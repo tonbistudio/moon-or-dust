@@ -55,8 +55,8 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     canFound: false,
     buildCharges: 0,
   },
-  ranged: {
-    type: 'ranged',
+  archer: {
+    type: 'archer',
     baseHealth: 80,
     baseMovement: 2,
     baseCombatStrength: 10,
@@ -100,6 +100,199 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     productionCost: 0, // Not producible directly
     isCivilian: true,
     canAttack: false,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  // ==========================================================================
+  // Era 1 Military Units
+  // ==========================================================================
+
+  horseman: {
+    type: 'horseman',
+    baseHealth: 90,
+    baseMovement: 4,
+    baseCombatStrength: 18,
+    baseRangedStrength: 0,
+    productionCost: 60,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  // ==========================================================================
+  // Era 2 Military Units
+  // ==========================================================================
+
+  swordsman: {
+    type: 'swordsman',
+    baseHealth: 120,
+    baseMovement: 2,
+    baseCombatStrength: 35,
+    baseRangedStrength: 0,
+    productionCost: 80,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  sniper: {
+    type: 'sniper',
+    baseHealth: 90,
+    baseMovement: 2,
+    baseCombatStrength: 15,
+    baseRangedStrength: 40,
+    productionCost: 90,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  knight: {
+    type: 'knight',
+    baseHealth: 110,
+    baseMovement: 4,
+    baseCombatStrength: 30,
+    baseRangedStrength: 0,
+    productionCost: 100,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  social_engineer: {
+    type: 'social_engineer',
+    baseHealth: 80,
+    baseMovement: 2,
+    baseCombatStrength: 20,
+    baseRangedStrength: 35, // Siege damage vs cities
+    productionCost: 100,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  // ==========================================================================
+  // Era 3 Military Units
+  // ==========================================================================
+
+  bot_fighter: {
+    type: 'bot_fighter',
+    baseHealth: 150,
+    baseMovement: 2,
+    baseCombatStrength: 55,
+    baseRangedStrength: 0,
+    productionCost: 150,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  rockeeter: {
+    type: 'rockeeter',
+    baseHealth: 100,
+    baseMovement: 2,
+    baseCombatStrength: 20,
+    baseRangedStrength: 60,
+    productionCost: 160,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  tank: {
+    type: 'tank',
+    baseHealth: 140,
+    baseMovement: 5,
+    baseCombatStrength: 50,
+    baseRangedStrength: 0,
+    productionCost: 180,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  bombard: {
+    type: 'bombard',
+    baseHealth: 90,
+    baseMovement: 2,
+    baseCombatStrength: 25,
+    baseRangedStrength: 55, // Siege damage vs cities
+    productionCost: 170,
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  // ==========================================================================
+  // Tribal Unique Units
+  // ==========================================================================
+
+  // Monkes: Banana Slinger (replaces Archer, Era 1)
+  // +1 range, +1/+1 strength over base Archer
+  banana_slinger: {
+    type: 'banana_slinger',
+    baseHealth: 80,
+    baseMovement: 2,
+    baseCombatStrength: 15, // 3/6 scaled: +5 over Archer's 10
+    baseRangedStrength: 30, // +5 over Archer's 25
+    productionCost: 50, // Same as Archer
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  // Geckos: Neon Geck (replaces Sniper, Era 2)
+  // +1 mobility, kills grant +5 Alpha (handled in combat resolution)
+  neon_geck: {
+    type: 'neon_geck',
+    baseHealth: 90,
+    baseMovement: 3, // +1 over Sniper's 2
+    baseCombatStrength: 15,
+    baseRangedStrength: 40, // Same as Sniper
+    productionCost: 90, // Same as Sniper
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  // DeGods: DeadGod (replaces Swordsman, Era 2)
+  // +8 strength (scaled), kills grant +20 Gold (handled in combat resolution)
+  deadgod: {
+    type: 'deadgod',
+    baseHealth: 120,
+    baseMovement: 2,
+    baseCombatStrength: 45, // +10 over Swordsman's 35 (8 strength in design doc)
+    baseRangedStrength: 0,
+    productionCost: 80, // Same as Swordsman
+    isCivilian: false,
+    canAttack: true,
+    canFound: false,
+    buildCharges: 0,
+  },
+
+  // Cets: Stuckers (replaces Swordsman, Era 2)
+  // Same strength, +1 mobility, enemies hit have mobility=0 for 2 turns (handled in combat)
+  stuckers: {
+    type: 'stuckers',
+    baseHealth: 120,
+    baseMovement: 3, // +1 over Swordsman's 2
+    baseCombatStrength: 35, // Same as Swordsman
+    baseRangedStrength: 0,
+    productionCost: 80, // Same as Swordsman
+    isCivilian: false,
+    canAttack: true,
     canFound: false,
     buildCharges: 0,
   },

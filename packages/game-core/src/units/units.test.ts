@@ -28,10 +28,20 @@ describe('Unit Definitions', () => {
   it('defines all unit types', () => {
     expect(UNIT_DEFINITIONS.scout).toBeDefined()
     expect(UNIT_DEFINITIONS.warrior).toBeDefined()
-    expect(UNIT_DEFINITIONS.ranged).toBeDefined()
+    expect(UNIT_DEFINITIONS.archer).toBeDefined()
     expect(UNIT_DEFINITIONS.settler).toBeDefined()
     expect(UNIT_DEFINITIONS.builder).toBeDefined()
     expect(UNIT_DEFINITIONS.great_person).toBeDefined()
+    // Era 1-3 units
+    expect(UNIT_DEFINITIONS.horseman).toBeDefined()
+    expect(UNIT_DEFINITIONS.swordsman).toBeDefined()
+    expect(UNIT_DEFINITIONS.sniper).toBeDefined()
+    expect(UNIT_DEFINITIONS.knight).toBeDefined()
+    expect(UNIT_DEFINITIONS.social_engineer).toBeDefined()
+    expect(UNIT_DEFINITIONS.bot_fighter).toBeDefined()
+    expect(UNIT_DEFINITIONS.rockeeter).toBeDefined()
+    expect(UNIT_DEFINITIONS.tank).toBeDefined()
+    expect(UNIT_DEFINITIONS.bombard).toBeDefined()
   })
 
   it('marks civilian units correctly', () => {
@@ -40,7 +50,7 @@ describe('Unit Definitions', () => {
     expect(UNIT_DEFINITIONS.great_person.isCivilian).toBe(true)
     expect(UNIT_DEFINITIONS.scout.isCivilian).toBe(false)
     expect(UNIT_DEFINITIONS.warrior.isCivilian).toBe(false)
-    expect(UNIT_DEFINITIONS.ranged.isCivilian).toBe(false)
+    expect(UNIT_DEFINITIONS.archer.isCivilian).toBe(false)
   })
 
   it('gives scouts highest movement', () => {

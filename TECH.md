@@ -19,13 +19,13 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 | Tech | Cost | Prerequisites | Unlocks |
 |------|------|---------------|---------|
 | **Mining** | 20 | None | Mine improvement, Quarry improvement, reveals Iron resource |
-| **Farming** | 20 | Animal Husbandry | Farm improvement, Granary building |
+| **Farming** | 20 | Animal Husbandry | Farm improvement, Granary building (+Population) |
 | **Animal Husbandry** | 20 | None | Pasture improvement, reveals Horses resource |
-| **Smart Contracts** | 25 | Coding | Candy Machine Wonder |
-| **Coding** | 25 | None | Library building |
+| **Smart Contracts** | 25 | Coding | +1 Trading Route, Candy Machine Wonder |
+| **Coding** | 25 | None | Library building (+Alpha) |
 | **Archery** | 25 | Animal Husbandry | Archer unit |
-| **Minting** | 30 | None | Mint improvement, Monument building |
-| **Bronze Working** | 35 | Mining | Warrior unit upgrade, Barracks building |
+| **Minting** | 30 | None | Mint improvement, Solanart building (+Gold)|
+| **Bronze Working** | 35 | Mining | Warrior unit upgrade, Barracks building (+Combat unit production) |
 | **PFPs** | 35 | Coding | Gallery building (+Vibes) |
 | **Horseback Riding** | 40 | Farming | Horseman unit, Roads |
 
@@ -40,15 +40,15 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 | Tech | Cost | Prerequisites | Unlocks |
 |------|------|---------------|---------|
 | **Iron Working** | 50 | Bronze Working | Swordsman unit (requires Iron) |
-| **Discord** | 50 | PFPs | Community Center building, +1 diplomacy visibility |
-| **Currency** | 55 | Minting, **Culture: OTC Trading** | Marketplace building, Magic Eden Wonder |
-| **Staking** | 55 | PFPs, Smart Contracts | Economy building, +5% Vibes generation, Taiyo Robotics Factory |
-| **Lending** | 60 | Smart Contracts | Trade benefits |
-| **Matrica** | 65 | Discord, **Culture: Early Empire** | Campus building |
-| **Botting** | 70 | Iron Working | +5% combat strength for melee units |
-| **On-chain Gaming** | 70 | Coding, Minting | Arena building, +10% Gold from entertainment |
-| **Priority Fees** | 75 | On-chain Gaming | +1 vision for all units, Explorer unit |
-| **Defi** | 80 | Currency | Bank building, +10% Gold income |
+| **Discord** | 50 | PFPs | Server building (+Population), Creckhouse |
+| **Currency** | 55 | Minting, **Culture: OTC Trading** | +1 trade route, Magic Eden Wonder |
+| **Staking** | 55 | PFPs, Smart Contracts | Art Upgrader (+Vibes), Taiyo Robotics Factory, The Garage |
+| **Lending** | 60 | Smart Contracts | +1 Trade route, Degent Mints Cabana |
+| **Matrica** | 65 | Discord, **Culture: Early Empire** | Alpha Hunter Hideout (+Alpha) Social engineer unit, Eternal Bridge |
+| **Botting** | 70 | Iron Working | Bot Farm (+Production), Sniper unit |
+| **On-chain Gaming** | 70 | Coding, Minting | Arena building (+Combat Unit production) |
+| **Priority Fees** | 75 | On-chain Gaming | Knight unit |
+| **Defi** | 80 | Currency | Yield Farm building (+Gold) |
 
 ---
 
@@ -60,16 +60,16 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 
 | Tech | Cost | Prerequisites | Unlocks |
 |------|------|---------------|---------|
-| **Artificial Intelligence** | 100 | Priority Fees | Bot Fighter unit, +15% production |
-| **Ponzinomics** | 100 | Staking | Reveals map edges, +2 Gold per settlement, Mindfolk Lumberyard |
+| **Artificial Intelligence** | 100 | Priority Fees | Bot Fighter unit |
+| **Ponzinomics** | 100 | Staking | Hype Machine building (+Population), Mindfolk Lumberyard |
 | **Hacking** | 110 | Botting, Horseback Riding | Tank unit |
-| **Tokenomics** | 110 | Defi | Dex Labs building, +1 trade route capacity |
-| **Hardware Wallets** | 120 | Iron Working | Foundry building, +20% production for units |
+| **Tokenomics** | 110 | Defi | Dex Labs building (+Gold), +1 trade route capacity |
+| **Hardware Wallets** | 120 | Iron Working | Ledger Foundry building (+Production) |
 | **Siege Weapons** | 120 | Hardware Wallets | Bombard siege unit |
-| **Wolf Game** | 130 | Defi | Yield Farm improvement, +15% Gold from trade |
+| **Wolf Game** | 130 | Defi | Rockeeter unit |
 | **Liquidity Pools** | 140 | Tokenomics, **Culture: Alpha DAOs** | +2 trade route capacity, +5% all yields |
-| **Firedancer** | 140 | Priority Fees | +50% damage to walls, +1 movement for siege |
-| **OHM** | 150 | Wolf Game, Liquidity Pools | Pyramid building (+25% Gold), victory point bonus |
+| **Firedancer** | 140 | Priority Fees | +2 mobility for all units |
+| **OHM** | 150 | Wolf Game, Liquidity Pools | Cult HQ building (+Vibes) |
 
 ---
 

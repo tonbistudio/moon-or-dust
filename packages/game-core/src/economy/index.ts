@@ -35,12 +35,30 @@ import { TECH_DEFINITIONS } from '../tech'
 // =============================================================================
 
 const UNIT_MAINTENANCE: Record<UnitType, number> = {
+  // Base units
   scout: 1,
   warrior: 2,
-  ranged: 2,
   settler: 0, // Civilians don't cost maintenance
   builder: 0,
   great_person: 0,
+  // Era 1
+  archer: 2,
+  horseman: 3,
+  // Era 2
+  swordsman: 3,
+  sniper: 3,
+  knight: 4,
+  social_engineer: 4,
+  // Era 3
+  bot_fighter: 5,
+  rockeeter: 5,
+  tank: 6,
+  bombard: 6,
+  // Tribal unique units
+  banana_slinger: 2, // Monkes (replaces Archer)
+  neon_geck: 3, // Geckos (replaces Sniper)
+  deadgod: 3, // DeGods (replaces Swordsman)
+  stuckers: 3, // Cets (replaces Swordsman)
 }
 
 /**
@@ -842,12 +860,30 @@ export function getProductionItemDefinition(
  */
 function formatUnitName(unitType: UnitType): string {
   const names: Record<UnitType, string> = {
+    // Base units
     scout: 'Scout',
     warrior: 'Warrior',
-    ranged: 'Archer',
     settler: 'Settler',
     builder: 'Builder',
     great_person: 'Great Person',
+    // Era 1
+    archer: 'Archer',
+    horseman: 'Horseman',
+    // Era 2
+    swordsman: 'Swordsman',
+    sniper: 'Sniper',
+    knight: 'Knight',
+    social_engineer: 'Social Engineer',
+    // Era 3
+    bot_fighter: 'Bot Fighter',
+    rockeeter: 'Rockeeter',
+    tank: 'Tank',
+    bombard: 'Bombard',
+    // Tribal unique units
+    banana_slinger: 'Banana Slinger',
+    neon_geck: 'Neon Geck',
+    deadgod: 'DeadGod',
+    stuckers: 'Stuckers',
   }
   return names[unitType] || unitType
 }

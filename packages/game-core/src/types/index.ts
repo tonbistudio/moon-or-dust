@@ -93,7 +93,7 @@ export interface Tile {
   readonly improvement?: ImprovementType
 }
 
-export type ImprovementType = 'farm' | 'mine' | 'pasture' | 'quarry' | 'mint' | 'server_farm'
+export type ImprovementType = 'farm' | 'mine' | 'pasture' | 'quarry' | 'mint' | 'server_farm' | 'roads'
 
 export interface HexMap {
   readonly width: number
@@ -105,7 +105,31 @@ export interface HexMap {
 // Units
 // =============================================================================
 
-export type UnitType = 'scout' | 'warrior' | 'ranged' | 'settler' | 'builder' | 'great_person'
+// Base/Era 1 units
+export type UnitType =
+  | 'scout'
+  | 'warrior'
+  | 'settler'
+  | 'builder'
+  | 'great_person'
+  // Era 1 military
+  | 'archer'      // Ranged, unlocked by Archery
+  | 'horseman'    // Cavalry, unlocked by Horseback Riding
+  // Era 2 military
+  | 'swordsman'       // Melee upgrade, unlocked by Iron Working
+  | 'sniper'          // Ranged upgrade, unlocked by Botting
+  | 'knight'          // Cavalry upgrade, unlocked by Priority Fees
+  | 'social_engineer' // Siege, unlocked by Matrica
+  // Era 3 military
+  | 'bot_fighter'  // Melee upgrade, unlocked by AI
+  | 'rockeeter'    // Ranged upgrade, unlocked by Wolf Game
+  | 'tank'         // Cavalry upgrade, unlocked by Hacking
+  | 'bombard'      // Siege upgrade, unlocked by Siege Weapons
+  // Tribal unique units
+  | 'banana_slinger'  // Monkes: replaces Archer, 3 range, 3/6 strength
+  | 'neon_geck'       // Geckos: replaces Sniper, 3 mobility, kills grant +5 Alpha
+  | 'deadgod'         // DeGods: replaces Swordsman, 8 strength, kills grant +20 Gold
+  | 'stuckers'        // Cets: replaces Swordsman, 6 str, 3 mobility, debuffs enemy mobility
 
 export type UnitRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 

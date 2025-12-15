@@ -40,7 +40,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
   // Era 1 Buildings
   // ==========================================================================
 
-  // Economy
+  // Population
   granary: {
     id: 'granary' as BuildingId,
     name: 'Granary',
@@ -53,25 +53,10 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
       amount: 1,
       condition: { type: 'improvement', improvement: 'farm' },
     },
-    prerequisiteTech: 'pottery',
+    prerequisiteTech: 'farming',
   },
 
-  marketplace: {
-    id: 'marketplace' as BuildingId,
-    name: 'Marketplace',
-    category: 'economy',
-    productionCost: 60,
-    maintenanceCost: 1,
-    baseYields: { ...ZERO_YIELDS, gold: 3 },
-    adjacencyBonus: {
-      yield: 'gold',
-      amount: 1,
-      condition: { type: 'resource', category: 'luxury' },
-    },
-    prerequisiteTech: 'currency',
-  },
-
-  // Tech/Science
+  // Alpha
   library: {
     id: 'library' as BuildingId,
     name: 'Library',
@@ -84,21 +69,37 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
       amount: 1,
       condition: { type: 'terrain', terrain: 'mountain' },
     },
-    prerequisiteTech: 'writing',
+    prerequisiteTech: 'coding',
   },
 
-  // Culture
-  monument: {
-    id: 'monument' as BuildingId,
-    name: 'Monument',
+  // Gold
+  solanart: {
+    id: 'solanart' as BuildingId,
+    name: 'Solanart',
+    category: 'economy',
+    productionCost: 50,
+    maintenanceCost: 1,
+    baseYields: { ...ZERO_YIELDS, gold: 3 },
+    adjacencyBonus: {
+      yield: 'gold',
+      amount: 1,
+      condition: { type: 'resource', category: 'luxury' },
+    },
+    prerequisiteTech: 'minting',
+  },
+
+  // Vibes
+  gallery: {
+    id: 'gallery' as BuildingId,
+    name: 'Gallery',
     category: 'vibes',
-    productionCost: 30,
-    maintenanceCost: 0,
+    productionCost: 45,
+    maintenanceCost: 1,
     baseYields: { ...ZERO_YIELDS, vibes: 2 },
-    prerequisiteTech: 'masonry',
+    prerequisiteTech: 'pfps',
   },
 
-  // Military
+  // Combat Production
   barracks: {
     id: 'barracks' as BuildingId,
     name: 'Barracks',
@@ -110,6 +111,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     prerequisiteTech: 'bronze_working',
   },
 
+  // Defense
   walls: {
     id: 'walls' as BuildingId,
     name: 'Walls',
@@ -125,104 +127,136 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     prerequisiteTech: 'masonry',
   },
 
-  // Production
-  workshop: {
-    id: 'workshop' as BuildingId,
-    name: 'Workshop',
-    category: 'production',
-    productionCost: 70,
+  // ==========================================================================
+  // Era 2 Buildings
+  // ==========================================================================
+
+  // Population
+  server: {
+    id: 'server' as BuildingId,
+    name: 'Server',
+    category: 'economy',
+    productionCost: 80,
+    maintenanceCost: 2,
+    baseYields: { ...ZERO_YIELDS, growth: 3 },
+    prerequisiteTech: 'discord',
+  },
+
+  // Alpha
+  alpha_hunter_hideout: {
+    id: 'alpha_hunter_hideout' as BuildingId,
+    name: 'Alpha Hunter Hideout',
+    category: 'tech',
+    productionCost: 100,
+    maintenanceCost: 2,
+    baseYields: { ...ZERO_YIELDS, alpha: 4 },
+    prerequisiteTech: 'matrica',
+  },
+
+  // Gold
+  yield_farm: {
+    id: 'yield_farm' as BuildingId,
+    name: 'Yield Farm',
+    category: 'economy',
+    productionCost: 90,
+    maintenanceCost: 2,
+    baseYields: { ...ZERO_YIELDS, gold: 5 },
+    prerequisiteTech: 'defi',
+  },
+
+  // Vibes
+  art_upgrader: {
+    id: 'art_upgrader' as BuildingId,
+    name: 'Art Upgrader',
+    category: 'vibes',
+    productionCost: 80,
     maintenanceCost: 1,
-    baseYields: { ...ZERO_YIELDS, production: 2 },
+    baseYields: { ...ZERO_YIELDS, vibes: 3 },
+    prerequisiteTech: 'staking',
+  },
+
+  // Production
+  bot_farm: {
+    id: 'bot_farm' as BuildingId,
+    name: 'Bot Farm',
+    category: 'production',
+    productionCost: 100,
+    maintenanceCost: 2,
+    baseYields: { ...ZERO_YIELDS, production: 3 },
     adjacencyBonus: {
       yield: 'production',
       amount: 1,
       condition: { type: 'improvement', improvement: 'mine' },
     },
+    prerequisiteTech: 'botting',
   },
 
-  // ==========================================================================
-  // Era 2 Buildings
-  // ==========================================================================
-
-  bank: {
-    id: 'bank' as BuildingId,
-    name: 'Bank',
-    category: 'economy',
-    productionCost: 100,
-    maintenanceCost: 2,
-    baseYields: { ...ZERO_YIELDS, gold: 5 },
-    prerequisiteTech: 'banking',
-  },
-
-  university: {
-    id: 'university' as BuildingId,
-    name: 'University',
-    category: 'tech',
-    productionCost: 120,
-    maintenanceCost: 2,
-    baseYields: { ...ZERO_YIELDS, alpha: 4 },
-    prerequisiteTech: 'printing',
-  },
-
+  // Combat Production
   arena: {
     id: 'arena' as BuildingId,
     name: 'Arena',
-    category: 'vibes',
-    productionCost: 80,
-    maintenanceCost: 1,
-    baseYields: { ...ZERO_YIELDS, vibes: 2, gold: 1 },
-    prerequisiteTech: 'construction',
-  },
-
-  aqueduct: {
-    id: 'aqueduct' as BuildingId,
-    name: 'Aqueduct',
-    category: 'production',
-    productionCost: 90,
-    maintenanceCost: 1,
-    baseYields: { ...ZERO_YIELDS, growth: 3 },
-    prerequisiteTech: 'engineering',
-  },
-
-  armory: {
-    id: 'armory' as BuildingId,
-    name: 'Armory',
     category: 'military',
-    productionCost: 100,
+    productionCost: 90,
     maintenanceCost: 2,
     baseYields: { ...ZERO_YIELDS, production: 2 },
-    // Grants additional XP
-    prerequisiteTech: 'military_tactics',
+    // Grants XP to trained units
+    prerequisiteTech: 'onchain_gaming',
   },
 
   // ==========================================================================
   // Era 3 Buildings
   // ==========================================================================
 
-  stock_exchange: {
-    id: 'stock_exchange' as BuildingId,
-    name: 'Stock Exchange',
+  // Population
+  hype_machine: {
+    id: 'hype_machine' as BuildingId,
+    name: 'Hype Machine',
+    category: 'economy',
+    productionCost: 140,
+    maintenanceCost: 3,
+    baseYields: { ...ZERO_YIELDS, growth: 5 },
+    prerequisiteTech: 'ponzinomics',
+  },
+
+  // Gold
+  dex_labs: {
+    id: 'dex_labs' as BuildingId,
+    name: 'Dex Labs',
     category: 'economy',
     productionCost: 150,
     maintenanceCost: 3,
     baseYields: { ...ZERO_YIELDS, gold: 8 },
-    prerequisiteTech: 'economics',
+    prerequisiteTech: 'tokenomics',
   },
 
-  foundry: {
-    id: 'foundry' as BuildingId,
-    name: 'Foundry',
+  // Production
+  ledger_foundry: {
+    id: 'ledger_foundry' as BuildingId,
+    name: 'Ledger Foundry',
     category: 'production',
-    productionCost: 140,
+    productionCost: 160,
     maintenanceCost: 2,
-    baseYields: { ...ZERO_YIELDS, production: 4 },
-    prerequisiteTech: 'metal_casting',
+    baseYields: { ...ZERO_YIELDS, production: 5 },
+    prerequisiteTech: 'hardware_wallets',
+  },
+
+  // Vibes
+  cult_hq: {
+    id: 'cult_hq' as BuildingId,
+    name: 'Cult HQ',
+    category: 'vibes',
+    productionCost: 180,
+    maintenanceCost: 3,
+    baseYields: { ...ZERO_YIELDS, vibes: 6 },
+    prerequisiteTech: 'ohm',
   },
 
   // ==========================================================================
   // Unique Tribal Buildings
   // ==========================================================================
 
+  // Monkes: +2 Gold per adjacent Jungle or Forest
+  // Unlocked by: Lending
   degen_mints_cabana: {
     id: 'degen_mints_cabana' as BuildingId,
     name: 'Degen Mints Cabana',
@@ -233,11 +267,14 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     adjacencyBonus: {
       yield: 'gold',
       amount: 2,
-      condition: { type: 'terrain', terrain: 'jungle' },
+      condition: { type: 'terrain', terrain: 'forest' }, // Also applies to jungle (handled in logic)
     },
+    prerequisiteTech: 'lending',
     isUnique: true, // Monkes
   },
 
+  // Geckos: +2 Alpha per adjacent Coast or Desert
+  // Unlocked by: Staking
   the_garage: {
     id: 'the_garage' as BuildingId,
     name: 'The Garage',
@@ -248,26 +285,28 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     adjacencyBonus: {
       yield: 'alpha',
       amount: 2,
-      condition: { type: 'terrain', terrain: 'water' },
+      condition: { type: 'terrain', terrain: 'desert' }, // Also applies to coast (handled in logic)
     },
+    prerequisiteTech: 'staking',
     isUnique: true, // Geckos
   },
 
+  // DeGods: +20% combat unit production
+  // Unlocked by: Matrica
   eternal_bridge: {
     id: 'eternal_bridge' as BuildingId,
     name: 'Eternal Bridge',
-    category: 'economy',
-    productionCost: 80,
-    maintenanceCost: 1,
-    baseYields: { ...ZERO_YIELDS, gold: 2, production: 1 },
-    adjacencyBonus: {
-      yield: 'gold',
-      amount: 1,
-      condition: { type: 'building' }, // Any adjacent building
-    },
+    category: 'military',
+    productionCost: 100,
+    maintenanceCost: 2,
+    baseYields: { ...ZERO_YIELDS, production: 2 },
+    // Note: +20% combat unit production handled separately in production logic
+    prerequisiteTech: 'matrica',
     isUnique: true, // DeGods
   },
 
+  // Cets: +1 Vibes per adjacent building (any)
+  // Unlocked by: Discord
   creckhouse: {
     id: 'creckhouse' as BuildingId,
     name: 'Creckhouse',
@@ -280,6 +319,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
       amount: 1,
       condition: { type: 'building' }, // Any adjacent building
     },
+    prerequisiteTech: 'discord',
     isUnique: true, // Cets
   },
 }
@@ -318,12 +358,27 @@ export function calculateAdjacencyBonus(
 
 function matchesAdjacencyCondition(
   tile: Tile,
-  _settlement: Settlement,
+  settlement: Settlement,
   condition: AdjacencyBonus['condition'],
   state: GameState
 ): boolean {
   switch (condition.type) {
     case 'terrain':
+      // Handle special multi-terrain cases for unique buildings
+      // Degen Mints Cabana: forest OR jungle
+      if (condition.terrain === 'forest') {
+        // Check if this is a Monkes building (degen_mints_cabana)
+        if (settlement.buildings.includes('degen_mints_cabana' as never)) {
+          return tile.terrain === 'forest' || tile.terrain === 'jungle'
+        }
+      }
+      // The Garage: desert OR coast (water adjacent to land)
+      if (condition.terrain === 'desert') {
+        // Check if this is a Geckos building (the_garage)
+        if (settlement.buildings.includes('the_garage' as never)) {
+          return tile.terrain === 'desert' || tile.terrain === 'water'
+        }
+      }
       return tile.terrain === condition.terrain
 
     case 'resource':

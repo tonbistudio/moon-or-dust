@@ -57,7 +57,8 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 25,
     prerequisites: { techs: ['coding' as TechId], cultures: [] },
-    unlocks: { buildings: ['holy_site' as BuildingId, 'shrine' as BuildingId] },
+    // +1 trade route capacity, unlocks Candy Machine wonder
+    unlocks: {},
   },
   archery: {
     id: 'archery' as TechId,
@@ -65,7 +66,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 25,
     prerequisites: { techs: ['animal_husbandry' as TechId], cultures: [] },
-    unlocks: { units: ['ranged'] },
+    unlocks: { units: ['archer'] },
   },
   minting: {
     id: 'minting' as TechId,
@@ -73,7 +74,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 30,
     prerequisites: { techs: [], cultures: [] },
-    unlocks: { improvements: ['mint'], buildings: ['monument' as BuildingId] },
+    unlocks: { improvements: ['mint'], buildings: ['solanart' as BuildingId] },
   },
   bronze_working: {
     id: 'bronze_working' as TechId,
@@ -81,7 +82,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 35,
     prerequisites: { techs: ['mining' as TechId], cultures: [] },
-    unlocks: { units: ['warrior'], buildings: ['barracks' as BuildingId] },
+    unlocks: { buildings: ['barracks' as BuildingId] },
   },
   pfps: {
     id: 'pfps' as TechId,
@@ -97,8 +98,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 40,
     prerequisites: { techs: ['farming' as TechId], cultures: [] },
-    // Note: Unlocks Horseman unit and Roads - unit types to be added later
-    unlocks: {},
+    unlocks: { units: ['horseman'], improvements: ['roads'] },
   },
 
   // ==========================================================================
@@ -110,8 +110,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 50,
     prerequisites: { techs: ['bronze_working' as TechId], cultures: [] },
-    // Note: Unlocks Swordsman unit - unit type to be added later
-    unlocks: {},
+    unlocks: { units: ['swordsman'] },
   },
   discord: {
     id: 'discord' as TechId,
@@ -119,7 +118,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 50,
     prerequisites: { techs: ['pfps' as TechId], cultures: [] },
-    unlocks: { buildings: ['community_center' as BuildingId] },
+    unlocks: { buildings: ['server' as BuildingId, 'creckhouse' as BuildingId] }, // Creckhouse: Cets unique
   },
   currency: {
     id: 'currency' as TechId,
@@ -127,7 +126,8 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 55,
     prerequisites: { techs: ['minting' as TechId], cultures: ['otc_trading' as CultureId] },
-    unlocks: { buildings: ['marketplace' as BuildingId] },
+    // +1 trade route, unlocks Magic Eden wonder
+    unlocks: {},
   },
   staking: {
     id: 'staking' as TechId,
@@ -135,7 +135,8 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 55,
     prerequisites: { techs: ['pfps' as TechId, 'smart_contracts' as TechId], cultures: [] },
-    unlocks: { buildings: ['staking_pool' as BuildingId] },
+    // Unlocks Art Upgrader, Taiyo Robotics Factory wonder, The Garage (Geckos unique)
+    unlocks: { buildings: ['art_upgrader' as BuildingId, 'the_garage' as BuildingId] },
   },
   lending: {
     id: 'lending' as TechId,
@@ -143,8 +144,8 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 60,
     prerequisites: { techs: ['smart_contracts' as TechId], cultures: [] },
-    // Note: Provides trade benefits - effect to be implemented
-    unlocks: {},
+    // +1 trade route capacity, Degen Mints Cabana (Monkes unique)
+    unlocks: { buildings: ['degen_mints_cabana' as BuildingId] },
   },
   matrica: {
     id: 'matrica' as TechId,
@@ -152,7 +153,8 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 65,
     prerequisites: { techs: ['discord' as TechId], cultures: ['early_empire' as CultureId] },
-    unlocks: { buildings: ['campus' as BuildingId] },
+    // Alpha Hunter Hideout, Social Engineer, Eternal Bridge (DeGods unique)
+    unlocks: { buildings: ['alpha_hunter_hideout' as BuildingId, 'eternal_bridge' as BuildingId], units: ['social_engineer'] },
   },
   botting: {
     id: 'botting' as TechId,
@@ -160,8 +162,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 70,
     prerequisites: { techs: ['iron_working' as TechId], cultures: [] },
-    // Note: +5% combat strength for melee units - effect to be implemented
-    unlocks: {},
+    unlocks: { buildings: ['bot_farm' as BuildingId], units: ['sniper'] },
   },
   onchain_gaming: {
     id: 'onchain_gaming' as TechId,
@@ -177,8 +178,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 75,
     prerequisites: { techs: ['onchain_gaming' as TechId], cultures: [] },
-    // Note: +1 vision for all units, Explorer unit - to be implemented
-    unlocks: {},
+    unlocks: { units: ['knight'] },
   },
   defi: {
     id: 'defi' as TechId,
@@ -186,8 +186,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 2,
     cost: 80,
     prerequisites: { techs: ['currency' as TechId], cultures: [] },
-    // Note: +10% Gold income bonus - to be implemented
-    unlocks: { buildings: ['bank' as BuildingId] },
+    unlocks: { buildings: ['yield_farm' as BuildingId] },
   },
 
   // ==========================================================================
@@ -199,8 +198,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 100,
     prerequisites: { techs: ['priority_fees' as TechId], cultures: [] },
-    // Note: Bot Fighter unit, +15% production - to be implemented
-    unlocks: {},
+    unlocks: { units: ['bot_fighter'] },
   },
   ponzinomics: {
     id: 'ponzinomics' as TechId,
@@ -208,8 +206,8 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 100,
     prerequisites: { techs: ['staking' as TechId], cultures: [] },
-    // Note: Reveals map edges, +2 Gold per settlement - to be implemented
-    unlocks: {},
+    // Unlocks Hype Machine and Mindfolk Lumberyard wonder
+    unlocks: { buildings: ['hype_machine' as BuildingId] },
   },
   hacking: {
     id: 'hacking' as TechId,
@@ -217,8 +215,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 110,
     prerequisites: { techs: ['botting' as TechId, 'horseback_riding' as TechId], cultures: [] },
-    // Note: Tank unit - to be added to UnitType later
-    unlocks: {},
+    unlocks: { units: ['tank'] },
   },
   tokenomics: {
     id: 'tokenomics' as TechId,
@@ -226,7 +223,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 110,
     prerequisites: { techs: ['defi' as TechId], cultures: [] },
-    // Note: +1 trade route capacity - to be implemented
+    // +1 trade route capacity
     unlocks: { buildings: ['dex_labs' as BuildingId] },
   },
   hardware_wallets: {
@@ -235,8 +232,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 120,
     prerequisites: { techs: ['iron_working' as TechId], cultures: [] },
-    // Note: +20% production for units - to be implemented
-    unlocks: { buildings: ['foundry' as BuildingId] },
+    unlocks: { buildings: ['ledger_foundry' as BuildingId] },
   },
   siege_weapons: {
     id: 'siege_weapons' as TechId,
@@ -244,8 +240,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 120,
     prerequisites: { techs: ['hardware_wallets' as TechId], cultures: [] },
-    // Note: Bombard siege unit - to be added to UnitType later
-    unlocks: {},
+    unlocks: { units: ['bombard'] },
   },
   wolf_game: {
     id: 'wolf_game' as TechId,
@@ -253,8 +248,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 130,
     prerequisites: { techs: ['defi' as TechId], cultures: [] },
-    // Note: Yield Farm improvement, +15% Gold from trade - to be implemented
-    unlocks: {},
+    unlocks: { units: ['rockeeter'] },
   },
   liquidity_pools: {
     id: 'liquidity_pools' as TechId,
@@ -262,7 +256,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 140,
     prerequisites: { techs: ['tokenomics' as TechId], cultures: ['alpha_daos' as CultureId] },
-    // Note: +2 trade route capacity, +5% all yields - to be implemented
+    // +2 trade route capacity, +5% all yields
     unlocks: {},
   },
   firedancer: {
@@ -271,7 +265,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 140,
     prerequisites: { techs: ['priority_fees' as TechId], cultures: [] },
-    // Note: +50% damage to walls, +1 movement for siege - to be implemented
+    // +2 mobility for all units
     unlocks: {},
   },
   ohm: {
@@ -280,8 +274,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 3,
     cost: 150,
     prerequisites: { techs: ['wolf_game' as TechId, 'liquidity_pools' as TechId], cultures: [] },
-    // Note: +25% Gold, victory point bonus - to be implemented
-    unlocks: { buildings: ['pyramid' as BuildingId] },
+    unlocks: { buildings: ['cult_hq' as BuildingId] },
   },
 }
 

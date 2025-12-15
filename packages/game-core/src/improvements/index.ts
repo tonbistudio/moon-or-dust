@@ -98,6 +98,17 @@ export const IMPROVEMENT_DEFINITIONS: Record<ImprovementType, ImprovementDefinit
     builderChargesCost: 1,
     prerequisiteTech: 'writing',
   },
+
+  roads: {
+    type: 'roads',
+    name: 'Roads',
+    yields: ZERO_YIELDS,
+    validTerrain: ['grassland', 'plains', 'desert', 'hills', 'forest', 'jungle'],
+    validResources: [],
+    builderChargesCost: 1,
+    prerequisiteTech: 'horseback_riding',
+    // Note: Roads reduce movement cost to 0.5 when moving through the tile
+  },
 }
 
 // =============================================================================

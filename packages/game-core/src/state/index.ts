@@ -48,6 +48,14 @@ import { resolveCombat } from '../combat'
 import { canResearchTech, TECH_DEFINITIONS } from '../tech'
 import { canUnlockCulture, CULTURE_DEFINITIONS } from '../cultures'
 import { canBuildImprovement } from '../improvements'
+import {
+  declareWar,
+  makePeace,
+  formAlliance,
+  canDeclareWar,
+  canProposePeace,
+  canProposeAlliance,
+} from '../diplomacy'
 
 // =============================================================================
 // Constants
@@ -140,7 +148,7 @@ export const TRIBES: Record<TribeName, Omit<Tribe, 'id'>> = {
     displayName: 'Monkes',
     primaryStrength: 'vibes',
     secondaryStrength: 'economy',
-    uniqueUnitType: 'ranged',
+    uniqueUnitType: 'archer',
     uniqueBuildingId: 'degen_mints_cabana' as never,
     color: '#4ade80', // green
   },
@@ -167,7 +175,7 @@ export const TRIBES: Record<TribeName, Omit<Tribe, 'id'>> = {
     displayName: 'Cets',
     primaryStrength: 'vibes',
     secondaryStrength: 'production',
-    uniqueUnitType: 'ranged',
+    uniqueUnitType: 'archer',
     uniqueBuildingId: 'creckhouse' as never,
     color: '#f97316', // orange
   },
@@ -185,7 +193,7 @@ export const TRIBES: Record<TribeName, Omit<Tribe, 'id'>> = {
     displayName: 'Dragonz',
     primaryStrength: 'economy',
     secondaryStrength: 'tech',
-    uniqueUnitType: 'ranged',
+    uniqueUnitType: 'archer',
     uniqueBuildingId: 'dragonz_den' as never,
     color: '#a855f7', // purple
   },
@@ -455,13 +463,13 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
       return { success: false, error: 'USE_GREAT_PERSON not yet implemented' }
 
     case 'DECLARE_WAR':
-      return { success: false, error: 'DECLARE_WAR not yet implemented' }
+      return applyDeclareWar(state, action.target)
 
     case 'PROPOSE_PEACE':
-      return { success: false, error: 'PROPOSE_PEACE not yet implemented' }
+      return applyProposePeace(state, action.target)
 
     case 'PROPOSE_ALLIANCE':
-      return { success: false, error: 'PROPOSE_ALLIANCE not yet implemented' }
+      return applyProposeAlliance(state, action.target)
 
     default: {
       const _exhaustive: never = action
@@ -1166,4 +1174,71 @@ function applyStartCulture(
     success: true,
     state: { ...state, players: newPlayers },
   }
+}
+
+// =============================================================================
+// Diplomacy Actions
+// =============================================================================
+
+/**
+ * Declares war on another tribe
+ */
+function applyDeclareWar(state: GameState, target: TribeId): ActionResult {
+  const currentTribe = state.currentPlayer
+
+  // Validate the action
+  const canDeclare = canDeclareWar(state, currentTribe, target)
+  if (!canDeclare.canDeclare) {
+    return { success: false, error: canDeclare.reason || 'Cannot declare war' }
+  }
+
+  // Apply the war declaration
+  const newState = declareWar(state, currentTribe, target)
+  if (!newState) {
+    return { success: false, error: 'Failed to declare war' }
+  }
+
+  return { success: true, state: newState }
+}
+
+/**
+ * Proposes peace with another tribe (immediately accepted for now)
+ */
+function applyProposePeace(state: GameState, target: TribeId): ActionResult {
+  const currentTribe = state.currentPlayer
+
+  // Validate the action
+  const canPropose = canProposePeace(state, currentTribe, target)
+  if (!canPropose.canPropose) {
+    return { success: false, error: canPropose.reason || 'Cannot propose peace' }
+  }
+
+  // Apply the peace treaty
+  const newState = makePeace(state, currentTribe, target)
+  if (!newState) {
+    return { success: false, error: 'Failed to make peace' }
+  }
+
+  return { success: true, state: newState }
+}
+
+/**
+ * Proposes alliance with another tribe (immediately accepted for now)
+ */
+function applyProposeAlliance(state: GameState, target: TribeId): ActionResult {
+  const currentTribe = state.currentPlayer
+
+  // Validate the action
+  const canPropose = canProposeAlliance(state, currentTribe, target)
+  if (!canPropose.canPropose) {
+    return { success: false, error: canPropose.reason || 'Cannot propose alliance' }
+  }
+
+  // Apply the alliance
+  const newState = formAlliance(state, currentTribe, target)
+  if (!newState) {
+    return { success: false, error: 'Failed to form alliance' }
+  }
+
+  return { success: true, state: newState }
 }

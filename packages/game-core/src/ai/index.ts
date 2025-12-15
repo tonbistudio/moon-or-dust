@@ -4,6 +4,251 @@ import type { GameState, Unit, HexCoord, GameAction, TribeId } from '../types'
 import { hexDistance } from '../hex'
 import { getReachableHexes } from '../units'
 import { getValidTargets } from '../combat'
+import {
+  getStance,
+  getEnemies,
+  getAllies,
+  getFriendlyTribes,
+  getWarWeariness,
+  canDeclareWar,
+  canProposePeace,
+  canProposeAlliance,
+} from '../diplomacy'
+
+// =============================================================================
+// AI Configuration
+// =============================================================================
+
+/** War weariness threshold where AI considers peace */
+const HIGH_WAR_WEARINESS = 30
+
+/** Military strength ratio to consider declaring war (AI vs target) */
+const WAR_STRENGTH_RATIO = 1.5
+
+/** Military strength ratio to seek peace (target vs AI) */
+const PEACE_STRENGTH_RATIO = 1.3
+
+// =============================================================================
+// Military Strength Calculation
+// =============================================================================
+
+/**
+ * Calculate total military strength for a tribe
+ */
+function calculateMilitaryStrength(state: GameState, tribeId: TribeId): number {
+  let strength = 0
+
+  for (const unit of state.units.values()) {
+    if (unit.owner === tribeId && !isCivilianUnit(unit.type)) {
+      // Base strength + health percentage
+      const healthFactor = unit.health / unit.maxHealth
+      const combatPower = Math.max(unit.combatStrength, unit.rangedStrength)
+      strength += combatPower * healthFactor
+
+      // Bonus for promotions
+      strength += unit.promotions.length * 0.5
+    }
+  }
+
+  return strength
+}
+
+/**
+ * Check if unit type is civilian (non-combat)
+ */
+function isCivilianUnit(type: string): boolean {
+  return type === 'settler' || type === 'builder' || type === 'great_person'
+}
+
+// =============================================================================
+// Diplomacy AI Decisions
+// =============================================================================
+
+/**
+ * Generate diplomacy actions for an AI turn
+ */
+function generateDiplomacyActions(state: GameState, tribeId: TribeId): GameAction[] {
+  const actions: GameAction[] = []
+  const aiStrength = calculateMilitaryStrength(state, tribeId)
+
+  // Check each other player for diplomacy opportunities
+  for (const player of state.players) {
+    if (player.tribeId === tribeId) continue
+
+    const targetId = player.tribeId
+    const stance = getStance(state, tribeId, targetId)
+    const targetStrength = calculateMilitaryStrength(state, targetId)
+
+    // Consider peace if at war
+    if (stance === 'war') {
+      const peaceAction = considerPeace(state, tribeId, targetId, aiStrength, targetStrength)
+      if (peaceAction) {
+        actions.push(peaceAction)
+        continue
+      }
+    }
+
+    // Consider war if not already at war
+    if (stance !== 'war') {
+      const warAction = considerWar(state, tribeId, targetId, aiStrength, targetStrength)
+      if (warAction) {
+        actions.push(warAction)
+        continue
+      }
+    }
+
+    // Consider alliance if friendly
+    if (stance === 'friendly') {
+      const allianceAction = considerAlliance(state, tribeId, targetId)
+      if (allianceAction) {
+        actions.push(allianceAction)
+      }
+    }
+  }
+
+  return actions
+}
+
+/**
+ * Evaluate whether to propose peace
+ */
+function considerPeace(
+  state: GameState,
+  tribeId: TribeId,
+  targetId: TribeId,
+  aiStrength: number,
+  targetStrength: number
+): GameAction | null {
+  const result = canProposePeace(state, tribeId, targetId)
+  if (!result.canPropose) return null
+
+  const warWeariness = getWarWeariness(state, tribeId)
+
+  // Seek peace if:
+  // 1. War weariness is high
+  // 2. Enemy is significantly stronger
+  // 3. We have no units left
+  const wearinessHigh = warWeariness >= HIGH_WAR_WEARINESS
+  const enemyStronger = targetStrength > aiStrength * PEACE_STRENGTH_RATIO
+  const noMilitary = aiStrength === 0
+
+  if (wearinessHigh || enemyStronger || noMilitary) {
+    return {
+      type: 'PROPOSE_PEACE',
+      target: targetId,
+    }
+  }
+
+  return null
+}
+
+/**
+ * Evaluate whether to declare war
+ */
+function considerWar(
+  state: GameState,
+  tribeId: TribeId,
+  targetId: TribeId,
+  aiStrength: number,
+  targetStrength: number
+): GameAction | null {
+  const result = canDeclareWar(state, tribeId, targetId)
+  if (!result.canDeclare) return null
+
+  const stance = getStance(state, tribeId, targetId)
+
+  // Don't break alliances or friendships lightly
+  if (stance === 'allied') return null
+  if (stance === 'friendly') {
+    // Only attack friendly if we have overwhelming force
+    if (aiStrength < targetStrength * 2) return null
+  }
+
+  // Already have enemies? Don't start more wars
+  const currentEnemies = getEnemies(state, tribeId)
+  if (currentEnemies.length >= 2) return null
+
+  // Check war weariness - don't start wars if already war-weary
+  const warWeariness = getWarWeariness(state, tribeId)
+  if (warWeariness >= HIGH_WAR_WEARINESS * 0.7) return null
+
+  // Only declare war if we have significant military advantage
+  if (aiStrength > targetStrength * WAR_STRENGTH_RATIO && aiStrength > 0) {
+    // Also consider if target has settlements we want
+    const targetSettlements = Array.from(state.settlements.values()).filter(
+      (s) => s.owner === targetId
+    )
+
+    if (targetSettlements.length > 0) {
+      return {
+        type: 'DECLARE_WAR',
+        target: targetId,
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Evaluate whether to propose alliance
+ */
+function considerAlliance(
+  state: GameState,
+  tribeId: TribeId,
+  targetId: TribeId
+): GameAction | null {
+  const result = canProposeAlliance(state, tribeId, targetId)
+  if (!result.canPropose) return null
+
+  // Already have allies? Be more selective
+  const currentAllies = getAllies(state, tribeId)
+  if (currentAllies.length >= 2) return null
+
+  // Check if we share common enemies
+  const ourEnemies = getEnemies(state, tribeId)
+  const theirEnemies = getEnemies(state, targetId)
+  const sharedEnemies = ourEnemies.filter((e) => theirEnemies.includes(e))
+
+  // More likely to ally if we share enemies
+  if (sharedEnemies.length > 0) {
+    return {
+      type: 'PROPOSE_ALLIANCE',
+      target: targetId,
+    }
+  }
+
+  // Also ally if we have no enemies and they're the strongest potential ally
+  if (ourEnemies.length === 0) {
+    const targetStrength = calculateMilitaryStrength(state, targetId)
+    const friendlyTribes = getFriendlyTribes(state, tribeId)
+
+    // Check if target is the strongest friendly tribe
+    let isStrongest = true
+    for (const friendId of friendlyTribes) {
+      if (friendId !== targetId) {
+        const friendStrength = calculateMilitaryStrength(state, friendId)
+        if (friendStrength > targetStrength) {
+          isStrongest = false
+          break
+        }
+      }
+    }
+
+    if (isStrongest && targetStrength > 0) {
+      return {
+        type: 'PROPOSE_ALLIANCE',
+        target: targetId,
+      }
+    }
+  }
+
+  return null
+}
+
+// =============================================================================
+// Main AI Action Generation
+// =============================================================================
 
 /**
  * Generate all actions for an AI player's turn
@@ -11,6 +256,10 @@ import { getValidTargets } from '../combat'
  */
 export function generateAIActions(state: GameState, tribeId: TribeId): GameAction[] {
   const actions: GameAction[] = []
+
+  // First, handle diplomacy decisions (before military actions)
+  const diplomacyActions = generateDiplomacyActions(state, tribeId)
+  actions.push(...diplomacyActions)
 
   // Get all units owned by this AI
   const aiUnits = Array.from(state.units.values()).filter(

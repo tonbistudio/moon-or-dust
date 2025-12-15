@@ -175,31 +175,69 @@ canvas.on('click', (hex) => {
 | Production | Building/unit construction |
 | Growth | Population increase |
 
-### Units (Demo)
+### Units
+
+**Civilian Units (always available):**
 - Scout (exploration, 3 movement)
-- Warrior (melee, 3 strength)
-- Archer (ranged attack, 2/5 strength)
-- Horseman (cavalry unit, 3 movement, 2 strength)
 - Settler (founds settlements)
 - Builder (3 build charges)
 
-(Mid-game units)
-- Soldier (melee, 6 strength)
-- Sniper (ranged, 4/10 strength)
-- Knight (cavalry, 3 movement, 4 strength)
+**Military Units by Era:**
 
-(Late game units)
-- Bot Fighter (melee, 12 strength)
-- Rockeeter (ranged, 8/16 strength)
-- Tank (cavalry, 5 movement, 10 strenth)
+| Era | Type | Unit | Unlocked By | Stats |
+|-----|------|------|-------------|-------|
+| Base | Melee | Warrior | — | 3 strength |
+| 1 | Ranged | Archer | Archery | 2/5 strength |
+| 1 | Cavalry | Horseman | Horseback Riding | 3 movement, 2 strength |
+| 2 | Melee | Swordsman | Iron Working | 6 strength (requires Iron) |
+| 2 | Ranged | Sniper | Botting | 4/10 strength |
+| 2 | Cavalry | Knight | Priority Fees | 3 movement, 4 strength |
+| 2 | Siege | Social Engineer | Matrica | 6 strength vs cities |
+| 3 | Melee | Bot Fighter | Artificial Intelligence | 12 strength |
+| 3 | Ranged | Rockeeter | Wolf Game | 8/16 strength |
+| 3 | Cavalry | Tank | Hacking | 5 movement, 10 strength |
+| 3 | Siege | Bombard | Siege Weapons | 12 strength vs cities |
+
+### Buildings
+
+**Buildings by Era and Yield:**
+
+| Era | Yield | Building | Unlocked By | Effect |
+|-----|-------|----------|-------------|--------|
+| 1 | Population | Granary | Farming | +Population |
+| 1 | Alpha | Library | Coding | +Alpha |
+| 1 | Gold | Solanart | Minting | +Gold |
+| 1 | Vibes | Gallery | PFPs | +Vibes |
+| 1 | Combat Prod | Barracks | Bronze Working | +Combat unit production |
+| 2 | Population | Server | Discord | +Population |
+| 2 | Alpha | Alpha Hunter Hideout | Matrica | +Alpha |
+| 2 | Gold | Yield Farm | Defi | +Gold |
+| 2 | Vibes | Art Upgrader | Staking | +Vibes |
+| 2 | Production | Bot Farm | Botting | +Production |
+| 2 | Combat Prod | Arena | On-chain Gaming | +Combat unit production |
+| 3 | Population | Hype Machine | Ponzinomics | +Population |
+| 3 | Gold | Dex Labs | Tokenomics | +Gold |
+| 3 | Production | Ledger Foundry | Hardware Wallets | +Production |
+| 3 | Vibes | Cult HQ | OHM | +Vibes |
+
+### Improvements
+
+| Improvement | Unlocked By | Effect |
+|-------------|-------------|--------|
+| Mine | Mining | +Production, works Iron |
+| Quarry | Mining | +Production, works Marble |
+| Farm | Farming | +Growth |
+| Pasture | Animal Husbandry | Works Horses, Cattle |
+| Mint | Minting | Works Whitelists |
+| Roads | Horseback Riding | +Movement speed |
 
 ### Tribes (4 playable)
 | Tribe | Primary | Secondary | Unique Unit | Unique Building |
 |-------|---------|-----------|-------------|-----------------|
-| Monkes | Vibes | Economy | Banana Slinger | Degen Mints Cabana |
-| Geckos | Tech | Naval | Neon Geck | The Garage |
-| DeGods | Military | Economy | DeadGod | Eternal Bridge |
-| Cets | Vibes | Production | Stuckers | Creckhouse |
+| Monkes | Vibes | Economy | Banana Slinger (replaces Archer, 3 range, 3/6 strength) | Degen Mints Cabana |
+| Geckos | Tech | Naval | Neon Geck (replaces Sniper, 3 mobility, kills grant +5 Alpha) | The Garage |
+| DeGods | Military | Economy | DeadGod (replaces Swordsman, 8 strength, kills grant +20 Gold) | Eternal Bridge |
+| Cets | Vibes | Production | Stuckers (replaces Swordsman, 6 strength, 3 mobility, enemies mobility=0 for 2 turns when attacked by Stuckers) | Creckhouse |
 
 Gregs and Dragonz show as "coming soon" in tribe selection.
 
@@ -427,9 +465,9 @@ Buildings provide bonuses based on neighboring tiles and buildings:
 **Unique Building Adjacencies:**
 | Tribe | Building | Adjacency |
 |-------|----------|-----------|
-| Monkes | Degen Mints Cabana | +2 Gold per adjacent Jungle |
-| Geckos | The Garage | +2 Alpha per adjacent Coast |
-| DeGods | Eternal Bridge | +1 Gold per adjacent military building |
+| Monkes | Degen Mints Cabana | +2 Gold per adjacent Jungle or Forest |
+| Geckos | The Garage | +2 Alpha per adjacent Coast or Desert
+| DeGods | Eternal Bridge | +20% combat unit production
 | Cets | Creckhouse | +1 Vibes per adjacent building (any) |
 
 ### Unit Stacking
@@ -637,35 +675,53 @@ interface Unit {
 
 ### Wonders
 
-10 exclusive buildings - first to complete owns it forever. Each references a Solana project.
+10 exclusive buildings - first to complete owns it forever. Each references a Solana project. Wonders are era-gated by tech or culture prerequisites.
 
-| Wonder | Reference | Category | Effect | Floor Price |
-|--------|-----------|----------|--------|-------------|
-| Candy Machine | Metaplex | Tech | +25% research speed | 50 |
-| The Portal | Portal NFTs | Tech | Reveals entire map on completion | 75 |
-| Magic Eden | Magic Eden | Economy | +3 Gold/turn from all trade routes | 50 |
-| Boogle Graveyard | Boogles | Economy | +10 Gold per enemy unit killed | 50 |
-| Degen Ape Emporium | Degen Apes | Vibes | +5 Vibes/turn | 50 |
-| Alpha Art Gallery | Alpha Art | Vibes | +2 Floor Price per tech owned | 75 |
-| SolBear Lair | SolBears | Military | +1 combat strength for all units | 75 |
-| Turtles Hideout | Turtles | Military | All units heal +5 HP/turn | 50 |
-| Taiyo Robotics Factory | Taiyo Robotics | Production | +25% production speed | 50 |
-| Mindfolk Lumberyard | Mindfolk | Production | +2 Production from forest tiles | 50 |
+**Era 1 Wonders** (Cost: 80-120, Floor Price: +25)
+| Wonder | Reference | Category | Prereq | Cost | Effect |
+|--------|-----------|----------|--------|------|--------|
+| Candy Machine | Metaplex | Tech | Tech: Smart Contracts | 120 | +10% research speed |
+| Degen Ape Emporium | Degen Apes | Vibes | Culture: Diamond Hands | 120 | +3 Vibes/turn |
+| Turtles Hideout | Turtles | Military | Culture: Memeing | 80 | All units heal +3 HP/turn |
+
+**Era 2 Wonders** (Cost: 150-200, Floor Price: +50)
+| Wonder | Reference | Category | Prereq | Cost | Effect |
+|--------|-----------|----------|--------|------|--------|
+| Magic Eden | Magic Eden | Economy | Tech: Currency | 180 | +3 Gold/turn from trade routes |
+| Taiyo Robotics Factory | Taiyo Robotics | Production | Tech: Staking | 200 | +20% production speed |
+| Boogle Graveyard | Boogles | Economy | Culture: Alpha DAOs | 160 | +10 Gold per enemy killed |
+| Alpha Art Gallery | Alpha Art | Vibes | Culture: Fudding | 180 | +2 Floor Price per tech |
+
+**Era 3 Wonders** (Cost: 250-350, Floor Price: +75)
+| Wonder | Reference | Category | Prereq | Cost | Effect |
+|--------|-----------|----------|--------|------|--------|
+| Mindfolk Lumberyard | Mindfolk | Production | Tech: Ponzinomics | 280 | +3 Production from forests |
+| The Portal | Portal NFTs | Economy | Culture: Hard Shilling | 300 | +50% gold in this settlement |
+| Balloonsville Lair | Balloonsville | Military | Culture: Rugging | 320 | +2 combat strength all units |
 
 **Mechanics:**
 - Only one player can build each wonder
 - If another player completes first, your production is refunded as gold
-- Wonders require significant production investment
-- Creates race conditions and strategic decisions
+- Wonders require unlocking prerequisites (tech or culture) before building
+- Era-scaled costs and effects reward late-game investment
 
 ```typescript
-interface Wonder {
+interface WonderDefinition {
   id: WonderId
   name: string
+  reference: string
   category: 'tech' | 'economy' | 'vibes' | 'military' | 'production'
-  effect: WonderEffect
-  floorPriceBonus: number
+  era: 1 | 2 | 3
   productionCost: number
+  floorPriceBonus: number
+  effect: WonderEffect
+  description: string
+  techPrereq?: TechId    // Tech required to build
+  culturePrereq?: CultureId  // Culture required to build
+}
+
+interface Wonder {
+  id: WonderId
   builtBy?: TribeId  // undefined if not yet built
   location?: SettlementId
 }
@@ -805,22 +861,61 @@ interface MilestoneChoice {
 - ✅ BUILD_IMPROVEMENT action (builder creates tile improvements)
 - ✅ START_RESEARCH action (set tech research target)
 - ✅ START_CULTURE action (set culture unlock target)
-- Remaining stubs: SELECT_POLICY, SELECT_PROMOTION, SELECT_MILESTONE, trade routes, great persons, diplomacy
+- ✅ DECLARE_WAR, PROPOSE_PEACE, PROPOSE_ALLIANCE actions (diplomacy)
+- Remaining stubs: SELECT_POLICY, SELECT_PROMOTION, SELECT_MILESTONE, trade routes, great persons
+
+#### Phase 7d: Wonder Prerequisites & Era Scaling
+- ✅ Wonders now require tech or culture prerequisites
+- ✅ Era 1 wonders: Floor Price +25, Cost 80-120, weaker effects
+- ✅ Era 2 wonders: Floor Price +50, Cost 150-200, moderate effects
+- ✅ Era 3 wonders: Floor Price +75, Cost 250-350, powerful effects
+- ✅ Renamed SolBear Lair → Balloonsville Lair
+- ✅ Changed The Portal effect: reveal map → +50% gold in settlement
+- ✅ Wonder prereqs documented in TECH.md and CULTURES.md
+
+#### Phase 7e: Basic AI
+- ✅ AI turn execution (runs after human ends turn)
+- ✅ AI unit movement (toward nearest enemy)
+- ✅ AI combat (attacks enemies in range, prioritizes weak targets)
+- ✅ Fog of war updates on unit movement
 
 ### Phase 8: Diplomacy & Trade
 47. ✅ Diplomatic state tracking (5 states)
 48. ✅ War declaration and reputation system
 49. ✅ Alliance formation and shared vision
-50. AI diplomacy decisions
+50. ✅ AI diplomacy decisions
 51. ✅ Trade route yields and external bonuses
+
+#### Phase 8b: Diplomacy Action Handlers & AI
+- ✅ DECLARE_WAR action handler (with reputation penalties, alliance obligations)
+- ✅ PROPOSE_PEACE action handler (war → hostile transition)
+- ✅ PROPOSE_ALLIANCE action handler (friendly → allied)
+- ✅ AI military strength calculation
+- ✅ AI peace decisions (war weariness, losing wars)
+- ✅ AI war decisions (military advantage, settlement targets)
+- ✅ AI alliance decisions (shared enemies, strongest ally)
 
 ### Phase 9: Tribes & Identity
 52. Tribe bonuses and modifiers
-53. Unique units implementation
-54. Unique buildings with adjacency bonuses
+53. ✅ Unique units implementation
+54. ✅ Unique buildings with adjacency bonuses
 55. Tribe-specific golden age triggers
 56. Tribe AI personalities
 57. Visual differentiation per tribe
+
+#### Phase 9a: Tribal Unique Units & Buildings
+- ✅ Added 4 unique unit types to UnitType
+- ✅ Banana Slinger (Monkes): replaces Archer, 3 range, 15/30 strength
+- ✅ Neon Geck (Geckos): replaces Sniper, 3 mobility, kills grant +5 Alpha
+- ✅ DeadGod (DeGods): replaces Swordsman, 45 strength, kills grant +20 Gold
+- ✅ Stuckers (Cets): replaces Swordsman, 35 strength, 3 mobility, debuffs enemy mobility
+- ✅ Unit definitions with stats, production costs, maintenance costs
+- ✅ Degen Mints Cabana (Monkes): +2 Gold per adjacent Jungle/Forest, unlocked by Lending
+- ✅ The Garage (Geckos): +2 Alpha per adjacent Coast/Desert, unlocked by Staking
+- ✅ Eternal Bridge (DeGods): +20% combat unit production, unlocked by Matrica
+- ✅ Creckhouse (Cets): +1 Vibes per adjacent building, unlocked by Discord
+- ✅ Multi-terrain adjacency logic for unique buildings
+- ✅ Tech unlock integration for unique buildings
 
 ### Phase 10: Advanced Systems
 58. Great People accumulation and spawning
