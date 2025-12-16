@@ -551,6 +551,7 @@ export interface PlayerPolicies {
 export interface Player {
   readonly id: PlayerId
   readonly tribeId: TribeId
+  readonly tribeName: TribeName
   readonly isHuman: boolean
   readonly yields: Yields
   readonly treasury: number
@@ -603,6 +604,7 @@ export type GameAction =
   | { type: 'FOUND_SETTLEMENT'; settlerId: UnitId }
   | { type: 'BUILD_IMPROVEMENT'; builderId: UnitId; improvement: ImprovementType }
   | { type: 'START_PRODUCTION'; settlementId: SettlementId; item: ProductionItem }
+  | { type: 'CANCEL_PRODUCTION'; settlementId: SettlementId; queueIndex: number }
   | { type: 'START_RESEARCH'; techId: TechId }
   | { type: 'START_CULTURE'; cultureId: CultureId }
   | { type: 'SELECT_POLICY'; cultureId: CultureId; choice: 0 | 1 }

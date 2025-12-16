@@ -5,9 +5,10 @@ import type { ProductionItem } from '@tribes/game-core'
 interface ProductionQueueProps {
   items: readonly ProductionItem[]
   currentProduction: number
+  onCancel?: (queueIndex: number) => void
 }
 
-export function ProductionQueue({ items, currentProduction }: ProductionQueueProps): JSX.Element {
+export function ProductionQueue({ items, currentProduction, onCancel }: ProductionQueueProps): JSX.Element {
   if (items.length === 0) {
     return (
       <div style={{ color: '#666', fontStyle: 'italic', padding: '12px 0' }}>
@@ -113,6 +114,28 @@ export function ProductionQueue({ items, currentProduction }: ProductionQueuePro
             >
               {item.type}
             </div>
+
+            {/* Cancel button */}
+            {onCancel && (
+              <button
+                onClick={() => onCancel(index)}
+                title="Cancel production"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#f44336',
+                  fontSize: '18px',
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                  lineHeight: 1,
+                  opacity: 0.7,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.7')}
+              >
+                ×
+              </button>
+            )}
           </div>
         )
       })}

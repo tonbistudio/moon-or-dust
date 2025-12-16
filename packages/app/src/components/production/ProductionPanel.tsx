@@ -14,7 +14,7 @@ interface ProductionPanelProps {
 
 export function ProductionPanel({ settlement, onClose }: ProductionPanelProps): JSX.Element {
   const { state } = useGame()
-  const { startProduction } = useGameActions()
+  const { startProduction, cancelProduction } = useGameActions()
 
   // Get available production items for this settlement
   const availableItems = useMemo(() => {
@@ -24,6 +24,10 @@ export function ProductionPanel({ settlement, onClose }: ProductionPanelProps): 
 
   const handleSelectItem = (item: AvailableProductionItem) => {
     startProduction(settlement.id, item.type, item.id, item.cost)
+  }
+
+  const handleCancelItem = (queueIndex: number) => {
+    cancelProduction(settlement.id, queueIndex)
   }
 
   return (
@@ -89,6 +93,7 @@ export function ProductionPanel({ settlement, onClose }: ProductionPanelProps): 
         <ProductionQueue
           items={settlement.productionQueue}
           currentProduction={settlement.currentProduction}
+          onCancel={handleCancelItem}
         />
       </div>
 

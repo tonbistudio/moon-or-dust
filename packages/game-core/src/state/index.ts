@@ -80,6 +80,7 @@ import {
   getGoldenAgeYieldBonus,
 } from '../goldenage'
 import { getPlayerTribeBonuses } from '../tribes'
+import { claimLootbox, hasLootboxAt } from '../lootbox'
 
 // =============================================================================
 // Constants
@@ -161,10 +162,11 @@ const INITIAL_POLICIES: PlayerPolicies = {
 // Player Creation
 // =============================================================================
 
-export function createPlayer(tribeId: TribeId, isHuman: boolean): Player {
+export function createPlayer(tribeId: TribeId, tribeName: TribeName, isHuman: boolean): Player {
   return {
     id: generatePlayerId(),
     tribeId,
+    tribeName,
     isHuman,
     yields: EMPTY_YIELDS,
     treasury: 0,
@@ -204,11 +206,11 @@ export function createInitialState(config: GameConfig): GameState {
   // Create players
   const players: Player[] = []
   const humanTribeId = tribeIds.get(humanTribe)!
-  players.push(createPlayer(humanTribeId, true))
+  players.push(createPlayer(humanTribeId, humanTribe, true))
 
   for (const aiTribe of aiTribes) {
     const aiTribeId = tribeIds.get(aiTribe)!
-    players.push(createPlayer(aiTribeId, false))
+    players.push(createPlayer(aiTribeId, aiTribe, false))
   }
 
   // Create empty map (will be populated by map generation)
@@ -405,6 +407,9 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
 
     case 'START_PRODUCTION':
       return applyStartProduction(state, action.settlementId, action.item)
+
+    case 'CANCEL_PRODUCTION':
+      return applyCancelProduction(state, action.settlementId, action.queueIndex)
 
     case 'START_RESEARCH':
       return applyStartResearch(state, action.techId)
@@ -954,6 +959,42 @@ function applyStartProduction(
   }
 }
 
+function applyCancelProduction(
+  state: GameState,
+  settlementId: SettlementId,
+  queueIndex: number
+): ActionResult {
+  // Get settlement
+  const settlement = state.settlements.get(settlementId)
+  if (!settlement) {
+    return { success: false, error: 'Settlement not found' }
+  }
+
+  // Validate ownership
+  if (settlement.owner !== state.currentPlayer) {
+    return { success: false, error: 'Settlement not owned by current player' }
+  }
+
+  // Validate queue index
+  if (queueIndex < 0 || queueIndex >= settlement.productionQueue.length) {
+    return { success: false, error: 'Invalid queue index' }
+  }
+
+  // Remove item from queue
+  const newQueue = [...settlement.productionQueue]
+  newQueue.splice(queueIndex, 1)
+
+  const updatedSettlement: Settlement = {
+    ...settlement,
+    productionQueue: newQueue,
+  }
+
+  const newSettlements = new Map(state.settlements)
+  newSettlements.set(settlementId, updatedSettlement)
+
+  return { success: true, state: { ...state, settlements: newSettlements } }
+}
+
 // =============================================================================
 // Floor Price Calculation
 // =============================================================================
@@ -1083,6 +1124,15 @@ function applyMoveUnit(
   const vision = BASE_UNIT_VISION + unit.rarityBonuses.vision
   newState = revealFogAroundPosition(newState, unit.owner, movedUnit.position, vision)
 
+  // Check for lootbox at destination
+  if (hasLootboxAt(newState, movedUnit.position)) {
+    const rng = createRng(newState.seed + newState.turn * 1000 + unitId.charCodeAt(0))
+    const claimResult = claimLootbox(newState, movedUnit.position, unit.owner, rng)
+    if (claimResult) {
+      newState = claimResult.state
+    }
+  }
+
   return { success: true, state: newState }
 }
 
@@ -1128,10 +1178,14 @@ function applyFoundSettlement(
   )
   const isCapital = playerSettlements.length === 0
 
+  // Get the player's tribe name for settlement naming
+  const player = state.players.find((p) => p.tribeId === settler.owner)
+
   // Create settlement
   const settlement = createSettlement({
     owner: settler.owner,
     position: settler.position,
+    ...(player?.tribeName && { tribeName: player.tribeName }),
     isCapital,
   })
 

@@ -69,7 +69,7 @@ export function useSelectedUnit(): Unit | null {
  * Hook for handling tile clicks
  */
 export function useTileClick() {
-  const { state, selectedUnit, dispatch, selectTile, selectUnit, selectSettlement } = useGameContext()
+  const { state, selectedUnit, selectedSettlement, dispatch, selectTile, selectUnit, selectSettlement } = useGameContext()
 
   return useCallback(
     (coord: HexCoord) => {
@@ -78,12 +78,12 @@ export function useTileClick() {
       selectTile(coord)
       const key = hexKey(coord)
 
-      // Check for settlement at tile
+      // Find settlement at tile (if any)
+      let settlementAtTile: Settlement | null = null
       for (const settlement of state.settlements.values()) {
         if (hexKey(settlement.position) === key) {
-          selectSettlement(settlement.id)
-          selectUnit(null)
-          return
+          settlementAtTile = settlement
+          break
         }
       }
 
@@ -116,6 +116,46 @@ export function useTileClick() {
           }
           // If attack failed, continue to other logic
         }
+      }
+
+      // Handle tiles with both settlement and units - cycle between them
+      if (settlementAtTile && friendlyUnitsAtTile.length > 0) {
+        // If settlement is currently selected, switch to first unit
+        if (selectedSettlement === settlementAtTile.id) {
+          selectSettlement(null)
+          selectUnit(friendlyUnitsAtTile[0]!.id)
+          return
+        }
+
+        // If a unit at this tile is selected, cycle to next unit or back to settlement
+        const currentUnitIndex = selectedUnit
+          ? friendlyUnitsAtTile.findIndex((u) => u.id === selectedUnit)
+          : -1
+
+        if (currentUnitIndex >= 0) {
+          const nextIndex = currentUnitIndex + 1
+          if (nextIndex < friendlyUnitsAtTile.length) {
+            // Cycle to next unit
+            selectUnit(friendlyUnitsAtTile[nextIndex]!.id)
+          } else {
+            // Cycled through all units, go back to settlement
+            selectUnit(null)
+            selectSettlement(settlementAtTile.id)
+          }
+          return
+        }
+
+        // Nothing selected at this tile yet, select settlement first
+        selectSettlement(settlementAtTile.id)
+        selectUnit(null)
+        return
+      }
+
+      // Settlement only (no friendly units)
+      if (settlementAtTile) {
+        selectSettlement(settlementAtTile.id)
+        selectUnit(null)
+        return
       }
 
       // If there are friendly units at this tile, cycle through them
@@ -161,7 +201,7 @@ export function useTileClick() {
       selectUnit(null)
       selectSettlement(null)
     },
-    [state, selectedUnit, dispatch, selectTile, selectUnit, selectSettlement]
+    [state, selectedUnit, selectedSettlement, dispatch, selectTile, selectUnit, selectSettlement]
   )
 }
 
@@ -196,12 +236,24 @@ export function useGameActions() {
     [dispatch]
   )
 
+  const cancelProduction = useCallback(
+    (settlementId: SettlementId, queueIndex: number) => {
+      return dispatch({
+        type: 'CANCEL_PRODUCTION',
+        settlementId,
+        queueIndex,
+      })
+    },
+    [dispatch]
+  )
+
   return useMemo(
     () => ({
       dispatch,
       endTurn,
       startProduction,
+      cancelProduction,
     }),
-    [dispatch, endTurn, startProduction]
+    [dispatch, endTurn, startProduction, cancelProduction]
   )
 }

@@ -137,11 +137,13 @@ export function GameUI(): JSX.Element | null {
 
       {/* Tech Tree Modal */}
       {showTechTree && (
-        <TechTreePanel
-          player={currentPlayer}
-          onSelectTech={handleSelectTech}
-          onClose={() => setShowTechTree(false)}
-        />
+        <div style={{ pointerEvents: 'auto' }}>
+          <TechTreePanel
+            player={currentPlayer}
+            onSelectTech={handleSelectTech}
+            onClose={() => setShowTechTree(false)}
+          />
+        </div>
       )}
     </div>
   )
