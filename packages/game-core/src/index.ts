@@ -54,5 +54,14 @@ export * from './wonders'
 // Diplomacy
 export * from './diplomacy'
 
+// Great People
+export * from './greatpeople'
+
+// Golden Ages
+export * from './goldenage'
+
+// Tribes
+export * from './tribes'
+
 // AI
 export * from './ai'

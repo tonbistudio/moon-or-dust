@@ -11,9 +11,7 @@ import type {
   HexMap,
   DiplomacyState,
   TribeName,
-  Tribe,
   Yields,
-  GreatPeopleAccumulator,
   GoldenAgeState,
   PlayerPolicies,
   ProductionItem,
@@ -24,6 +22,10 @@ import type {
   TechId,
   CultureId,
   ImprovementType,
+  PromotionId,
+  TradeRouteId,
+  DiplomaticRelation,
+  PolicyId,
 } from '../types'
 import { hexKey } from '../hex'
 import { startWonderConstruction, canBuildWonder, completeWonder } from '../wonders'
@@ -38,15 +40,21 @@ import {
   getPathCost,
   moveUnit as applyUnitMove,
 } from '../units'
-import { processProduction, processPlayerEconomy } from '../economy'
+import { processProduction, processPlayerEconomy, createTradeRoute, cancelTradeRoute, processTradeRouteFormation } from '../economy'
 import {
   createSettlement,
   addSettlement,
   canFoundSettlement,
+  calculateSettlementYields,
 } from '../settlements'
-import { resolveCombat } from '../combat'
-import { canResearchTech, TECH_DEFINITIONS } from '../tech'
-import { canUnlockCulture, CULTURE_DEFINITIONS } from '../cultures'
+import {
+  resolveCombat,
+  resolveSettlementCombat,
+  applySettlementCombatResult,
+} from '../combat'
+import { getSettlementMaxHealth } from '../settlements'
+import { canResearchTech, TECH_DEFINITIONS, addResearchProgress } from '../tech'
+import { canUnlockCulture, CULTURE_DEFINITIONS, completeCulture, isCultureReadyForCompletion, addCultureProgress, swapPolicies } from '../cultures'
 import { canBuildImprovement } from '../improvements'
 import {
   declareWar,
@@ -56,6 +64,22 @@ import {
   canProposePeace,
   canProposeAlliance,
 } from '../diplomacy'
+import { processBarbarianSpawning } from '../barbarians'
+import { applyPromotion, getAvailablePromotions } from '../promotions'
+import { selectMilestone, hasPendingMilestone } from '../milestones'
+import {
+  getInitialGreatPeopleState,
+  checkAndSpawnGreatPeople,
+  useGreatPersonAction,
+} from '../greatpeople'
+import {
+  checkAllTriggers,
+  activateGoldenAge,
+  processGoldenAgeTurn,
+  cleanupRecentTechs,
+  getGoldenAgeYieldBonus,
+} from '../goldenage'
+import { getPlayerTribeBonuses } from '../tribes'
 
 // =============================================================================
 // Constants
@@ -114,17 +138,12 @@ const EMPTY_YIELDS: Yields = {
   growth: 0,
 }
 
-const EMPTY_GREAT_PEOPLE_ACCUMULATOR: GreatPeopleAccumulator = {
-  combat: 0,
-  alpha: 0,
-  gold: 0,
-  vibes: 0,
-}
 
 const INITIAL_GOLDEN_AGE_STATE: GoldenAgeState = {
   active: false,
   turnsRemaining: 0,
   triggersUsed: [],
+  recentTechTurns: [],
 }
 
 const INITIAL_POLICIES: PlayerPolicies = {
@@ -136,67 +155,6 @@ const INITIAL_POLICIES: PlayerPolicies = {
   },
   pool: [],
   active: [],
-}
-
-// =============================================================================
-// Tribe Definitions
-// =============================================================================
-
-export const TRIBES: Record<TribeName, Omit<Tribe, 'id'>> = {
-  monkes: {
-    name: 'monkes',
-    displayName: 'Monkes',
-    primaryStrength: 'vibes',
-    secondaryStrength: 'economy',
-    uniqueUnitType: 'archer',
-    uniqueBuildingId: 'degen_mints_cabana' as never,
-    color: '#4ade80', // green
-  },
-  geckos: {
-    name: 'geckos',
-    displayName: 'Geckos',
-    primaryStrength: 'tech',
-    secondaryStrength: 'production',
-    uniqueUnitType: 'scout',
-    uniqueBuildingId: 'the_garage' as never,
-    color: '#22d3ee', // cyan
-  },
-  degods: {
-    name: 'degods',
-    displayName: 'DeGods',
-    primaryStrength: 'military',
-    secondaryStrength: 'economy',
-    uniqueUnitType: 'warrior',
-    uniqueBuildingId: 'eternal_bridge' as never,
-    color: '#fbbf24', // gold
-  },
-  cets: {
-    name: 'cets',
-    displayName: 'Cets',
-    primaryStrength: 'vibes',
-    secondaryStrength: 'production',
-    uniqueUnitType: 'archer',
-    uniqueBuildingId: 'creckhouse' as never,
-    color: '#f97316', // orange
-  },
-  gregs: {
-    name: 'gregs',
-    displayName: 'Gregs',
-    primaryStrength: 'production',
-    secondaryStrength: 'military',
-    uniqueUnitType: 'warrior',
-    uniqueBuildingId: 'holder_chat' as never,
-    color: '#ef4444', // red
-  },
-  dragonz: {
-    name: 'dragonz',
-    displayName: 'Dragonz',
-    primaryStrength: 'economy',
-    secondaryStrength: 'tech',
-    uniqueUnitType: 'archer',
-    uniqueBuildingId: 'dragonz_den' as never,
-    color: '#a855f7', // purple
-  },
 }
 
 // =============================================================================
@@ -215,7 +173,7 @@ export function createPlayer(tribeId: TribeId, isHuman: boolean): Player {
     unlockedCultures: [],
     cultureProgress: 0,
     policies: INITIAL_POLICIES,
-    greatPeopleProgress: EMPTY_GREAT_PEOPLE_ACCUMULATOR,
+    greatPeople: getInitialGreatPeopleState(),
     goldenAge: INITIAL_GOLDEN_AGE_STATE,
     killCount: 0,
   }
@@ -306,6 +264,7 @@ export function createInitialState(config: GameConfig): GameState {
     diplomacy,
     tradeRoutes: [],
     barbarianCamps: [],
+    greatPersons: new Map(),
     lootboxes: [],
     wonders: [],
     floorPrices,
@@ -429,6 +388,15 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
     case 'ATTACK':
       return applyAttack(state, action.attackerId, action.targetId)
 
+    case 'ATTACK_SETTLEMENT':
+      return applyAttackSettlement(state, action.attackerId, action.settlementId)
+
+    case 'CAPTURE_SETTLEMENT':
+      return applyCaptureSettlement(state, action.settlementId)
+
+    case 'RAZE_SETTLEMENT':
+      return applyRazeSettlement(state, action.settlementId)
+
     case 'FOUND_SETTLEMENT':
       return applyFoundSettlement(state, action.settlerId)
 
@@ -445,22 +413,25 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
       return applyStartCulture(state, action.cultureId)
 
     case 'SELECT_POLICY':
-      return { success: false, error: 'SELECT_POLICY not yet implemented' }
+      return applySelectPolicy(state, action.cultureId, action.choice)
 
     case 'SELECT_PROMOTION':
-      return { success: false, error: 'SELECT_PROMOTION not yet implemented' }
+      return applySelectPromotion(state, action.unitId, action.promotionId)
 
     case 'SELECT_MILESTONE':
-      return { success: false, error: 'SELECT_MILESTONE not yet implemented' }
+      return applySelectMilestone(state, action.settlementId, action.choice)
 
     case 'CREATE_TRADE_ROUTE':
-      return { success: false, error: 'CREATE_TRADE_ROUTE not yet implemented' }
+      return applyCreateTradeRoute(state, action.origin, action.destination)
 
     case 'CANCEL_TRADE_ROUTE':
-      return { success: false, error: 'CANCEL_TRADE_ROUTE not yet implemented' }
+      return applyCancelTradeRoute(state, action.routeId)
 
     case 'USE_GREAT_PERSON':
-      return { success: false, error: 'USE_GREAT_PERSON not yet implemented' }
+      return applyUseGreatPerson(state, action.unitId)
+
+    case 'SWAP_POLICIES':
+      return applySwapPolicies(state, action.toSlot, action.toUnslot)
 
     case 'DECLARE_WAR':
       return applyDeclareWar(state, action.target)
@@ -492,11 +463,34 @@ function applyEndTurn(state: GameState): ActionResult {
   // Process economy (gold income/maintenance)
   newState = processPlayerEconomy(newState, currentPlayer)
 
-  // TODO: Apply research progress
-  // TODO: Process golden ages
-  // TODO: Spawn barbarians
-  // TODO: Check golden age triggers
-  // TODO: Update diplomacy timers
+  // Process trade route formation (2-turn delay)
+  newState = processTradeRouteFormation(newState, currentPlayer)
+
+  // Apply research progress from Alpha yield
+  newState = applyResearchProgress(newState, currentPlayer)
+
+  // Apply culture progress from Vibes yield
+  newState = applyCultureProgress(newState, currentPlayer)
+
+  // Process golden ages (decrement turns remaining)
+  newState = processGoldenAges(newState, currentPlayer)
+
+  // Check golden age triggers
+  newState = checkGoldenAgeTriggers(newState, currentPlayer)
+
+  // Update diplomacy timers (increment turnsAtCurrentStance)
+  newState = updateDiplomacyTimers(newState)
+
+  // Spawn barbarians (only on new round, i.e., when first player ends turn)
+  const isFirstPlayer = state.players.findIndex((p) => p.tribeId === currentPlayer) === 0
+  if (isFirstPlayer) {
+    const rng = createRng(state.seed + state.turn)
+    newState = processBarbarianSpawning(newState, rng)
+  }
+
+  // Check for great person spawning
+  const gpRng = createRng(state.seed + state.turn * 100 + currentPlayer.charCodeAt(0))
+  newState = checkAndSpawnGreatPeople(newState, currentPlayer, gpRng)
 
   // Reset unit movement for current player
   newState = resetPlayerUnits(newState, currentPlayer)
@@ -589,19 +583,79 @@ function handleCompletedProduction(
       )
       const newSettlements = new Map(state.settlements)
       newSettlements.set(settlementId, updatedSettlement)
-      return { ...state, settlements: newSettlements }
+      let newState: GameState = { ...state, settlements: newSettlements }
+
+      // Increment buildingsBuilt in GP accumulator
+      newState = incrementBuildingsBuilt(newState, settlement.owner)
+
+      return newState
     }
 
     case 'wonder': {
       // Complete wonder
       const wonderId = item.id as WonderId
-      const result = completeWonder(state, settlementId, wonderId)
-      return result ?? state
+      let result = completeWonder(state, settlementId, wonderId)
+      if (!result) return state
+
+      // Increment wondersBuilt in GP accumulator
+      result = incrementWondersBuilt(result, settlement.owner)
+
+      return result
     }
 
     default:
       return state
   }
+}
+
+/**
+ * Increments buildingsBuilt counter in GP accumulator
+ */
+function incrementBuildingsBuilt(state: GameState, tribeId: TribeId): GameState {
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+  const updatedPlayer: Player = {
+    ...player,
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        buildingsBuilt: player.greatPeople.accumulator.buildingsBuilt + 1,
+      },
+    },
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+
+  return { ...state, players: newPlayers }
+}
+
+/**
+ * Increments wondersBuilt counter in GP accumulator
+ */
+function incrementWondersBuilt(state: GameState, tribeId: TribeId): GameState {
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+  const updatedPlayer: Player = {
+    ...player,
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        wondersBuilt: player.greatPeople.accumulator.wondersBuilt + 1,
+      },
+    },
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+
+  return { ...state, players: newPlayers }
 }
 
 /**
@@ -624,6 +678,173 @@ function resetPlayerUnits(state: GameState, tribeId: TribeId): GameState {
   return {
     ...state,
     units: newUnits,
+  }
+}
+
+// =============================================================================
+// Turn Processing Helpers
+// =============================================================================
+
+/**
+ * Applies research progress based on player's Alpha yield
+ */
+function applyResearchProgress(state: GameState, tribeId: TribeId): GameState {
+  const player = getPlayer(state, tribeId)
+  if (!player) return state
+
+  // Calculate Alpha yield from all settlements
+  let totalAlpha = 0
+  for (const settlement of state.settlements.values()) {
+    if (settlement.owner === tribeId) {
+      const yields = calculateSettlementYields(state, settlement)
+      totalAlpha += yields.alpha
+    }
+  }
+
+  // Apply tribe bonus (e.g., Geckos +5% Alpha)
+  const tribeBonuses = getPlayerTribeBonuses(state, tribeId)
+  if (tribeBonuses.alphaYieldPercent) {
+    totalAlpha = Math.floor(totalAlpha * (1 + tribeBonuses.alphaYieldPercent))
+  }
+
+  // Apply golden age bonus if active
+  const alphaBonus = getGoldenAgeYieldBonus(player, 'alpha')
+  if (alphaBonus > 0) {
+    totalAlpha = Math.floor(totalAlpha * (1 + alphaBonus))
+  }
+
+  if (totalAlpha <= 0) return state
+
+  // Update Great People accumulator with alpha earned
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  const updatedPlayer: Player = {
+    ...player,
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        alpha: player.greatPeople.accumulator.alpha + totalAlpha,
+      },
+    },
+  }
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+  let newState: GameState = { ...state, players: newPlayers }
+
+  // Only add to research queue if there's current research
+  if (!player.currentResearch) return newState
+
+  return addResearchProgress(newState, tribeId, totalAlpha)
+}
+
+/**
+ * Applies culture progress based on player's Vibes yield
+ */
+function applyCultureProgress(state: GameState, tribeId: TribeId): GameState {
+  const player = getPlayer(state, tribeId)
+  if (!player) return state
+
+  // Calculate Vibes yield from all settlements
+  let totalVibes = 0
+  for (const settlement of state.settlements.values()) {
+    if (settlement.owner === tribeId) {
+      const yields = calculateSettlementYields(state, settlement)
+      totalVibes += yields.vibes
+    }
+  }
+
+  // Apply tribe bonus (e.g., Monkes +5% Vibes)
+  const tribeBonuses = getPlayerTribeBonuses(state, tribeId)
+  if (tribeBonuses.vibesYieldPercent) {
+    totalVibes = Math.floor(totalVibes * (1 + tribeBonuses.vibesYieldPercent))
+  }
+
+  // Apply golden age bonus if active
+  const vibesBonus = getGoldenAgeYieldBonus(player, 'vibes')
+  if (vibesBonus > 0) {
+    totalVibes = Math.floor(totalVibes * (1 + vibesBonus))
+  }
+
+  if (totalVibes <= 0) return state
+
+  // Update Great People accumulator with vibes earned
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  const updatedPlayer: Player = {
+    ...player,
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        vibes: player.greatPeople.accumulator.vibes + totalVibes,
+      },
+    },
+  }
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+  let newState: GameState = { ...state, players: newPlayers }
+
+  // Only add to culture progress if there's current culture being researched
+  if (!player.currentCulture) return newState
+
+  return addCultureProgress(newState, tribeId, totalVibes)
+}
+
+/**
+ * Processes golden age state (decrement turns remaining, cleanup old tech records)
+ */
+function processGoldenAges(state: GameState, tribeId: TribeId): GameState {
+  // Clean up old tech records for the "3 techs in 5 turns" trigger
+  let newState = cleanupRecentTechs(state, tribeId, state.turn)
+
+  // Process active golden age (decrement turns remaining)
+  newState = processGoldenAgeTurn(newState, tribeId)
+
+  return newState
+}
+
+/**
+ * Checks and triggers golden ages based on achievements
+ */
+function checkGoldenAgeTriggers(state: GameState, tribeId: TribeId): GameState {
+  const player = getPlayer(state, tribeId)
+  if (!player) return state
+
+  // Don't check if already in a golden age
+  if (player.goldenAge.active) return state
+
+  // Use the goldenage module to check all triggers
+  const metTriggers = checkAllTriggers(state, tribeId)
+
+  // If no triggers met, return unchanged state
+  if (metTriggers.length === 0) return state
+
+  // Activate with the first met trigger (priority order is already in checkAllTriggers)
+  const triggerId = metTriggers[0]!
+  const rng = createRng(state.seed + state.turn * 1000 + tribeId.charCodeAt(0))
+
+  return activateGoldenAge(state, tribeId, triggerId, rng)
+}
+
+/**
+ * Updates diplomacy timers (increment turnsAtCurrentStance for all relations)
+ */
+function updateDiplomacyTimers(state: GameState): GameState {
+  const newRelations = new Map(state.diplomacy.relations)
+
+  for (const [key, relation] of state.diplomacy.relations) {
+    const updatedRelation: DiplomaticRelation = {
+      ...relation,
+      turnsAtCurrentStance: relation.turnsAtCurrentStance + 1,
+    }
+    newRelations.set(key, updatedRelation)
+  }
+
+  return {
+    ...state,
+    diplomacy: {
+      ...state.diplomacy,
+      relations: newRelations,
+    },
   }
 }
 
@@ -1025,6 +1246,161 @@ function applyAttack(
 }
 
 // =============================================================================
+// Settlement Combat
+// =============================================================================
+
+/**
+ * Executes an attack from a unit to a settlement
+ */
+function applyAttackSettlement(
+  state: GameState,
+  attackerId: UnitId,
+  settlementId: SettlementId
+): ActionResult {
+  const attacker = state.units.get(attackerId)
+  const settlement = state.settlements.get(settlementId)
+
+  if (!attacker) {
+    return { success: false, error: 'Attacker not found' }
+  }
+
+  if (!settlement) {
+    return { success: false, error: 'Settlement not found' }
+  }
+
+  // Validate ownership
+  if (attacker.owner !== state.currentPlayer) {
+    return { success: false, error: 'Attacker not owned by current player' }
+  }
+
+  // Resolve settlement combat
+  const combatResult = resolveSettlementCombat(state, attackerId, settlementId)
+  if (!combatResult) {
+    return { success: false, error: 'Settlement combat could not be resolved' }
+  }
+
+  // Apply combat results
+  let newState = applySettlementCombatResult(state, combatResult)
+
+  // If settlement is conquered, player will need to choose capture or raze
+  // For now, just mark the settlement as having 0 HP
+
+  return { success: true, state: newState }
+}
+
+/**
+ * Captures a conquered settlement (HP = 0), transferring ownership
+ */
+function applyCaptureSettlement(
+  state: GameState,
+  settlementId: SettlementId
+): ActionResult {
+  const settlement = state.settlements.get(settlementId)
+
+  if (!settlement) {
+    return { success: false, error: 'Settlement not found' }
+  }
+
+  // Verify settlement is conquered (HP = 0)
+  if (settlement.health > 0) {
+    return { success: false, error: 'Settlement is not conquered' }
+  }
+
+  // Verify current player doesn't already own it
+  if (settlement.owner === state.currentPlayer) {
+    return { success: false, error: 'You already own this settlement' }
+  }
+
+  // Calculate captured settlement HP (restored to half max)
+  const capturedMaxHealth = getSettlementMaxHealth(settlement.level)
+  const capturedHealth = Math.floor(capturedMaxHealth / 2)
+
+  // Transfer ownership
+  const capturedSettlement: Settlement = {
+    ...settlement,
+    owner: state.currentPlayer,
+    health: capturedHealth,
+    maxHealth: capturedMaxHealth,
+    // Reset production queue (capturing player starts fresh)
+    productionQueue: [],
+    currentProduction: 0,
+    // Keep buildings, but not capital status
+    isCapital: false,
+  }
+
+  const settlements = new Map(state.settlements)
+  settlements.set(settlementId, capturedSettlement)
+
+  // Update tile ownership in the settlement's territory
+  const tiles = new Map(state.map.tiles)
+  for (const [key, tile] of tiles) {
+    if (tile.owner === settlement.owner) {
+      // Check if this tile is closer to the captured settlement than any other settlement
+      // For simplicity, just transfer the settlement tile for now
+      if (key === hexKey(settlement.position)) {
+        tiles.set(key, { ...tile, owner: state.currentPlayer })
+      }
+    }
+  }
+
+  const newMap: HexMap = { ...state.map, tiles }
+
+  return {
+    success: true,
+    state: { ...state, settlements, map: newMap },
+  }
+}
+
+/**
+ * Razes a conquered settlement, destroying it completely
+ */
+function applyRazeSettlement(
+  state: GameState,
+  settlementId: SettlementId
+): ActionResult {
+  const settlement = state.settlements.get(settlementId)
+
+  if (!settlement) {
+    return { success: false, error: 'Settlement not found' }
+  }
+
+  // Verify settlement is conquered (HP = 0)
+  if (settlement.health > 0) {
+    return { success: false, error: 'Settlement is not conquered' }
+  }
+
+  // Verify current player doesn't already own it (can't raze your own)
+  if (settlement.owner === state.currentPlayer) {
+    return { success: false, error: 'Cannot raze your own settlement' }
+  }
+
+  // Remove settlement
+  const settlements = new Map(state.settlements)
+  settlements.delete(settlementId)
+
+  // Clear tile ownership in the razed settlement's former territory
+  const tiles = new Map(state.map.tiles)
+  for (const [key, tile] of tiles) {
+    if (tile.owner === settlement.owner) {
+      // Remove ownership from tiles that belonged to the razed settlement
+      // For simplicity, just clear the settlement tile for now
+      if (key === hexKey(settlement.position)) {
+        // Remove owner by creating tile without owner property
+        const { owner: _removed, ...tileWithoutOwner } = tile
+        tiles.set(key, tileWithoutOwner)
+      }
+    }
+  }
+
+  const newMap: HexMap = { ...state.map, tiles }
+
+  return {
+    success: true,
+    state: { ...state, settlements, map: newMap },
+  }
+}
+
+// =============================================================================
 // Tile Improvements
 // =============================================================================
 
@@ -1238,6 +1614,250 @@ function applyProposeAlliance(state: GameState, target: TribeId): ActionResult {
   const newState = formAlliance(state, currentTribe, target)
   if (!newState) {
     return { success: false, error: 'Failed to form alliance' }
+  }
+
+  return { success: true, state: newState }
+}
+
+// =============================================================================
+// Policy, Promotion, Milestone, and Trade Route Actions
+// =============================================================================
+
+/**
+ * Selects a policy when completing a culture (chooses A or B policy card)
+ */
+function applySelectPolicy(
+  state: GameState,
+  cultureId: CultureId,
+  choice: 0 | 1
+): ActionResult {
+  const currentTribe = state.currentPlayer
+  const player = state.players.find((p) => p.tribeId === currentTribe)
+
+  if (!player) {
+    return { success: false, error: 'Player not found' }
+  }
+
+  // Verify this is the culture they're working on and it's ready
+  if (player.currentCulture !== cultureId) {
+    return { success: false, error: 'Not currently researching this culture' }
+  }
+
+  if (!isCultureReadyForCompletion(player)) {
+    return { success: false, error: 'Culture research not complete' }
+  }
+
+  // Complete the culture with the chosen policy
+  const policyChoice = choice === 0 ? 'a' : 'b'
+  const newState = completeCulture(state, currentTribe, policyChoice)
+
+  if (!newState) {
+    return { success: false, error: 'Failed to complete culture' }
+  }
+
+  return { success: true, state: newState }
+}
+
+/**
+ * Swaps active policy cards (slot/unslot policies)
+ * Can be used after completing a culture to rearrange active policies
+ */
+function applySwapPolicies(
+  state: GameState,
+  toSlot: PolicyId[],
+  toUnslot: PolicyId[]
+): ActionResult {
+  const currentTribe = state.currentPlayer
+
+  const newState = swapPolicies(state, currentTribe, toSlot, toUnslot)
+
+  if (!newState) {
+    return { success: false, error: 'Failed to swap policies - check slot availability' }
+  }
+
+  return { success: true, state: newState }
+}
+
+/**
+ * Selects a promotion for a unit that has leveled up
+ */
+function applySelectPromotion(
+  state: GameState,
+  unitId: UnitId,
+  promotionId: PromotionId
+): ActionResult {
+  const unit = state.units.get(unitId)
+  if (!unit) {
+    return { success: false, error: 'Unit not found' }
+  }
+
+  // Validate ownership
+  if (unit.owner !== state.currentPlayer) {
+    return { success: false, error: 'Unit not owned by current player' }
+  }
+
+  // Check if unit can get a promotion (has pending promotion)
+  const availablePromotions = getAvailablePromotions(unit)
+  if (availablePromotions.length === 0) {
+    return { success: false, error: 'Unit has no promotions available' }
+  }
+
+  // Verify the selected promotion is available
+  const isAvailable = availablePromotions.some((p) => p.id === promotionId)
+  if (!isAvailable) {
+    return { success: false, error: 'Promotion not available for this unit' }
+  }
+
+  // Apply the promotion (returns updated unit)
+  const updatedUnit = applyPromotion(unit, promotionId)
+  if (!updatedUnit) {
+    return { success: false, error: 'Failed to apply promotion' }
+  }
+
+  // Update the unit in state
+  const newUnits = new Map(state.units)
+  newUnits.set(unitId, updatedUnit)
+
+  return { success: true, state: { ...state, units: newUnits } }
+}
+
+/**
+ * Selects a milestone reward when a settlement levels up
+ */
+function applySelectMilestone(
+  state: GameState,
+  settlementId: SettlementId,
+  choice: 'a' | 'b'
+): ActionResult {
+  const settlement = state.settlements.get(settlementId)
+  if (!settlement) {
+    return { success: false, error: 'Settlement not found' }
+  }
+
+  // Validate ownership
+  if (settlement.owner !== state.currentPlayer) {
+    return { success: false, error: 'Settlement not owned by current player' }
+  }
+
+  // Check if settlement has pending milestones
+  if (!hasPendingMilestone(settlement)) {
+    return { success: false, error: 'Settlement has no pending milestone choices' }
+  }
+
+  // Apply the milestone selection
+  const newState = selectMilestone(state, settlementId, settlement.level, choice)
+  if (!newState) {
+    return { success: false, error: 'Failed to apply milestone selection' }
+  }
+
+  return { success: true, state: newState }
+}
+
+/**
+ * Creates a trade route between two settlements
+ */
+function applyCreateTradeRoute(
+  state: GameState,
+  originId: SettlementId,
+  destinationId: SettlementId
+): ActionResult {
+  const origin = state.settlements.get(originId)
+  if (!origin) {
+    return { success: false, error: 'Origin settlement not found' }
+  }
+
+  // Validate ownership of origin
+  if (origin.owner !== state.currentPlayer) {
+    return { success: false, error: 'Origin settlement not owned by current player' }
+  }
+
+  const destination = state.settlements.get(destinationId)
+  if (!destination) {
+    return { success: false, error: 'Destination settlement not found' }
+  }
+
+  // Create the trade route
+  const result = createTradeRoute(state, originId, destinationId)
+  if (!result) {
+    return { success: false, error: 'Cannot create trade route (check diplomatic relations or route limits)' }
+  }
+
+  return { success: true, state: result.state }
+}
+
+/**
+ * Cancels an existing trade route
+ */
+function applyCancelTradeRoute(
+  state: GameState,
+  routeId: TradeRouteId
+): ActionResult {
+  // Find the route
+  const route = state.tradeRoutes.find((r) => r.id === routeId)
+  if (!route) {
+    return { success: false, error: 'Trade route not found' }
+  }
+
+  // Validate ownership (route must originate from player's settlement)
+  const origin = state.settlements.get(route.origin)
+  if (!origin || origin.owner !== state.currentPlayer) {
+    return { success: false, error: 'Trade route not owned by current player' }
+  }
+
+  // Check if route is active
+  if (!route.active) {
+    return { success: false, error: 'Trade route already cancelled' }
+  }
+
+  // Cancel the route
+  const newState = cancelTradeRoute(state, routeId)
+
+  return { success: true, state: newState }
+}
+
+// =============================================================================
+// Great Person Actions
+// =============================================================================
+
+/**
+ * Uses a great person's one-time action
+ */
+function applyUseGreatPerson(
+  state: GameState,
+  unitId: UnitId
+): ActionResult {
+  const unit = state.units.get(unitId)
+  if (!unit) {
+    return { success: false, error: 'Unit not found' }
+  }
+
+  // Validate ownership
+  if (unit.owner !== state.currentPlayer) {
+    return { success: false, error: 'Unit not owned by current player' }
+  }
+
+  // Validate it's a great person
+  if (unit.type !== 'great_person') {
+    return { success: false, error: 'Unit is not a great person' }
+  }
+
+  // Check if the great person has already acted
+  const greatPerson = state.greatPersons?.get(unitId)
+  if (!greatPerson) {
+    return { success: false, error: 'Great person data not found' }
+  }
+
+  if (greatPerson.hasActed) {
+    return { success: false, error: 'This great person has already used their action' }
+  }
+
+  // Create RNG based on state
+  const rng = createRng(state.seed + state.turn + unitId.charCodeAt(0))
+
+  // Use the great person action
+  const newState = useGreatPersonAction(state, unitId, rng)
+  if (!newState) {
+    return { success: false, error: 'Failed to use great person action' }
   }
 
   return { success: true, state: newState }

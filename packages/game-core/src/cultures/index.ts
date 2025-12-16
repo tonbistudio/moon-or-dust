@@ -77,7 +77,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 20,
     prerequisites: { cultures: [], techs: [] },
     policyChoices: [
-      createPolicy('clout', 'Clout', 'Alliance proposals always accepted', 'influence', 'a', 'wildcard', 'alliance_accept', {}),
+      createPolicy('clout', 'Clout', '65% chance of earning great people at thresholds', 'influence', 'a', 'wildcard', 'great_people_chance', { percent: 65 }),
       createPolicy('networking', 'Networking', '+1 Gold per ally', 'influence', 'b', 'economy', 'ally_gold', { amount: 1 }),
     ],
     slotUnlocks: { military: 1 },
@@ -148,6 +148,45 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
       createPolicy('hodl', 'HODL', 'Units +25% defense below 50% HP', 'diamond_hands', 'a', 'military', 'low_health_defense', { percent: 25, threshold: 50 }),
       createPolicy('paper_hands', 'Paper Hands', '-50% war weariness', 'diamond_hands', 'b', 'wildcard', 'war_weariness', { percent: -50 }),
     ],
+  },
+
+  // Era 2: Classical Age (45-70 Vibes)
+  alpha_daos: {
+    id: 'alpha_daos' as CultureId,
+    name: 'Alpha DAOs',
+    era: 2,
+    cost: 50,
+    prerequisites: { cultures: ['otc_trading' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('big_addition', 'Big Addition', '80% chance of earning great people at thresholds', 'alpha_daos', 'a', 'wildcard', 'great_people_chance', { percent: 80 }),
+      createPolicy('treasury', 'Treasury', '+2 Trade Route capacity', 'alpha_daos', 'b', 'economy', 'trade_capacity', { amount: 2 }),
+    ],
+  },
+
+  // Era 3: Renaissance Age (80-120 Vibes)
+  one_of_ones: {
+    id: 'one_of_ones' as CultureId,
+    name: '1 of 1s',
+    era: 3,
+    cost: 85,
+    prerequisites: { cultures: ['whitelisting' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('unique_art', 'Unique Art', '+3 Vibes per wonder', 'one_of_ones', 'a', 'progress', 'wonder_vibes', { amount: 3 }),
+      createPolicy('collector', 'Collector', '100% chance of earning great people at thresholds', 'one_of_ones', 'b', 'wildcard', 'great_people_chance', { percent: 100 }),
+    ],
+  },
+
+  whitelisting: {
+    id: 'whitelisting' as CultureId,
+    name: 'Whitelisting',
+    era: 2,
+    cost: 45,
+    prerequisites: { cultures: ['early_adopters' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('exclusive_access', 'Exclusive Access', '+10% Gold from improvements', 'whitelisting', 'a', 'economy', 'improvement_gold', { percent: 10 }),
+      createPolicy('vip_list', 'VIP List', 'Alliance cost -25%', 'whitelisting', 'b', 'wildcard', 'alliance_discount', { percent: 25 }),
+    ],
+    slotUnlocks: { progress: 1 },
   },
 }
 
@@ -478,6 +517,27 @@ export function unslotPolicy(policies: PlayerPolicies, policyId: PolicyId): Play
 }
 
 /**
+ * Calculates the GP spawn chance bonus from active policies
+ * Returns the bonus percentage to add to the base 50% chance
+ */
+export function calculateGPSpawnChanceBonus(policies: PlayerPolicies): number {
+  let highestChance = 50 // Base chance
+
+  for (const policyId of policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'great_people_chance') {
+      const policyChance = policy.effect.percent as number
+      if (typeof policyChance === 'number' && policyChance > highestChance) {
+        highestChance = policyChance
+      }
+    }
+  }
+
+  // Return the bonus (amount above base 50%)
+  return highestChance - 50
+}
+
+/**
  * Swaps policies during culture completion
  */
 export function swapPolicies(
@@ -506,9 +566,16 @@ export function swapPolicies(
     policies = result
   }
 
+  // Calculate new GP spawn chance bonus based on active policies
+  const gpSpawnChanceBonus = calculateGPSpawnChanceBonus(policies)
+
   const updatedPlayer: Player = {
     ...player,
     policies,
+    greatPeople: {
+      ...player.greatPeople,
+      spawnChanceBonus: gpSpawnChanceBonus,
+    },
   }
 
   const newPlayers = [...state.players]

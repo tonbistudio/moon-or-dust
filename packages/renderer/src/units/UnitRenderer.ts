@@ -26,13 +26,52 @@ const RARITY_GLOW_INTENSITY: Record<UnitRarity, number> = {
 // Unit Type Icons (simple shapes for now)
 // =============================================================================
 
-const UNIT_COLORS: Record<UnitType, number> = {
+// Visual categories for unit types
+type UnitVisualCategory = 'scout' | 'melee' | 'ranged' | 'cavalry' | 'siege' | 'settler' | 'builder' | 'great_person'
+
+const CATEGORY_COLORS: Record<UnitVisualCategory, number> = {
   scout: 0x38bdf8, // Light blue - exploration
-  warrior: 0xef4444, // Red - melee combat
+  melee: 0xef4444, // Red - melee combat
   ranged: 0xfbbf24, // Amber - ranged attack
+  cavalry: 0x22d3ee, // Cyan - fast units
+  siege: 0x78716c, // Stone - siege weapons
   settler: 0x10b981, // Emerald - founding
   builder: 0x8b5cf6, // Violet - construction
   great_person: 0xec4899, // Pink - special
+}
+
+function getUnitVisualCategory(type: UnitType): UnitVisualCategory {
+  switch (type) {
+    case 'scout':
+      return 'scout'
+    case 'warrior':
+    case 'swordsman':
+    case 'bot_fighter':
+    case 'deadgod':
+    case 'stuckers':
+      return 'melee'
+    case 'archer':
+    case 'sniper':
+    case 'rockeeter':
+    case 'banana_slinger':
+    case 'neon_geck':
+      return 'ranged'
+    case 'horseman':
+    case 'knight':
+    case 'tank':
+      return 'cavalry'
+    case 'social_engineer':
+    case 'bombard':
+      return 'siege'
+    case 'settler':
+      return 'settler'
+    case 'builder':
+      return 'builder'
+    case 'great_person':
+      return 'great_person'
+    default:
+      return 'melee' // fallback
+  }
 }
 
 // =============================================================================
@@ -193,14 +232,15 @@ export class UnitRenderer {
     }
 
     // Draw unit base (circle with unit type color)
+    const category = getUnitVisualCategory(unit.type)
     const base = new Graphics()
     base.circle(0, 0, unitSize)
-    base.fill({ color: UNIT_COLORS[unit.type] })
+    base.fill({ color: CATEGORY_COLORS[category] })
     base.stroke({ color: playerColor, width: 2 })
     container.addChild(base)
 
     // Draw unit type symbol
-    const symbol = this.createUnitSymbol(unit.type, unitSize * 0.6)
+    const symbol = this.createUnitSymbol(category, unitSize * 0.6)
     container.addChild(symbol)
 
     // Draw health bar background
@@ -223,10 +263,10 @@ export class UnitRenderer {
     return container
   }
 
-  private createUnitSymbol(unitType: UnitType, size: number): Graphics {
+  private createUnitSymbol(category: UnitVisualCategory, size: number): Graphics {
     const symbol = new Graphics()
 
-    switch (unitType) {
+    switch (category) {
       case 'scout':
         // Eye symbol (exploration)
         symbol.circle(0, 0, size * 0.3)
@@ -235,7 +275,7 @@ export class UnitRenderer {
         symbol.fill({ color: 0x000000 })
         break
 
-      case 'warrior':
+      case 'melee':
         // Sword symbol
         symbol.moveTo(0, -size * 0.5)
         symbol.lineTo(0, size * 0.3)
@@ -252,6 +292,25 @@ export class UnitRenderer {
         symbol.lineTo(size * 0.3, size * 0.3)
         symbol.lineTo(size * 0.3, size * 0.1)
         symbol.stroke({ color: 0xffffff, width: 2 })
+        break
+
+      case 'cavalry':
+        // Horse head symbol
+        symbol.moveTo(-size * 0.2, size * 0.3)
+        symbol.lineTo(-size * 0.2, -size * 0.1)
+        symbol.lineTo(size * 0.1, -size * 0.4)
+        symbol.lineTo(size * 0.3, -size * 0.2)
+        symbol.lineTo(size * 0.2, size * 0.1)
+        symbol.stroke({ color: 0xffffff, width: 2 })
+        break
+
+      case 'siege':
+        // Catapult/cannon symbol
+        symbol.circle(0, 0, size * 0.25)
+        symbol.stroke({ color: 0xffffff, width: 2 })
+        symbol.moveTo(0, -size * 0.25)
+        symbol.lineTo(0, -size * 0.5)
+        symbol.stroke({ color: 0xffffff, width: 3 })
         break
 
       case 'settler':

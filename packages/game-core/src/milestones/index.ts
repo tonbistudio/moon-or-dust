@@ -290,9 +290,19 @@ function spawnFreeUnit(
 
 function spawnUniqueUnit(state: GameState, settlement: Settlement): GameState {
   // Map tribes to their unique unit types
-  // For now, spawn a warrior with better rarity
+  const tribeUniqueUnits: Record<string, string> = {
+    monkes: 'banana_slinger',
+    geckos: 'neon_geck',
+    degods: 'deadgod',
+    cets: 'stuckers',
+  }
+
+  // Get the tribe name from the tribeId (format is usually the tribe name)
+  const tribeId = settlement.owner as string
+  const uniqueUnitType = tribeUniqueUnits[tribeId] ?? 'warrior'
+
   const unit = createUnit({
-    type: 'warrior',
+    type: uniqueUnitType as never,
     owner: settlement.owner,
     position: settlement.position,
     rarity: 'rare', // Unique units get better rarity

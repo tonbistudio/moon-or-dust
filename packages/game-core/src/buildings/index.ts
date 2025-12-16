@@ -8,6 +8,7 @@ import type {
   Settlement,
   GameState,
   Tile,
+  TribeBonuses,
 } from '../types'
 import { hexNeighbors, hexKey } from '../hex'
 
@@ -422,10 +423,12 @@ function getResourceCategory(
 
 /**
  * Calculates total yields from all buildings in a settlement
+ * @param tribeBonuses Optional tribe bonuses to apply category-specific modifiers
  */
 export function calculateBuildingYields(
   state: GameState,
-  settlement: Settlement
+  settlement: Settlement,
+  tribeBonuses?: TribeBonuses
 ): Yields {
   let yields: Yields = {
     gold: 0,
@@ -435,12 +438,28 @@ export function calculateBuildingYields(
     growth: 0,
   }
 
+  // Track yields by category for tribe bonuses
+  let goldFromGoldBuildings = 0
+  let vibesFromCultureBuildings = 0
+  let productionFromProductionBuildings = 0
+
   for (const buildingId of settlement.buildings) {
     const building = BUILDING_DEFINITIONS[buildingId]
     if (!building) continue
 
     // Add base yields
     yields = addYields(yields, building.baseYields)
+
+    // Track category-specific yields for tribe bonuses
+    if (building.category === 'economy') {
+      goldFromGoldBuildings += building.baseYields.gold
+    }
+    if (building.category === 'vibes') {
+      vibesFromCultureBuildings += building.baseYields.vibes
+    }
+    if (building.category === 'production') {
+      productionFromProductionBuildings += building.baseYields.production
+    }
 
     // Add adjacency bonus
     const adjacencyBonus = calculateAdjacencyBonus(state, settlement, building)
@@ -450,6 +469,38 @@ export function calculateBuildingYields(
         ...yields,
         [yieldKey]: yields[yieldKey] + adjacencyBonus,
       }
+
+      // Also track adjacency yields by category
+      if (building.category === 'economy' && yieldKey === 'gold') {
+        goldFromGoldBuildings += adjacencyBonus
+      }
+      if (building.category === 'vibes' && yieldKey === 'vibes') {
+        vibesFromCultureBuildings += adjacencyBonus
+      }
+      if (building.category === 'production' && yieldKey === 'production') {
+        productionFromProductionBuildings += adjacencyBonus
+      }
+    }
+  }
+
+  // Apply tribe bonuses to category-specific yields
+  if (tribeBonuses) {
+    // DeGods: +10% gold from gold-yield buildings
+    if (tribeBonuses.goldFromGoldBuildingsPercent && goldFromGoldBuildings > 0) {
+      const bonusGold = Math.floor(goldFromGoldBuildings * tribeBonuses.goldFromGoldBuildingsPercent)
+      yields = { ...yields, gold: yields.gold + bonusGold }
+    }
+
+    // Cets: +10% Vibes from culture buildings
+    if (tribeBonuses.vibesFromCultureBuildingsPercent && vibesFromCultureBuildings > 0) {
+      const bonusVibes = Math.floor(vibesFromCultureBuildings * tribeBonuses.vibesFromCultureBuildingsPercent)
+      yields = { ...yields, vibes: yields.vibes + bonusVibes }
+    }
+
+    // Cets: +10% production from production buildings
+    if (tribeBonuses.productionFromProductionBuildingsPercent && productionFromProductionBuildings > 0) {
+      const bonusProduction = Math.floor(productionFromProductionBuildings * tribeBonuses.productionFromProductionBuildingsPercent)
+      yields = { ...yields, production: yields.production + bonusProduction }
     }
   }
 

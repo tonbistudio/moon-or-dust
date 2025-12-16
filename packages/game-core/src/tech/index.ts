@@ -10,6 +10,7 @@ import type {
   Player,
   BuildingId,
 } from '../types'
+import { recordTechResearched } from '../goldenage'
 
 // =============================================================================
 // Tech Definitions
@@ -452,6 +453,9 @@ export function completeResearch(state: GameState, tribeId: TribeId, techId: Tec
 
   // Apply unlocks (reveal resources, etc.)
   newState = applyTechUnlocks(newState, tribeId, tech)
+
+  // Record tech for golden age trigger tracking
+  newState = recordTechResearched(newState, tribeId, state.turn)
 
   return newState
 }

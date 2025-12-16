@@ -186,17 +186,17 @@ canvas.on('click', (hex) => {
 
 | Era | Type | Unit | Unlocked By | Stats |
 |-----|------|------|-------------|-------|
-| Base | Melee | Warrior | — | 3 strength |
-| 1 | Ranged | Archer | Archery | 2/5 strength |
-| 1 | Cavalry | Horseman | Horseback Riding | 3 movement, 2 strength |
-| 2 | Melee | Swordsman | Iron Working | 6 strength (requires Iron) |
-| 2 | Ranged | Sniper | Botting | 4/10 strength |
-| 2 | Cavalry | Knight | Priority Fees | 3 movement, 4 strength |
-| 2 | Siege | Social Engineer | Matrica | 6 strength vs cities |
-| 3 | Melee | Bot Fighter | Artificial Intelligence | 12 strength |
-| 3 | Ranged | Rockeeter | Wolf Game | 8/16 strength |
-| 3 | Cavalry | Tank | Hacking | 5 movement, 10 strength |
-| 3 | Siege | Bombard | Siege Weapons | 12 strength vs cities |
+| Base | Melee | Warrior | — | 3 strength, 7 HP |
+| 1 | Ranged | Archer | Archery | 2-hex range, 2 strength, 5 HP|
+| 1 | Cavalry | Horseman | Horseback Riding | 3 movement, 2 strength, 5 HP|
+| 2 | Melee | Swordsman | Iron Working | 6 strength (requires Iron), 15 HP |
+| 2 | Ranged | Sniper | Botting | 2-hex range, 4 strength, 10 HP |
+| 2 | Cavalry | Knight | Priority Fees | 3 movement, 4 strength, 8 HP |
+| 2 | Siege | Social Engineer | Matrica | 2-hex range, 2 strength against combat units, 10 strength against settlement HP, 6 HP |
+| 3 | Melee | Bot Fighter | Artificial Intelligence | 12 strength, 25 HP |
+| 3 | Ranged | Rockeeter | Wolf Game | 2-hex range, 8 strength, 18 HP |
+| 3 | Cavalry | Tank | Hacking | 4 movement, 10 strength, 20 HP |
+| 3 | Siege | Bombard | Siege Weapons | 2-hex range, 4 strength against combat units, 20 strength against settlement HP, 12 HP |
 
 ### Buildings
 
@@ -466,8 +466,8 @@ Buildings provide bonuses based on neighboring tiles and buildings:
 | Tribe | Building | Adjacency |
 |-------|----------|-----------|
 | Monkes | Degen Mints Cabana | +2 Gold per adjacent Jungle or Forest |
-| Geckos | The Garage | +2 Alpha per adjacent Coast or Desert
-| DeGods | Eternal Bridge | +20% combat unit production
+| Geckos | The Garage | +2 Alpha per adjacent Coast or Desert |
+| DeGods | Eternal Bridge | +20% combat unit production |
 | Cets | Creckhouse | +1 Vibes per adjacent building (any) |
 
 ### Unit Stacking
@@ -546,38 +546,104 @@ interface TradeRoute {
 
 Unique powerful units spawned from accumulated yields. Only one of each can be earned per game. There is a 50% base chance of earning the great person when a threshold is hit. This percentage can be increased by buildings, policies, and other factors.
 
-**Types and Thresholds:**
+**Universal Great People - Types and Thresholds:**
 | Great Person | Accumulated From | Threshold |
 |--------------|------------------|-----------|
-| Fxnction | Combat XP across all units | 100 XP |
-| Mert | Alpha (science) | 150 Alpha |
-| Big Brain | Gold income | 200 Gold |
+| Fxnction | Combat XP | 100 XP |
+| Mert | Alpha | 150 Alpha |
+| Big Brain | Gold | 200 Gold |
 | SCUM | Vibes | 150 Vibes |
-| HGE | Economy | 3+ trade routes |
-| Solport Tom | Production | Build 2+ wonders |
+| HGE | Trade | 3 trade routes |
+| Solport Tom | Production | 2 wonders built |
+| The Solstice | Kills | 5 enemy units killed |
+| Toly | Alpha | 250 Alpha |
+| Dingaling | Gold | 400 Gold |
+| John Le | Vibes | 350 Vibes |
+| Ravi | Trade | 5 trade routes |
+| Renji | Production | 2 wonders + 8 buildings built |
+| Iced Knife | Captures | 2 cities captured |
+| Raj | Alpha | 350 Alpha |
+| Retired Chad Dev | Gold | 600 Gold |
+| Monoliff | Vibes | 500 Vibes |
+| Watch King | Trade | 7 trade routes |
+| Blocksmyth | Production | 3 wonders built |
+| Jpeggler | Combat XP | 200 XP |
 
 **One-Time Actions (consumed on use):**
 | Great Person | Action | Effect |
 |--------------|--------|--------|
 | Fxnction | Inspire | All units in 2-hex radius gain a free promotion |
-| Mert | Eureka | Instantly complete current research |
+| Mert | Eureka | Instantly produce next Alpha building |
 | Big Brain | Sweep | Gain 100 gold |
 | SCUM | Masterwork | Instantly expand borders by 3 tiles + 50 vibes |
 | HGE | Sweep | 1 free trade route |
 | Solport Tom | Beep Beep | +25% production for 3 turns |
+| The Solstice | Goofy Gorilla Gang | All units in 2-hex radius +10% combat strength for 5 turns |
+| Toly | Dragon Mode | +10% Alpha yield for 5 turns |
+| Dingaling | Forgotten Treasure | +15% gold yield for 5 turns |
+| John Le | First Edition | Instantly complete current culture research |
+| Ravi | Perfect Portfolio | Triggers 2-turn Golden Age |
+| Renji | Golden Akari | +50% wonder production for 3 turns |
+| Iced Knife | Twisted Knife | All units in 2-hex radius +25% defense for 5 turns + free promotion |
+| Raj | Myro's Epiphany | Instantly complete current research |
+| Retired Chad Dev | Mad Sweep | Gain 300 Gold |
+| Monoliff | Grail Ape | +33% Vibes production for 4 turns |
+| Watch King | Rolex Romp | Trade route gold income +25% for 5 turns |
+| Blocksmyth | Mercury Blast | +30% building production for 3 turns |
+| Jpeggler | Enigma Venture | All units in 3-hex radius gain a free promotion |
+
+**Tribe-Specific Great People (building + culture required):**
+| Great Person | Tribe | Requirements | Action | Effect |
+|--------------|-------|--------------|--------|--------|
+| Nom | Monkes | Degen Mints Cabana + Memecoin Mania | BONK! | +300 Gold and +33% Gold income for 5 turns |
+| Frank | DeGods | Eternal Bridge + Fudding | Tragedy for the Haters | 3 free random combat units + 200 Vibes |
+| Genuine Articles | Geckos | The Garage + Whitelisting | Immortal Journey | +20% production and +25% Alpha for 5 turns |
+| Peblo | Cets | Creckhouse + Virality | We are Peblo | +50% defense and +25% Vibes for 5 turns |
 
 ```typescript
-interface GreatPerson {
-  id: UnitId
-  type: GreatPersonType
-  hasActed: boolean  // one-time action used
+type GreatPersonId =
+  // Universal (19)
+  | 'fxnction' | 'mert' | 'big_brain' | 'scum' | 'hge' | 'solport_tom'
+  | 'the_solstice' | 'toly' | 'dingaling' | 'john_le' | 'ravi' | 'renji'
+  | 'iced_knife' | 'raj' | 'retired_chad_dev' | 'monoliff' | 'watch_king'
+  | 'blocksmyth' | 'jpeggler'
+  // Tribal (4)
+  | 'nom' | 'frank' | 'genuine_articles' | 'peblo'
+
+type GreatPersonCategory = 'combat' | 'alpha' | 'gold' | 'vibes' | 'trade' | 'production' | 'kills' | 'captures' | 'tribal'
+
+interface GreatPersonDefinition {
+  id: GreatPersonId
+  name: string
+  category: GreatPersonCategory
+  threshold: GreatPersonThreshold
+  action: string
+  effect: GreatPersonEffect
+  tribe?: TribeName  // Only for tribal great people
 }
 
+type GreatPersonThreshold =
+  | { type: 'accumulator'; stat: 'combat' | 'alpha' | 'gold' | 'vibes'; amount: number }
+  | { type: 'count'; stat: 'tradeRoutes' | 'wondersBuilt' | 'buildingsBuilt' | 'kills' | 'captures'; amount: number }
+  | { type: 'combo'; wonders: number; buildings: number }
+  | { type: 'tribal'; building: BuildingId; culture: CultureId }
+
 interface GreatPeopleAccumulator {
-  combat: number
-  alpha: number
-  gold: number
-  vibes: number
+  combat: number    // XP from all units
+  alpha: number     // Total Alpha earned
+  gold: number      // Total Gold earned
+  vibes: number     // Total Vibes earned
+  kills: number     // Enemy units killed
+  captures: number  // Cities captured
+  tradeRoutes: number      // Current active trade routes
+  wondersBuilt: number     // Total wonders built
+  buildingsBuilt: number   // Total buildings built
+}
+
+interface GreatPerson {
+  id: UnitId
+  greatPersonId: GreatPersonId
+  hasActed: boolean  // one-time action used
 }
 ```
 
@@ -841,7 +907,7 @@ interface MilestoneChoice {
 43. ✅ Wonder construction (exclusive race mechanic)
 44. ✅ Wonder effects implementation
 45. ✅ Wonder UI (available, in-progress, completed) - via ProductionPanel
-46. AI wonder prioritization
+46. ✅ AI wonder prioritization
 
 #### Phase 7b: React Game Integration
 - ✅ GameContext for React state management
@@ -862,7 +928,13 @@ interface MilestoneChoice {
 - ✅ START_RESEARCH action (set tech research target)
 - ✅ START_CULTURE action (set culture unlock target)
 - ✅ DECLARE_WAR, PROPOSE_PEACE, PROPOSE_ALLIANCE actions (diplomacy)
-- Remaining stubs: SELECT_POLICY, SELECT_PROMOTION, SELECT_MILESTONE, trade routes, great persons
+- ✅ SELECT_POLICY action (choose A/B policy when completing culture)
+- ✅ SWAP_POLICIES action (slot/unslot policies after culture completion)
+- ✅ SELECT_PROMOTION action (choose promotion for leveled unit)
+- ✅ SELECT_MILESTONE action (choose settlement level-up reward)
+- ✅ CREATE_TRADE_ROUTE action (establish trade between settlements)
+- ✅ CANCEL_TRADE_ROUTE action (cancel existing trade route)
+- ✅ USE_GREAT_PERSON action (use great person's one-time ability)
 
 #### Phase 7d: Wonder Prerequisites & Era Scaling
 - ✅ Wonders now require tech or culture prerequisites
@@ -896,12 +968,12 @@ interface MilestoneChoice {
 - ✅ AI alliance decisions (shared enemies, strongest ally)
 
 ### Phase 9: Tribes & Identity
-52. Tribe bonuses and modifiers
+52. ✅ Tribe bonuses and modifiers
 53. ✅ Unique units implementation
 54. ✅ Unique buildings with adjacency bonuses
-55. Tribe-specific golden age triggers
-56. Tribe AI personalities
-57. Visual differentiation per tribe
+55. ✅ Tribe-specific golden age triggers
+56. ✅ Tribe AI personalities
+57. ✅ Visual differentiation per tribe
 
 #### Phase 9a: Tribal Unique Units & Buildings
 - ✅ Added 4 unique unit types to UnitType
@@ -917,22 +989,102 @@ interface MilestoneChoice {
 - ✅ Multi-terrain adjacency logic for unique buildings
 - ✅ Tech unlock integration for unique buildings
 
+#### Phase 9b: Tribe Bonuses System
+- ✅ TribeBonuses interface with optional bonus fields
+- ✅ Tribes module with tribe definitions and helper functions
+- ✅ Monkes: +5% Vibes yield, +1 trade route capacity
+- ✅ Geckos: +5% Alpha yield, +10% production on ranged units
+- ✅ DeGods: +10% production on melee units, +10% gold from gold-yield buildings
+- ✅ Cets: +10% Vibes from culture buildings, +10% production from production buildings
+- ✅ Yield bonuses applied in state turn processing (alpha, vibes)
+- ✅ Building category bonuses applied in calculateBuildingYields
+- ✅ Unit production bonuses applied in processProduction
+- ✅ Trade route capacity bonus applied in getMaxTradeRoutes
+
+#### Phase 9c: Tribe AI Personalities
+- ✅ TribePersonality interface with 7 behavioral modifiers
+- ✅ Personality-based war declaration (aggressionMultiplier, warStrengthRatioModifier)
+- ✅ Personality-based peace-seeking (peacefulnessMultiplier, peaceStrengthRatioModifier)
+- ✅ Personality-based alliance formation (allianceMultiplier)
+- ✅ Target prioritization by personality (weakest/strongest/closest)
+- ✅ War weariness tolerance per tribe
+- ✅ Monkes: Diplomatic, trade-focused (low aggression, high alliance, seeks peace early)
+- ✅ Geckos: Cautious, research-focused (moderate, efficient fighters)
+- ✅ DeGods: Aggressive, war-focused (high aggression, targets strongest, holds out in wars)
+- ✅ Cets: Diplomatic, builder-focused (very low aggression, defensive, prioritizes nearby threats)
+
+#### Phase 9d: Visual Tribe Differentiation
+- ✅ Territory borders now use tribe colors (gold, neon green, dark red, royal blue)
+- ✅ Settlement markers rendered on map with tribe colors
+- ✅ Capital indicators with star icon
+- ✅ Settlement names displayed with drop shadow
+- ✅ Map rebuilds on territory/settlement changes
+- ✅ Unit visual categories for new unit types (melee, ranged, cavalry, siege)
+- ✅ getTribeColor helper converts hex string to Pixi number
+
 ### Phase 10: Advanced Systems
-58. Great People accumulation and spawning
-59. Great Person one-time actions
-60. Golden age triggers (universal + tribe-specific)
-61. Golden age effects
-62. Policy era swapping
+58. ✅ Great People accumulation and spawning
+59. ✅ Great Person one-time actions
+60. ✅ Golden age triggers (universal + tribe-specific)
+61. ✅ Golden age effects
+62. ✅ Policy swapping (SWAP_POLICIES action)
+
+#### Phase 10a: Great People System
+- ✅ 19 universal great people with unique thresholds and actions
+- ✅ 4 tribal great people (Nom, Frank, Genuine Articles, Peblo)
+- ✅ GreatPeopleAccumulator tracking (combat, alpha, gold, vibes, kills, captures, trade routes, wonders, buildings)
+- ✅ Threshold checking and spawn logic with configurable spawn chance
+- ✅ Policy bonuses for GP spawn chance (Clout 65%, Big Addition 80%, Collector 100%)
+- ✅ Great person one-time actions (yield buffs, instant production, promotions, golden ages)
+- ✅ USE_GREAT_PERSON action handler
+
+#### Phase 10b: Golden Age System
+- ✅ 7 universal triggers (3 techs in 5 turns, capture capital, 4th settlement, 20 pop, 2 wonders, 3 great people, 6 trade routes first)
+- ✅ 4 tribal triggers (Monkes 500 gold, Geckos Era 3 tech first, DeGods 10 kills, Cets Era 3 culture first)
+- ✅ Era-based random effect selection (17 effects across 3 eras)
+- ✅ Golden age yield bonuses applied to alpha, vibes, production, gold
+- ✅ Combat and mobility bonuses from golden age effects
+- ✅ Tech completion tracking for "3 techs in 5 turns" trigger
+- ✅ Golden age turn processing (decrement duration, cleanup)
 
 ### Phase 11: AI Opponents
-63. AI decision framework
-64. Expansion logic
-65. Military logic with barbarian handling
-66. Research and culture priorities
-67. Diplomacy AI (when to ally, when to war)
-68. Trade route optimization
-69. Wonder race decisions
-70. Lootbox hunting priority
+63. ✅ AI decision framework
+64. ✅ Expansion logic
+65. ✅ Military logic with barbarian handling
+66. ✅ Research and culture priorities
+67. ✅ Diplomacy AI (when to ally, when to war)
+68. ✅ Trade route optimization
+69. ✅ Wonder race decisions
+70. ✅ Lootbox hunting priority
+
+#### Phase 11a: Comprehensive AI System
+- ✅ TribePersonality system with behavioral modifiers (aggression, peacefulness, alliance tendencies)
+- ✅ Priority-based decision framework (diplomacy → research → culture → production → units)
+- ✅ Research AI with tribe-specific tech prioritization
+- ✅ Culture AI with tribe-specific culture prioritization
+- ✅ Expansion AI (settler movement and settlement founding)
+- ✅ Military AI with barbarian hunting priority
+- ✅ Scout AI with lootbox hunting and exploration
+- ✅ Wonder AI with tribe-specific wonder prioritization
+
+#### Phase 11b: Trade Route System
+- ✅ Tech-based trade route capacity (Smart Contracts: 1, Currency: +1, Lending: +1)
+- ✅ Monkes tribe bonus: +1 trade route capacity
+- ✅ 2-turn formation delay before routes become active
+- ✅ Trade route yields: 20% of combined Gold (25% for Allied) + 1 per luxury
+- ✅ Pillaging trade routes when settlement takes HP damage
+- ✅ UI helpers: getAvailableTradeDestinations(), canCreateTradeRoute(), getTradeRouteSummary()
+- ✅ AI trade route optimization with tribe-specific priorities
+- ✅ 20 tests for trade route system
+
+#### Phase 11c: Settlement HP & Siege System
+- ✅ Settlement HP system (settlements have HP, can be damaged/captured)
+- ✅ Siege weapon dual-strength system (separate combatStrength vs settlementStrength)
+- ✅ Social Engineer: 20 combat strength, 60 settlement strength (3x)
+- ✅ Bombard: 25 combat strength, 75 settlement strength (3x)
+- ✅ Siege units are "glass cannons" - weak vs units, strong vs settlements
+- ✅ Tank movement reduced from 5 to 4 for balance
+- ✅ Updated combat preview to show siege vs settlement effectiveness
 
 ### Phase 12: UI & Polish
 71. Main menu and tribe selection

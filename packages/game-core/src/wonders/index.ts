@@ -8,6 +8,8 @@ import type {
   SettlementId,
   Settlement,
   BuildingCategory,
+  TechId,
+  CultureId,
 } from '../types'
 
 // =============================================================================
@@ -268,6 +270,22 @@ export function canBuildWonder(
   // Check if already built by anyone
   if (isWonderBuilt(state, wonderId)) {
     return { canBuild: false, reason: 'Wonder already built by another tribe' }
+  }
+
+  // Check tech prerequisite
+  if (wonderDef.techPrereq) {
+    const player = state.players.find((p) => p.tribeId === settlement.owner)
+    if (!player?.researchedTechs.includes(wonderDef.techPrereq as TechId)) {
+      return { canBuild: false, reason: `Requires ${wonderDef.techPrereq} tech` }
+    }
+  }
+
+  // Check culture prerequisite
+  if (wonderDef.culturePrereq) {
+    const player = state.players.find((p) => p.tribeId === settlement.owner)
+    if (!player?.unlockedCultures.includes(wonderDef.culturePrereq as CultureId)) {
+      return { canBuild: false, reason: `Requires ${wonderDef.culturePrereq} culture` }
+    }
   }
 
   // Check if settlement is already building this wonder

@@ -23,6 +23,7 @@ export interface UnitDefinition {
   readonly baseMovement: number
   readonly baseCombatStrength: number
   readonly baseRangedStrength: number
+  readonly baseSettlementStrength: number // Strength vs settlements (siege units have higher values)
   readonly productionCost: number
   readonly isCivilian: boolean
   readonly canAttack: boolean
@@ -37,6 +38,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 4,
     baseCombatStrength: 5,
     baseRangedStrength: 0,
+    baseSettlementStrength: 5, // Same as combat
     productionCost: 30,
     isCivilian: false,
     canAttack: true,
@@ -49,6 +51,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 20,
     baseRangedStrength: 0,
+    baseSettlementStrength: 20, // Same as combat
     productionCost: 40,
     isCivilian: false,
     canAttack: true,
@@ -61,6 +64,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 10,
     baseRangedStrength: 25,
+    baseSettlementStrength: 25, // Use ranged for settlement attacks
     productionCost: 50,
     isCivilian: false,
     canAttack: true,
@@ -73,6 +77,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 0,
     baseRangedStrength: 0,
+    baseSettlementStrength: 0,
     productionCost: 80,
     isCivilian: true,
     canAttack: false,
@@ -85,6 +90,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 0,
     baseRangedStrength: 0,
+    baseSettlementStrength: 0,
     productionCost: 50,
     isCivilian: true,
     canAttack: false,
@@ -97,6 +103,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 3,
     baseCombatStrength: 0,
     baseRangedStrength: 0,
+    baseSettlementStrength: 0,
     productionCost: 0, // Not producible directly
     isCivilian: true,
     canAttack: false,
@@ -114,6 +121,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 4,
     baseCombatStrength: 18,
     baseRangedStrength: 0,
+    baseSettlementStrength: 18, // Same as combat
     productionCost: 60,
     isCivilian: false,
     canAttack: true,
@@ -131,6 +139,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 35,
     baseRangedStrength: 0,
+    baseSettlementStrength: 35, // Same as combat
     productionCost: 80,
     isCivilian: false,
     canAttack: true,
@@ -144,6 +153,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 15,
     baseRangedStrength: 40,
+    baseSettlementStrength: 40, // Use ranged for settlement attacks
     productionCost: 90,
     isCivilian: false,
     canAttack: true,
@@ -157,6 +167,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 4,
     baseCombatStrength: 30,
     baseRangedStrength: 0,
+    baseSettlementStrength: 30, // Same as combat
     productionCost: 100,
     isCivilian: false,
     canAttack: true,
@@ -164,12 +175,15 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     buildCharges: 0,
   },
 
+  // SIEGE UNIT: Weak vs units (20), strong vs settlements (60 = 3x)
+  // Per CLAUDE.md: "2 strength against combat units, 10 strength against settlement HP"
   social_engineer: {
     type: 'social_engineer',
     baseHealth: 80,
     baseMovement: 2,
-    baseCombatStrength: 20,
-    baseRangedStrength: 35, // Siege damage vs cities
+    baseCombatStrength: 20, // Weak against units
+    baseRangedStrength: 20, // 2-hex range, same as combat strength
+    baseSettlementStrength: 60, // 3x combat strength vs settlements
     productionCost: 100,
     isCivilian: false,
     canAttack: true,
@@ -187,6 +201,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 55,
     baseRangedStrength: 0,
+    baseSettlementStrength: 55, // Same as combat
     productionCost: 150,
     isCivilian: false,
     canAttack: true,
@@ -200,6 +215,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 20,
     baseRangedStrength: 60,
+    baseSettlementStrength: 60, // Use ranged for settlement attacks
     productionCost: 160,
     isCivilian: false,
     canAttack: true,
@@ -210,9 +226,10 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
   tank: {
     type: 'tank',
     baseHealth: 140,
-    baseMovement: 5,
+    baseMovement: 4, // Changed from 5 to 4 for balance
     baseCombatStrength: 50,
     baseRangedStrength: 0,
+    baseSettlementStrength: 50, // Same as combat
     productionCost: 180,
     isCivilian: false,
     canAttack: true,
@@ -220,12 +237,15 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     buildCharges: 0,
   },
 
+  // SIEGE UNIT: Weak vs units (25), strong vs settlements (75 = 3x)
+  // Per CLAUDE.md: "4 strength against combat units, 20 strength against settlement HP"
   bombard: {
     type: 'bombard',
     baseHealth: 90,
     baseMovement: 2,
-    baseCombatStrength: 25,
-    baseRangedStrength: 55, // Siege damage vs cities
+    baseCombatStrength: 25, // Weak against units
+    baseRangedStrength: 25, // 2-hex range, same as combat strength
+    baseSettlementStrength: 75, // 3x combat strength vs settlements
     productionCost: 170,
     isCivilian: false,
     canAttack: true,
@@ -245,6 +265,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 15, // 3/6 scaled: +5 over Archer's 10
     baseRangedStrength: 30, // +5 over Archer's 25
+    baseSettlementStrength: 30, // Use ranged for settlement attacks
     productionCost: 50, // Same as Archer
     isCivilian: false,
     canAttack: true,
@@ -260,6 +281,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 3, // +1 over Sniper's 2
     baseCombatStrength: 15,
     baseRangedStrength: 40, // Same as Sniper
+    baseSettlementStrength: 40, // Use ranged for settlement attacks
     productionCost: 90, // Same as Sniper
     isCivilian: false,
     canAttack: true,
@@ -275,6 +297,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 2,
     baseCombatStrength: 45, // +10 over Swordsman's 35 (8 strength in design doc)
     baseRangedStrength: 0,
+    baseSettlementStrength: 45, // Same as combat
     productionCost: 80, // Same as Swordsman
     isCivilian: false,
     canAttack: true,
@@ -290,6 +313,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     baseMovement: 3, // +1 over Swordsman's 2
     baseCombatStrength: 35, // Same as Swordsman
     baseRangedStrength: 0,
+    baseSettlementStrength: 35, // Same as combat
     productionCost: 80, // Same as Swordsman
     isCivilian: false,
     canAttack: true,
@@ -363,6 +387,7 @@ export function createUnit(options: CreateUnitOptions): Unit {
   const maxHealth = def.baseHealth
   const combatStrength = def.baseCombatStrength + rarityBonuses.combat
   const rangedStrength = def.baseRangedStrength + rarityBonuses.combat // Use combat bonus for ranged too
+  const settlementStrength = def.baseSettlementStrength + rarityBonuses.combat // Settlement strength also gets combat bonus
   const maxMovement = def.baseMovement + rarityBonuses.movement
 
   return {
@@ -376,6 +401,7 @@ export function createUnit(options: CreateUnitOptions): Unit {
     maxMovement,
     combatStrength,
     rangedStrength,
+    settlementStrength,
     experience: 0,
     level: 1,
     promotions: [],

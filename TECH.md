@@ -21,7 +21,7 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 | **Mining** | 20 | None | Mine improvement, Quarry improvement, reveals Iron resource |
 | **Farming** | 20 | Animal Husbandry | Farm improvement, Granary building (+Population) |
 | **Animal Husbandry** | 20 | None | Pasture improvement, reveals Horses resource |
-| **Smart Contracts** | 25 | Coding | +1 Trading Route, Candy Machine Wonder |
+| **Smart Contracts** | 25 | Coding | Unlocks Trade, +1 Trading Route, Candy Machine Wonder |
 | **Coding** | 25 | None | Library building (+Alpha) |
 | **Archery** | 25 | Animal Husbandry | Archer unit |
 | **Minting** | 30 | None | Mint improvement, Solanart building (+Gold)|
@@ -43,7 +43,7 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 | **Discord** | 50 | PFPs | Server building (+Population), Creckhouse |
 | **Currency** | 55 | Minting, **Culture: OTC Trading** | +1 trade route, Magic Eden Wonder |
 | **Staking** | 55 | PFPs, Smart Contracts | Art Upgrader (+Vibes), Taiyo Robotics Factory, The Garage |
-| **Lending** | 60 | Smart Contracts | +1 Trade route, Degent Mints Cabana |
+| **Lending** | 60 | Smart Contracts | +1 Trade route, Degen Mints Cabana |
 | **Matrica** | 65 | Discord, **Culture: Early Empire** | Alpha Hunter Hideout (+Alpha) Social engineer unit, Eternal Bridge |
 | **Botting** | 70 | Iron Working | Bot Farm (+Production), Sniper unit |
 | **On-chain Gaming** | 70 | Coding, Minting | Arena building (+Combat Unit production) |

@@ -1,6 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js'
-import type { GameState, HexCoord, Tile, TerrainType, Lootbox } from '@tribes/game-core'
-import { hexToPixel, type HexLayout } from '@tribes/game-core'
+import type { GameState, HexCoord, Tile, TerrainType, Lootbox, TribeId } from '@tribes/game-core'
+import { hexToPixel, getTribeById, type HexLayout } from '@tribes/game-core'
 
 // =============================================================================
 // Color Definitions
@@ -88,8 +88,22 @@ export class HexTileRenderer {
     return (
       newState.map.width !== oldState.map.width ||
       newState.map.height !== oldState.map.height ||
-      newState.map.tiles.size !== oldState.map.tiles.size
+      newState.map.tiles.size !== oldState.map.tiles.size ||
+      newState.settlements.size !== oldState.settlements.size ||
+      newState.lootboxes.length !== oldState.lootboxes.length ||
+      // Check if any tile ownership changed
+      this.tileOwnershipChanged(newState, oldState)
     )
+  }
+
+  private tileOwnershipChanged(newState: GameState, oldState: GameState): boolean {
+    for (const [key, newTile] of newState.map.tiles) {
+      const oldTile = oldState.map.tiles.get(key)
+      if (oldTile && newTile.owner !== oldTile.owner) {
+        return true
+      }
+    }
+    return false
   }
 
   private rebuildTiles(state: GameState): void {
@@ -111,9 +125,21 @@ export class HexTileRenderer {
         this.tileContainer.addChild(marker)
       }
     }
+
+    // Add settlement markers
+    for (const settlement of state.settlements.values()) {
+      const marker = this.createSettlementMarker(
+        state,
+        settlement.position,
+        settlement.isCapital,
+        settlement.owner,
+        settlement.name
+      )
+      this.tileContainer.addChild(marker)
+    }
   }
 
-  private createTileGraphic(tile: Tile, state: GameState): Graphics {
+  private createTileGraphic(tile: Tile, _state: GameState): Graphics {
     const graphics = new Graphics()
     const { x, y } = hexToPixel(tile.coord, this.layout)
     const color = TERRAIN_COLORS[tile.terrain]
@@ -138,11 +164,8 @@ export class HexTileRenderer {
 
     // Draw territory border if owned
     if (tile.owner) {
-      const player = state.players.find((p) => p.tribeId === tile.owner)
-      if (player) {
-        // TODO: Get tribe color from definitions
-        this.drawTerritoryBorder(graphics, x, y, 0xffffff)
-      }
+      const tribeColor = this.getTribeColor(tile.owner)
+      this.drawTerritoryBorder(graphics, x, y, tribeColor)
     }
 
     return graphics
@@ -213,6 +236,85 @@ export class HexTileRenderer {
 
     graphics.poly(points)
     graphics.stroke({ color, width: 2, alpha: 0.5 })
+  }
+
+  /**
+   * Convert tribe color string (#RRGGBB) to Pixi number (0xRRGGBB)
+   */
+  private getTribeColor(tribeId: TribeId): number {
+    const tribe = getTribeById(tribeId)
+    if (!tribe) return 0xffffff
+    // Convert hex string like '#FFD700' to number 0xFFD700
+    return parseInt(tribe.color.replace('#', ''), 16)
+  }
+
+  private createSettlementMarker(
+    _state: GameState,
+    coord: HexCoord,
+    isCapital: boolean,
+    tribeId: TribeId,
+    name: string
+  ): Graphics {
+    const graphics = new Graphics()
+    const { x, y } = hexToPixel(coord, this.layout)
+    const tribeColor = this.getTribeColor(tribeId)
+
+    // Settlement size - capitals are larger
+    const baseSize = this.hexSize * (isCapital ? 0.45 : 0.35)
+
+    // Outer glow
+    graphics.circle(x, y, baseSize * 1.3)
+    graphics.fill({ color: tribeColor, alpha: 0.3 })
+
+    // Main circle
+    graphics.circle(x, y, baseSize)
+    graphics.fill({ color: tribeColor })
+    graphics.stroke({ color: 0xffffff, width: 2 })
+
+    // Capital star indicator
+    if (isCapital) {
+      this.drawStar(graphics, x, y, baseSize * 0.5, tribeColor)
+    }
+
+    // Settlement name
+    const style = new TextStyle({
+      fontSize: this.hexSize * 0.25,
+      fill: 0xffffff,
+      fontWeight: 'bold',
+      dropShadow: {
+        alpha: 0.8,
+        angle: Math.PI / 4,
+        blur: 2,
+        distance: 1,
+        color: 0x000000,
+      },
+    })
+    const text = new Text({ text: name, style })
+    text.anchor.set(0.5, 0)
+    text.x = x
+    text.y = y + baseSize + 4
+    graphics.addChild(text)
+
+    return graphics
+  }
+
+  private drawStar(
+    graphics: Graphics,
+    x: number,
+    y: number,
+    size: number,
+    _color: number
+  ): void {
+    // Draw a 5-pointed star
+    const points: number[] = []
+    for (let i = 0; i < 10; i++) {
+      const radius = i % 2 === 0 ? size : size * 0.5
+      const angle = (Math.PI * 2 * i) / 10 - Math.PI / 2
+      points.push(x + radius * Math.cos(angle))
+      points.push(y + radius * Math.sin(angle))
+    }
+    graphics.poly(points)
+    graphics.fill({ color: 0xffffff })
   }
 
   private createLootboxMarker(lootbox: Lootbox): Graphics {

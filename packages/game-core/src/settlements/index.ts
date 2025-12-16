@@ -11,6 +11,8 @@ import type {
 } from '../types'
 import { generateSettlementId } from '../state'
 import { hexKey, hexRange } from '../hex'
+import { calculateBuildingYields } from '../buildings'
+import { getPlayerTribeBonuses } from '../tribes'
 
 // =============================================================================
 // Settlement Names (Tribe-Specific)
@@ -77,6 +79,19 @@ export function resetSettlementNames(): void {
 }
 
 // =============================================================================
+// Settlement HP Constants
+// =============================================================================
+
+/** Base HP for a level 1 settlement */
+const BASE_SETTLEMENT_HP = 30
+
+/** HP gained per settlement level */
+const HP_PER_LEVEL = 5
+
+/** HP regenerated per turn */
+export const SETTLEMENT_HP_REGEN = 5
+
+// =============================================================================
 // Settlement Creation
 // =============================================================================
 
@@ -89,6 +104,14 @@ export interface CreateSettlementOptions {
 }
 
 /**
+ * Calculate max HP for a settlement based on level
+ * Base: 30, +5 per level
+ */
+export function getSettlementMaxHealth(level: number): number {
+  return BASE_SETTLEMENT_HP + (level - 1) * HP_PER_LEVEL
+}
+
+/**
  * Creates a new settlement
  */
 export function createSettlement(options: CreateSettlementOptions): Settlement {
@@ -96,6 +119,7 @@ export function createSettlement(options: CreateSettlementOptions): Settlement {
 
   // Use provided name, or get tribe-specific name
   const settlementName = name ?? getNextSettlementName(owner, tribeName)
+  const maxHealth = getSettlementMaxHealth(1)
 
   return {
     id: generateSettlementId(),
@@ -111,6 +135,8 @@ export function createSettlement(options: CreateSettlementOptions): Settlement {
     currentProduction: 0,
     milestonesChosen: [],
     isCapital,
+    health: maxHealth,
+    maxHealth,
   }
 }
 
@@ -271,7 +297,10 @@ export function calculateSettlementYields(state: GameState, settlement: Settleme
     yields = addYields(yields, calculateTileYields(tile))
   }
 
-  // TODO: Add building yields and adjacency bonuses
+  // Add building yields and adjacency bonuses (with tribe bonuses)
+  const tribeBonuses = getPlayerTribeBonuses(state, settlement.owner)
+  const buildingYields = calculateBuildingYields(state, settlement, tribeBonuses)
+  yields = addYields(yields, buildingYields)
 
   return yields
 }
@@ -446,6 +475,11 @@ export function processSettlementGrowth(
     const newLevel = getSettlementLevel(newPopulation)
     const reachedMilestone = newLevel > settlement.level
 
+    // Update max HP if level increased
+    const newMaxHealth = reachedMilestone
+      ? getSettlementMaxHealth(newLevel)
+      : settlement.maxHealth
+
     return {
       settlement: {
         ...settlement,
@@ -453,6 +487,11 @@ export function processSettlementGrowth(
         level: newLevel,
         populationProgress: newProgress - settlement.populationThreshold,
         populationThreshold: getPopulationThreshold(newPopulation),
+        maxHealth: newMaxHealth,
+        // Also heal by the HP increase amount
+        health: reachedMilestone
+          ? Math.min(settlement.health + HP_PER_LEVEL, newMaxHealth)
+          : settlement.health,
       },
       reachedMilestone,
     }
@@ -465,6 +504,59 @@ export function processSettlementGrowth(
     },
     reachedMilestone: false,
   }
+}
+
+// =============================================================================
+// Settlement HP Management
+// =============================================================================
+
+/**
+ * Apply damage to a settlement
+ * Returns updated settlement and whether it was conquered (HP <= 0)
+ */
+export function damageSettlement(
+  settlement: Settlement,
+  damage: number
+): { settlement: Settlement; conquered: boolean } {
+  const newHealth = Math.max(0, settlement.health - damage)
+  const conquered = newHealth <= 0
+
+  return {
+    settlement: {
+      ...settlement,
+      health: newHealth,
+    },
+    conquered,
+  }
+}
+
+/**
+ * Heal a settlement by a specified amount
+ */
+export function healSettlement(settlement: Settlement, amount: number): Settlement {
+  return {
+    ...settlement,
+    health: Math.min(settlement.maxHealth, settlement.health + amount),
+  }
+}
+
+/**
+ * Process settlement HP regeneration (called at end of turn)
+ * Regenerates SETTLEMENT_HP_REGEN HP per turn
+ */
+export function processSettlementRegeneration(settlement: Settlement): Settlement {
+  if (settlement.health >= settlement.maxHealth) {
+    return settlement
+  }
+
+  return healSettlement(settlement, SETTLEMENT_HP_REGEN)
+}
+
+/**
+ * Check if a settlement is at full health
+ */
+export function isSettlementAtFullHealth(settlement: Settlement): boolean {
+  return settlement.health >= settlement.maxHealth
 }
 
 // =============================================================================

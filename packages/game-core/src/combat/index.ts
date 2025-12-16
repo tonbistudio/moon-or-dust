@@ -7,6 +7,9 @@ import type {
   TribeId,
   HexCoord,
   TerrainType,
+  Player,
+  Settlement,
+  SettlementId,
 } from '../types'
 import { hexKey, hexNeighbors, hexDistance } from '../hex'
 import {
@@ -17,6 +20,8 @@ import {
   updateUnit,
   removeUnit,
 } from '../units'
+import { damageSettlement } from '../settlements'
+import { pillageSettlementTradeRoutes } from '../economy'
 
 // =============================================================================
 // Combat Constants
@@ -26,6 +31,9 @@ const BASE_COMBAT_DAMAGE = 30 // Base damage dealt in combat
 const XP_PER_COMBAT = 5 // XP gained per combat
 const XP_PER_KILL = 10 // Bonus XP for killing a unit
 const XP_TO_LEVEL = 10 // XP needed for promotion
+
+// Settlement combat constants
+const SETTLEMENT_DEFENSE_STRENGTH = 20 // Base defense strength of settlements
 
 // =============================================================================
 // Terrain Defense Modifiers
@@ -331,6 +339,12 @@ export function applyCombatResult(
 ): GameState {
   let newState = state
 
+  // Track combat XP in Great People accumulator for both combatants
+  newState = addCombatXpToAccumulator(newState, result.attacker.owner, result.attackerXpGained)
+  if (result.defenderXpGained > 0) {
+    newState = addCombatXpToAccumulator(newState, result.defender.owner, result.defenderXpGained)
+  }
+
   // Update or remove attacker
   if (result.attackerKilled) {
     newState = removeUnit(newState, result.attacker.id)
@@ -356,10 +370,53 @@ export function applyCombatResult(
   return newState
 }
 
+/**
+ * Adds combat XP to the Great People accumulator
+ */
+function addCombatXpToAccumulator(state: GameState, tribeId: TribeId, xp: number): GameState {
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+  const updatedPlayer: Player = {
+    ...player,
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        combat: player.greatPeople.accumulator.combat + xp,
+      },
+    },
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+
+  return { ...state, players: newPlayers }
+}
+
+/**
+ * Increments kill count for a tribe (both in player.killCount and GP accumulator)
+ */
 function incrementKillCount(state: GameState, tribeId: TribeId): GameState {
-  const newPlayers = state.players.map((p) =>
-    p.tribeId === tribeId ? { ...p, killCount: p.killCount + 1 } : p
-  )
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+  const updatedPlayer: Player = {
+    ...player,
+    killCount: player.killCount + 1,
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        kills: player.greatPeople.accumulator.kills + 1,
+      },
+    },
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
 
   return { ...state, players: newPlayers }
 }
@@ -545,5 +602,228 @@ export function getCombatPreview(
     estimatedDefenderDamage,
     attackerSurvivalChance,
     defenderSurvivalChance,
+  }
+}
+
+// =============================================================================
+// Settlement Combat
+// =============================================================================
+
+/** Siege unit types that get bonus vs settlements */
+const SIEGE_UNIT_TYPES = ['social_engineer', 'bombard']
+
+/**
+ * Check if a unit type is a siege unit
+ */
+export function isSiegeUnit(unitType: string): boolean {
+  return SIEGE_UNIT_TYPES.includes(unitType)
+}
+
+/**
+ * Checks if a unit can attack a settlement
+ * Requires: no defending units, adjacent (melee) or in range (ranged), at war
+ */
+export function canAttackSettlement(
+  state: GameState,
+  attacker: Unit,
+  settlement: Settlement
+): { canAttack: boolean; reason?: string } {
+  const attackerDef = UNIT_DEFINITIONS[attacker.type]
+
+  // Check if attacker can attack
+  if (!attackerDef.canAttack) {
+    return { canAttack: false, reason: 'This unit cannot attack' }
+  }
+
+  // Check if attacker has acted
+  if (attacker.hasActed) {
+    return { canAttack: false, reason: 'Unit has already acted this turn' }
+  }
+
+  // Check if same owner
+  if (attacker.owner === settlement.owner) {
+    return { canAttack: false, reason: 'Cannot attack your own settlement' }
+  }
+
+  // Check for defending units at settlement
+  const defendingUnits = getUnitsAt(state, settlement.position).filter(
+    u => u.owner === settlement.owner
+  )
+  if (defendingUnits.length > 0) {
+    return { canAttack: false, reason: 'Must defeat defending units first' }
+  }
+
+  // Check range
+  const distance = hexDistance(attacker.position, settlement.position)
+  const isRanged = attackerDef.baseRangedStrength > 0
+
+  if (isRanged) {
+    if (distance > 2) {
+      return { canAttack: false, reason: 'Settlement out of range' }
+    }
+  } else {
+    if (distance !== 1) {
+      return { canAttack: false, reason: 'Must be adjacent to attack settlement' }
+    }
+  }
+
+  return { canAttack: true }
+}
+
+/**
+ * Get all settlements that can be attacked by a unit
+ */
+export function getAttackableSettlements(state: GameState, attacker: Unit): Settlement[] {
+  const settlements: Settlement[] = []
+  const attackerDef = UNIT_DEFINITIONS[attacker.type]
+
+  if (!attackerDef.canAttack || attacker.hasActed) {
+    return settlements
+  }
+
+  const isRanged = attackerDef.baseRangedStrength > 0
+  const maxRange = isRanged ? 2 : 1
+
+  for (const settlement of state.settlements.values()) {
+    if (settlement.owner === attacker.owner) continue
+
+    const distance = hexDistance(attacker.position, settlement.position)
+    if (distance <= maxRange) {
+      const result = canAttackSettlement(state, attacker, settlement)
+      if (result.canAttack) {
+        settlements.push(settlement)
+      }
+    }
+  }
+
+  return settlements
+}
+
+export interface SettlementCombatResult {
+  attacker: Unit
+  settlement: Settlement
+  damageDealt: number
+  conquered: boolean
+  attackerXpGained: number
+}
+
+/**
+ * Resolves combat between a unit and a settlement
+ * Uses unit's settlementStrength (siege units have much higher values)
+ */
+export function resolveSettlementCombat(
+  state: GameState,
+  attackerId: UnitId,
+  settlementId: SettlementId
+): SettlementCombatResult | null {
+  const attacker = state.units.get(attackerId)
+  const settlement = state.settlements.get(settlementId)
+
+  if (!attacker || !settlement) return null
+
+  const canAttackResult = canAttackSettlement(state, attacker, settlement)
+  if (!canAttackResult.canAttack) return null
+
+  // Use settlementStrength for attacking settlements
+  // Siege units have much higher settlementStrength (5x their combat strength)
+  const attackStrength = attacker.settlementStrength
+
+  // Calculate damage based on strength ratio
+  const strengthRatio = attackStrength / Math.max(1, SETTLEMENT_DEFENSE_STRENGTH)
+  const damageDealt = Math.floor(BASE_COMBAT_DAMAGE * strengthRatio)
+
+  // Apply damage to settlement
+  const { settlement: damagedSettlement, conquered } = damageSettlement(settlement, damageDealt)
+
+  // Calculate XP (more XP for conquest)
+  const attackerXpGained = conquered ? XP_PER_COMBAT + XP_PER_KILL : XP_PER_COMBAT
+
+  // Update attacker
+  const updatedAttacker: Unit = {
+    ...attacker,
+    hasActed: true,
+    experience: attacker.experience + attackerXpGained,
+  }
+
+  return {
+    attacker: updatedAttacker,
+    settlement: damagedSettlement,
+    damageDealt,
+    conquered,
+    attackerXpGained,
+  }
+}
+
+/**
+ * Applies settlement combat result to game state
+ * Note: Does NOT handle conquest (capture/raze) - that requires player choice
+ * Triggers trade route pillaging when settlement takes damage
+ */
+export function applySettlementCombatResult(
+  state: GameState,
+  result: SettlementCombatResult
+): GameState {
+  let newState = state
+
+  // Update attacker
+  newState = updateUnit(newState, result.attacker)
+
+  // Track combat XP
+  newState = addCombatXpToAccumulator(newState, result.attacker.owner, result.attackerXpGained)
+
+  // Update settlement HP (but don't change ownership yet - that's a separate action)
+  const settlements = new Map(newState.settlements)
+  settlements.set(result.settlement.id, result.settlement)
+  newState = { ...newState, settlements }
+
+  // Pillage trade routes connected to this settlement
+  // Attacker gains gold from breaking trade routes
+  if (result.damageDealt > 0) {
+    const pillageResult = pillageSettlementTradeRoutes(
+      newState,
+      result.settlement.id,
+      result.attacker.owner
+    )
+    newState = pillageResult.state
+  }
+
+  return newState
+}
+
+export interface SettlementCombatPreview {
+  attackerStrength: CombatStrengthBreakdown
+  settlementStrength: number // The effective strength vs settlements
+  settlementDefense: number
+  estimatedDamage: number
+  isSiege: boolean // Whether this is a siege unit
+  turnsToConquer: number
+}
+
+/**
+ * Gets a preview of settlement combat outcome (for UI)
+ * Uses unit's settlementStrength (siege units have much higher values)
+ */
+export function getSettlementCombatPreview(
+  state: GameState,
+  attacker: Unit,
+  settlement: Settlement
+): SettlementCombatPreview {
+  const attackerStrength = calculateCombatStrength(state, attacker, false)
+
+  // Use settlementStrength for attacking settlements
+  const settlementAttackStrength = attacker.settlementStrength
+  const strengthRatio = settlementAttackStrength / Math.max(1, SETTLEMENT_DEFENSE_STRENGTH)
+  const estimatedDamage = Math.floor(BASE_COMBAT_DAMAGE * strengthRatio)
+
+  // Estimate turns to conquer (assuming no regen during siege)
+  const turnsToConquer = Math.ceil(settlement.health / Math.max(1, estimatedDamage))
+
+  return {
+    attackerStrength,
+    settlementStrength: settlementAttackStrength,
+    settlementDefense: SETTLEMENT_DEFENSE_STRENGTH,
+    estimatedDamage,
+    isSiege: isSiegeUnit(attacker.type),
+    turnsToConquer,
   }
 }

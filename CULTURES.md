@@ -95,7 +95,7 @@ This document defines the cultures tree for Tribes. Cultures unlock policy cards
 | **Degen Culture** | 25 | Community | **Full Send** [M]: +10% combat strength, -5% defense | **Ape In** [W]: +20% Production when behind in score |
 | **Social Media** | 25 | Influence | **Followers** [P]: +1 Vibes per population | **Engagement** [P]: +15% Vibes generation |
 | **Memeing** | 25 | Influence | **Shitposting** [M]: Enemy units in your territory -1 combat strength | **Good Vibes** [P]: +1 Vibes per settlement | Turtlers Hideout |
-| **Early Adopters** | 30 | OTC Trading | **First Mover** [E]: +10 Gold on discovery | **Scout Bonus** [M]: +1 Scout vision |
+| **Early Adopters** | 30 | OTC Trading | **First Mover** [E]: +1 trade route capacity | **Scout Bonus** [M]: +1 Scout vision |
 | **Diamond Hands** | 35 | Early Adopters | **HODL** [M]: Units +25% defense below 50% HP | **Paper Hands** [W]: -50% war weariness | Unlocks Degen Ape Emporium |
 
 *Era 1 Distribution: M=5, E=4, P=5, W=6*
@@ -163,7 +163,7 @@ From Memeing:
 |---------|------|---------------|-----------------|-----------------|
 | **GM** | 45 | Community | **Positive Vibes** [P]: +2 Vibes in all settlements | **Good Morning** [W]: Hostile tribes become Neutral after 3 turns (instead of 5) |
 | **Whitelisting** | 45 | Early Adopters | **Exclusive Access** [E]: +10% Gold from improvements | **VIP List** [W]: Alliance cost -25% |
-| **Alpha DAOs** | 50 | OTC Trading | **Big Addition** [W]: 80% chance of earning great people at thresholds | **Treasury** [E]: +1 Trade Route capacity | Unlocks Boogle Graveyard |
+| **Alpha DAOs** | 50 | OTC Trading | **Big Addition** [W]: 80% chance of earning great people at thresholds | **Treasury** [E]: +2 Trade Route capacity | Unlocks Boogle Graveyard |
 | **Follow for Follow** | 50 | GM | **Mutual Support** [M]: Allies heal +5 HP/turn | **Community Building** [W]: +1 Population when settling |
 | **Fudding** | 55 | Influence | **FUD Campaign** [M]: Enemy units -1 combat strength when attacking you | **Spread Doubt** [W]: Enemies cannot form alliances with each other | Unlocks Alpha Art Gallery | 
 | **Virality** | 55 | Social Media | **Going Viral** [P]: +20% Vibes when completing wonders | **Influencer** [W]: Great Person points +25% |
@@ -250,8 +250,8 @@ From Fudding:
 | **Innovation** | 80 | Builder Culture, Whitelisting, **Tech: Priority Fees** | **R&D** [P]: +20% Alpha generation | **Breakthrough** [P]: Buildings +2 Alpha |
 | **Hard Shilling** | 85 | Virality | **Hype Train** [M]: +25% combat XP gain | **Momentum** [P]: +2 Vibes per unit promoted | Unlocks The Portal
 | **1 of 1s** | 85 | Whitelisting | **Unique Art** [P]: +3 Vibes per wonder | **Collector** [W]: 100% chance of earning great people at thresholds |
-| **Auctions** | 90 | Alpha DAOs | **Bidding War** [E]: +25% Gold income | **Reserve Price** [E]: +10 Gold per settlement |
-| **Presales** | 90 | Alpha DAOs, **Tech: Matrica** | **Early Access** [E]: -25% building cost | **Allocation** [W]: +1 trade route capacity |
+| **Auctions** | 90 | Alpha DAOs | **Bidding War** [E]: +25% Gold income | **Reserve Price** [E]: +20 Gold income per settlement |
+| **Presales** | 90 | Alpha DAOs, **Tech: Matrica** | **Early Access** [E]: -25% building cost | **Allocation** [W]: +3 trade route capacity |
 | **Trenching** | 95 | Memecoin Mania, **Tech: Discord** | **In the Trenches** [M]: +15% combat strength when outnumbered | **Never Selling** [W]: +1 Floor Price per 5 population |
 | **Delisting** | 100 | Diamond Hands, Follow for Follow | **Floor Defense** [M]: Settlements +50% defense | **Exit Liquidity** [E]: +25 Gold when losing units |
 | **Sweeping** | 110 | Degen Minting, Delisting | **Buy the Dip** [E]: +30% Gold from trade routes | **Collection Complete** [W]: +5 Floor Price per 10 tiles |

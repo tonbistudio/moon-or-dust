@@ -11,6 +11,7 @@ import type {
   UnitType,
   BuildingId,
   WonderId,
+  Player,
 } from '../types'
 import { calculateSettlementYields, getPlayerSettlements } from '../settlements'
 import {
@@ -20,7 +21,7 @@ import {
   BUILDING_DEFINITIONS,
   type BuildingDefinition,
 } from '../buildings'
-import { areAllied, getStance, ALLIED_TRADE_BONUS } from '../diplomacy'
+import { areAllied, getStance } from '../diplomacy'
 import { UNIT_DEFINITIONS, type UnitDefinition } from '../units'
 import {
   getAvailableWonders,
@@ -29,6 +30,8 @@ import {
   type WonderDefinition,
 } from '../wonders'
 import { TECH_DEFINITIONS } from '../tech'
+import { getGoldenAgeYieldBonus } from '../goldenage'
+import { getPlayerTribeBonuses, getUnitProductionBonus } from '../tribes'
 
 // =============================================================================
 // Unit Maintenance Costs
@@ -89,6 +92,7 @@ export function calculateGoldIncome(state: GameState, tribeId: TribeId): {
   net: number
   breakdown: GoldBreakdown
 } {
+  const player = state.players.find((p) => p.tribeId === tribeId)
   const settlements = getPlayerSettlements(state, tribeId)
 
   let grossGold = 0
@@ -100,9 +104,10 @@ export function calculateGoldIncome(state: GameState, tribeId: TribeId): {
   }
 
   // Gold from settlements
+  const tribeBonuses = player ? getPlayerTribeBonuses(state, player.tribeId) : undefined
   for (const settlement of settlements) {
     const yields = calculateSettlementYields(state, settlement)
-    const buildingYields = calculateBuildingYields(state, settlement)
+    const buildingYields = calculateBuildingYields(state, settlement, tribeBonuses)
     breakdown.settlements += yields.gold + buildingYields.gold
   }
   grossGold += breakdown.settlements
@@ -111,6 +116,14 @@ export function calculateGoldIncome(state: GameState, tribeId: TribeId): {
   const tradeGold = calculateTradeRouteIncome(state, tribeId)
   breakdown.tradeRoutes = tradeGold
   grossGold += tradeGold
+
+  // Apply golden age bonus to gross gold
+  if (player) {
+    const goldBonus = getGoldenAgeYieldBonus(player, 'gold')
+    if (goldBonus > 0) {
+      grossGold = Math.floor(grossGold * (1 + goldBonus))
+    }
+  }
 
   // Maintenance costs
   breakdown.buildingMaintenance = calculatePlayerBuildingMaintenance(state, tribeId)
@@ -137,6 +150,15 @@ export interface GoldBreakdown {
 // Trade Route System
 // =============================================================================
 
+/** Turns for a trade route to become active */
+const TRADE_ROUTE_FORMATION_TURNS = 2
+
+/** Base trade route yield percentage (20% of combined Gold) */
+const TRADE_ROUTE_BASE_PERCENT = 0.20
+
+/** Allied trade route yield percentage (25% of combined Gold) */
+const TRADE_ROUTE_ALLIED_PERCENT = 0.25
+
 let tradeRouteIdCounter = 1
 
 function generateTradeRouteId(): TradeRouteId {
@@ -148,7 +170,71 @@ export function resetTradeRouteIds(): void {
 }
 
 /**
+ * Gets the trade route capacity for a tribe (global, not per settlement)
+ * Based on techs: Smart Contracts (+1), Currency (+1), Lending (+1)
+ * Plus tribe bonus (Monkes +1)
+ */
+export function getTradeRouteCapacity(state: GameState, tribeId: TribeId): number {
+  const player = state.players.find((p) => p.tribeId === tribeId)
+  if (!player) return 0
+
+  let capacity = 0
+
+  // Smart Contracts tech unlocks trade routes with +1 capacity
+  if (player.researchedTechs.includes('smart_contracts' as never)) {
+    capacity += 1
+  }
+
+  // Currency tech: +1 trade route
+  if (player.researchedTechs.includes('currency' as never)) {
+    capacity += 1
+  }
+
+  // Lending tech: +1 trade route capacity
+  if (player.researchedTechs.includes('lending' as never)) {
+    capacity += 1
+  }
+
+  // Apply tribe bonus (Monkes +1)
+  const tribeBonuses = getPlayerTribeBonuses(state, tribeId)
+  if (tribeBonuses.extraTradeRouteCapacity) {
+    capacity += tribeBonuses.extraTradeRouteCapacity
+  }
+
+  return capacity
+}
+
+/**
+ * Checks if a tribe can create trade routes (has unlocked the ability)
+ */
+export function hasTradeUnlocked(state: GameState, tribeId: TribeId): boolean {
+  const player = state.players.find((p) => p.tribeId === tribeId)
+  if (!player) return false
+  return player.researchedTechs.includes('smart_contracts' as never)
+}
+
+/**
+ * Checks if a settlement is visible to a tribe (required for trade)
+ */
+function isSettlementVisible(state: GameState, tribeId: TribeId, settlement: Settlement): boolean {
+  const fog = state.fog.get(tribeId)
+  if (!fog) return false
+  const key = `${settlement.position.q},${settlement.position.r}`
+  return fog.has(key)
+}
+
+/**
+ * Checks if destination already has a trade route from the same tribe
+ */
+function hasRouteFromTribe(state: GameState, destinationId: SettlementId, tribeId: TribeId): boolean {
+  return state.tradeRoutes.some((r) =>
+    r.active && r.destination === destinationId && r.ownerTribe === tribeId
+  )
+}
+
+/**
  * Creates a new trade route between two settlements
+ * Routes take 2 turns to form before becoming active
  */
 export function createTradeRoute(
   state: GameState,
@@ -162,46 +248,122 @@ export function createTradeRoute(
     return null
   }
 
-  // Check if origin can send a trade route
-  const existingRoutes = getTradeRoutesFrom(state, originId)
-  const maxRoutes = getMaxTradeRoutes(state, origin.owner)
-  if (existingRoutes.length >= maxRoutes) {
+  // Check if trade is unlocked
+  if (!hasTradeUnlocked(state, origin.owner)) {
+    return null
+  }
+
+  // Check if tribe has route capacity
+  const currentRoutes = getPlayerTradeRoutes(state, origin.owner)
+  const capacity = getTradeRouteCapacity(state, origin.owner)
+  if (currentRoutes.length >= capacity) {
     return null
   }
 
   // Check diplomatic relations for external routes
   const isInternal = origin.owner === destination.owner
   if (!isInternal) {
-    // External routes require Neutral or better relations
+    // External routes require Neutral or better relations (cannot initiate in Hostile)
     const stance = getStance(state, origin.owner, destination.owner)
     if (stance === 'war' || stance === 'hostile') {
-      return null // Cannot trade with enemies
+      return null // Cannot initiate trade with enemies or hostile tribes
+    }
+
+    // Destination must be visible
+    if (!isSettlementVisible(state, origin.owner, destination)) {
+      return null
+    }
+
+    // Destination cannot already receive a route from this tribe
+    if (hasRouteFromTribe(state, destinationId, origin.owner)) {
+      return null
     }
   }
 
-  // Calculate gold per turn
+  // Calculate gold per turn (will recalculate when active)
   const goldPerTurn = calculateTradeRouteGold(state, origin, destination)
 
   const route: TradeRoute = {
     id: generateTradeRouteId(),
     origin: originId,
     destination: destinationId,
+    ownerTribe: origin.owner,
     targetTribe: destination.owner,
     goldPerTurn,
-    active: true,
+    active: false, // Starts inactive, becomes active after formation
+    turnsUntilActive: TRADE_ROUTE_FORMATION_TURNS,
   }
 
+  let newState: GameState = {
+    ...state,
+    tradeRoutes: [...state.tradeRoutes, route],
+  }
+
+  // Update trade route count in GP accumulator
+  newState = updateTradeRouteCount(newState, origin.owner)
+
   return {
-    state: {
-      ...state,
-      tradeRoutes: [...state.tradeRoutes, route],
-    },
+    state: newState,
     route,
   }
 }
 
 /**
+ * Updates the trade route count in the GP accumulator based on active routes
+ */
+function updateTradeRouteCount(state: GameState, tribeId: TribeId): GameState {
+  // Count active routes for this player
+  const activeRoutes = getPlayerTradeRoutes(state, tribeId).length
+
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+  const updatedPlayer: Player = {
+    ...player,
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        tradeRoutes: activeRoutes,
+      },
+    },
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+
+  return { ...state, players: newPlayers }
+}
+
+/**
+ * Calculates the Gold yield of a settlement (for trade route calculations)
+ */
+function getSettlementGoldYield(state: GameState, settlement: Settlement): number {
+  const player = state.players.find((p) => p.tribeId === settlement.owner)
+  const tribeBonuses = player ? getPlayerTribeBonuses(state, player.tribeId) : undefined
+  const baseYields = calculateSettlementYields(state, settlement)
+  const buildingYields = calculateBuildingYields(state, settlement, tribeBonuses)
+  return baseYields.gold + buildingYields.gold
+}
+
+/**
+ * Counts luxury resources in tiles owned by a settlement
+ */
+function countLuxuryResources(state: GameState, settlement: Settlement): number {
+  let count = 0
+  for (const tile of state.map.tiles.values()) {
+    if (tile.owner === settlement.owner && tile.resource?.category === 'luxury' && tile.resource.improved) {
+      count++
+    }
+  }
+  return count
+}
+
+/**
  * Calculates gold per turn for a trade route
+ * Internal routes: 20% of combined Gold yield
+ * External routes: 20% of combined Gold yield + 1 per luxury (25% if allied)
  */
 export function calculateTradeRouteGold(
   state: GameState,
@@ -210,32 +372,29 @@ export function calculateTradeRouteGold(
 ): number {
   const isInternal = origin.owner === destination.owner
 
-  // Base gold
-  let gold = isInternal ? 3 : 4
+  // Get combined Gold yield of both settlements
+  const originGold = getSettlementGoldYield(state, origin)
+  const destinationGold = getSettlementGoldYield(state, destination)
+  const combinedGold = originGold + destinationGold
 
-  // Bonus for buildings at destination
-  gold += Math.min(destination.buildings.length, 3)
+  // Determine yield percentage
+  let yieldPercent = TRADE_ROUTE_BASE_PERCENT // 20%
 
-  // Bonus for luxury resources (if external)
-  if (!isInternal) {
-    // Count unique luxury resources at destination
-    // Simplified: +1 per luxury
-    const luxuryCount = countLuxuryResources(state, destination)
-    gold += luxuryCount
-
-    // Alliance bonus (+10% gold if allied)
-    if (areAllied(state, origin.owner, destination.owner)) {
-      gold = Math.ceil(gold * (1 + ALLIED_TRADE_BONUS / 100))
-    }
+  if (!isInternal && areAllied(state, origin.owner, destination.owner)) {
+    yieldPercent = TRADE_ROUTE_ALLIED_PERCENT // 25% for allied
   }
 
-  return gold
-}
+  // Calculate base gold from percentage of combined yields
+  let gold = Math.floor(combinedGold * yieldPercent)
 
-function countLuxuryResources(_state: GameState, _settlement: Settlement): number {
-  // Count tiles with luxury resources around settlement
-  // Simplified implementation - would iterate through settlement tiles
-  return 0
+  // External routes: +1 Gold per luxury resource at destination
+  if (!isInternal) {
+    const luxuryCount = countLuxuryResources(state, destination)
+    gold += luxuryCount
+  }
+
+  // Minimum 1 gold per route
+  return Math.max(1, gold)
 }
 
 /**
@@ -259,43 +418,96 @@ export function getTradeRoutesTo(
 }
 
 /**
- * Gets all trade routes for a player
+ * Gets all trade routes for a player (both forming and active)
  */
 export function getPlayerTradeRoutes(state: GameState, tribeId: TribeId): TradeRoute[] {
-  return state.tradeRoutes.filter((r) => {
-    const origin = state.settlements.get(r.origin)
-    return origin && origin.owner === tribeId && r.active
-  })
+  return state.tradeRoutes.filter((r) => r.ownerTribe === tribeId && (r.active || r.turnsUntilActive > 0))
 }
 
 /**
- * Calculates total trade route income for a player
+ * Gets only active trade routes for a player (for income calculation)
+ */
+export function getActiveTradeRoutes(state: GameState, tribeId: TribeId): TradeRoute[] {
+  return state.tradeRoutes.filter((r) => r.ownerTribe === tribeId && r.active)
+}
+
+/**
+ * Calculates total trade route income for a player (only from active routes)
  */
 export function calculateTradeRouteIncome(state: GameState, tribeId: TribeId): number {
-  const routes = getPlayerTradeRoutes(state, tribeId)
+  const routes = getActiveTradeRoutes(state, tribeId)
   return routes.reduce((sum, r) => sum + r.goldPerTurn, 0)
 }
 
 /**
- * Gets maximum trade routes a player can have
+ * Gets maximum trade routes a player can have (tech-based)
+ * @deprecated Use getTradeRouteCapacity instead
  */
 export function getMaxTradeRoutes(state: GameState, tribeId: TribeId): number {
-  // Base: 1 trade route per settlement
-  const settlements = getPlayerSettlements(state, tribeId)
-  let max = settlements.length
-
-  // Could add bonuses from techs/civics here
-
-  return max
+  return getTradeRouteCapacity(state, tribeId)
 }
 
 /**
  * Cancels a trade route
  */
 export function cancelTradeRoute(state: GameState, routeId: TradeRouteId): GameState {
+  const route = state.tradeRoutes.find((r) => r.id === routeId)
+  if (!route) return state
+
   const newRoutes = state.tradeRoutes.map((r) =>
-    r.id === routeId ? { ...r, active: false } : r
+    r.id === routeId ? { ...r, active: false, turnsUntilActive: 0 } : r
   )
+
+  let newState: GameState = {
+    ...state,
+    tradeRoutes: newRoutes,
+  }
+
+  // Update trade route count in GP accumulator
+  newState = updateTradeRouteCount(newState, route.ownerTribe)
+
+  return newState
+}
+
+/**
+ * Processes trade route formation each turn
+ * Decrements turnsUntilActive and activates routes when ready
+ */
+export function processTradeRouteFormation(state: GameState, tribeId: TribeId): GameState {
+  let routesChanged = false
+  const newRoutes = state.tradeRoutes.map((route) => {
+    // Only process routes owned by this tribe that are still forming
+    if (route.ownerTribe !== tribeId || route.active || route.turnsUntilActive <= 0) {
+      return route
+    }
+
+    routesChanged = true
+    const newTurns = route.turnsUntilActive - 1
+
+    if (newTurns <= 0) {
+      // Route becomes active - recalculate gold yield
+      const origin = state.settlements.get(route.origin)
+      const destination = state.settlements.get(route.destination)
+
+      if (!origin || !destination) {
+        // Settlement was destroyed, cancel route
+        return { ...route, active: false, turnsUntilActive: 0 }
+      }
+
+      const goldPerTurn = calculateTradeRouteGold(state, origin, destination)
+
+      return {
+        ...route,
+        active: true,
+        turnsUntilActive: 0,
+        goldPerTurn,
+      }
+    }
+
+    return { ...route, turnsUntilActive: newTurns }
+  })
+
+  if (!routesChanged) return state
 
   return {
     ...state,
@@ -337,34 +549,101 @@ export function cancelTradeRoutesDueToWar(
   tribe2: TribeId
 ): GameState {
   const newRoutes = state.tradeRoutes.map((route) => {
-    if (!route.active) return route
-
-    const origin = state.settlements.get(route.origin)
-    const dest = state.settlements.get(route.destination)
-
-    if (!origin || !dest) return route
+    if (!route.active && route.turnsUntilActive <= 0) return route
 
     // Cancel if route goes between the two warring tribes
     const isAffected =
-      (origin.owner === tribe1 && dest.owner === tribe2) ||
-      (origin.owner === tribe2 && dest.owner === tribe1)
+      (route.ownerTribe === tribe1 && route.targetTribe === tribe2) ||
+      (route.ownerTribe === tribe2 && route.targetTribe === tribe1)
 
     if (isAffected) {
-      return { ...route, active: false }
+      return { ...route, active: false, turnsUntilActive: 0 }
     }
 
     return route
   })
 
-  return {
+  let newState: GameState = {
     ...state,
     tradeRoutes: newRoutes,
+  }
+
+  // Update trade route counts for both tribes
+  newState = updateTradeRouteCount(newState, tribe1)
+  newState = updateTradeRouteCount(newState, tribe2)
+
+  return newState
+}
+
+/**
+ * Pillages trade routes connected to a settlement when it takes damage
+ * Triggered by settlement HP damage, not by unit actions directly
+ * Returns gold to the pillaging player (1 turn of route value)
+ */
+export function pillageSettlementTradeRoutes(
+  state: GameState,
+  settlementId: SettlementId,
+  pillagerTribeId: TribeId
+): { state: GameState; goldGained: number; routesBroken: number } {
+  const settlement = state.settlements.get(settlementId)
+  if (!settlement) {
+    return { state, goldGained: 0, routesBroken: 0 }
+  }
+
+  let goldGained = 0
+  let routesBroken = 0
+  const affectedOwners = new Set<TribeId>()
+
+  // Find all active routes connected to this settlement (either end)
+  const newRoutes = state.tradeRoutes.map((route) => {
+    if (!route.active) return route
+
+    const isConnected = route.origin === settlementId || route.destination === settlementId
+
+    if (isConnected) {
+      // Pillager gains 1 turn worth of bonus gold
+      goldGained += route.goldPerTurn
+      routesBroken++
+      affectedOwners.add(route.ownerTribe)
+
+      return { ...route, active: false, turnsUntilActive: 0 }
+    }
+
+    return route
+  })
+
+  if (routesBroken === 0) {
+    return { state, goldGained: 0, routesBroken: 0 }
+  }
+
+  // Grant gold to pillager
+  const newPlayers = state.players.map((p) =>
+    p.tribeId === pillagerTribeId
+      ? { ...p, treasury: p.treasury + goldGained }
+      : p
+  )
+
+  let newState: GameState = {
+    ...state,
+    tradeRoutes: newRoutes,
+    players: newPlayers,
+  }
+
+  // Update trade route counts for affected route owners
+  for (const ownerId of affectedOwners) {
+    newState = updateTradeRouteCount(newState, ownerId)
+  }
+
+  return {
+    state: newState,
+    goldGained,
+    routesBroken,
   }
 }
 
 /**
- * Pillages a trade route (enemy action)
- * Returns gold to the pillaging player
+ * @deprecated Use pillageSettlementTradeRoutes instead
+ * Pillages a specific trade route
  */
 export function pillageTradeRoute(
   state: GameState,
@@ -378,17 +657,16 @@ export function pillageTradeRoute(
   }
 
   // Can't pillage own routes
-  const origin = state.settlements.get(route.origin)
-  if (origin && origin.owner === pillagerTribeId) {
+  if (route.ownerTribe === pillagerTribeId) {
     return null
   }
 
-  // Gold gained = 3 turns of route value
-  const goldGained = route.goldPerTurn * 3
+  // Gold gained = 1 turn of route value (per TRADE.md spec)
+  const goldGained = route.goldPerTurn
 
   // Deactivate the route
   const newRoutes = state.tradeRoutes.map((r) =>
-    r.id === routeId ? { ...r, active: false } : r
+    r.id === routeId ? { ...r, active: false, turnsUntilActive: 0 } : r
   )
 
   // Grant gold to pillager
@@ -398,13 +676,151 @@ export function pillageTradeRoute(
       : p
   )
 
+  let newState: GameState = {
+    ...state,
+    tradeRoutes: newRoutes,
+    players: newPlayers,
+  }
+
+  // Update trade route count for the route owner
+  newState = updateTradeRouteCount(newState, route.ownerTribe)
+
   return {
-    state: {
-      ...state,
-      tradeRoutes: newRoutes,
-      players: newPlayers,
-    },
+    state: newState,
     goldGained,
+  }
+}
+
+/**
+ * Gets all valid trade route destinations for a tribe
+ */
+export function getAvailableTradeDestinations(
+  state: GameState,
+  tribeId: TribeId
+): { settlement: Settlement; isInternal: boolean; goldPerTurn: number }[] {
+  const destinations: { settlement: Settlement; isInternal: boolean; goldPerTurn: number }[] = []
+
+  // Check if trade is unlocked
+  if (!hasTradeUnlocked(state, tribeId)) {
+    return destinations
+  }
+
+  // Check if tribe has capacity
+  const currentRoutes = getPlayerTradeRoutes(state, tribeId)
+  const capacity = getTradeRouteCapacity(state, tribeId)
+  if (currentRoutes.length >= capacity) {
+    return destinations
+  }
+
+  // Get player's settlements for origin
+  const playerSettlements = getPlayerSettlements(state, tribeId)
+  if (playerSettlements.length === 0) {
+    return destinations
+  }
+
+  // Use first settlement as reference origin for gold calculation
+  const originSettlement = playerSettlements[0]!
+
+  for (const settlement of state.settlements.values()) {
+    const isInternal = settlement.owner === tribeId
+
+    if (!isInternal) {
+      // External routes require visibility and neutral+ stance
+      const stance = getStance(state, tribeId, settlement.owner)
+      if (stance === 'war' || stance === 'hostile') continue
+
+      if (!isSettlementVisible(state, tribeId, settlement)) continue
+
+      // Can't already have a route from this tribe
+      if (hasRouteFromTribe(state, settlement.id, tribeId)) continue
+    }
+
+    // Calculate potential gold per turn
+    const goldPerTurn = calculateTradeRouteGold(state, originSettlement, settlement)
+
+    destinations.push({ settlement, isInternal, goldPerTurn })
+  }
+
+  return destinations
+}
+
+/**
+ * Checks if a specific trade route can be created
+ */
+export function canCreateTradeRoute(
+  state: GameState,
+  originId: SettlementId,
+  destinationId: SettlementId
+): { canCreate: boolean; reason?: string } {
+  const origin = state.settlements.get(originId)
+  const destination = state.settlements.get(destinationId)
+
+  if (!origin) {
+    return { canCreate: false, reason: 'Origin settlement not found' }
+  }
+
+  if (!destination) {
+    return { canCreate: false, reason: 'Destination settlement not found' }
+  }
+
+  if (!hasTradeUnlocked(state, origin.owner)) {
+    return { canCreate: false, reason: 'Trade not unlocked (requires Smart Contracts tech)' }
+  }
+
+  const currentRoutes = getPlayerTradeRoutes(state, origin.owner)
+  const capacity = getTradeRouteCapacity(state, origin.owner)
+  if (currentRoutes.length >= capacity) {
+    return { canCreate: false, reason: `Trade route capacity full (${currentRoutes.length}/${capacity})` }
+  }
+
+  const isInternal = origin.owner === destination.owner
+  if (!isInternal) {
+    const stance = getStance(state, origin.owner, destination.owner)
+    if (stance === 'war') {
+      return { canCreate: false, reason: 'Cannot trade with enemies' }
+    }
+    if (stance === 'hostile') {
+      return { canCreate: false, reason: 'Cannot initiate trade while hostile' }
+    }
+
+    if (!isSettlementVisible(state, origin.owner, destination)) {
+      return { canCreate: false, reason: 'Destination not visible' }
+    }
+
+    if (hasRouteFromTribe(state, destinationId, origin.owner)) {
+      return { canCreate: false, reason: 'Already have a route to this settlement' }
+    }
+  }
+
+  return { canCreate: true }
+}
+
+/**
+ * Gets trade route status summary for a tribe
+ */
+export function getTradeRouteSummary(
+  state: GameState,
+  tribeId: TribeId
+): {
+  capacity: number
+  active: number
+  forming: number
+  income: number
+  unlocked: boolean
+} {
+  const unlocked = hasTradeUnlocked(state, tribeId)
+  const capacity = getTradeRouteCapacity(state, tribeId)
+  const allRoutes = getPlayerTradeRoutes(state, tribeId)
+  const activeRoutes = allRoutes.filter(r => r.active)
+  const formingRoutes = allRoutes.filter(r => !r.active && r.turnsUntilActive > 0)
+  const income = calculateTradeRouteIncome(state, tribeId)
+
+  return {
+    capacity,
+    active: activeRoutes.length,
+    forming: formingRoutes.length,
+    income,
+    unlocked,
   }
 }
 
@@ -479,9 +895,19 @@ export function processProduction(
   }
 
   // Calculate production yields
+  const player = state.players.find((p) => p.tribeId === settlement.owner)
+  const tribeBonuses = player ? getPlayerTribeBonuses(state, player.tribeId) : undefined
   const baseYields = calculateSettlementYields(state, settlement)
-  const buildingYields = calculateBuildingYields(state, settlement)
-  const totalProduction = baseYields.production + buildingYields.production
+  const buildingYields = calculateBuildingYields(state, settlement, tribeBonuses)
+  let totalProduction = baseYields.production + buildingYields.production
+
+  // Apply golden age production bonus
+  if (player) {
+    const productionBonus = getGoldenAgeYieldBonus(player, 'production')
+    if (productionBonus > 0) {
+      totalProduction = Math.floor(totalProduction * (1 + productionBonus))
+    }
+  }
 
   const completed: ProductionItem[] = []
   let currentItem = settlement.productionQueue[0]!
@@ -495,16 +921,29 @@ export function processProduction(
     currentItem = settlement.productionQueue[itemIndex]!
     const remaining = currentItem.cost - currentItem.progress
 
-    if (overflow >= remaining) {
+    // Calculate effective production for this item (with unit type bonuses)
+    let effectiveProduction = overflow
+    if (currentItem.type === 'unit' && tribeBonuses) {
+      const unitBonus = getUnitProductionBonus(currentItem.id, tribeBonuses)
+      if (unitBonus > 0) {
+        effectiveProduction = Math.floor(overflow * (1 + unitBonus))
+      }
+    }
+
+    if (effectiveProduction >= remaining) {
       // Item completed
       completed.push(currentItem)
-      overflow -= remaining
+      // Subtract the actual production used (before bonus), not the effective production
+      const productionUsed = tribeBonuses && currentItem.type === 'unit'
+        ? Math.ceil(remaining / (1 + getUnitProductionBonus(currentItem.id, tribeBonuses)))
+        : remaining
+      overflow -= Math.min(productionUsed, overflow)
       itemIndex++
     } else {
       // Item partially complete
       newQueue.push({
         ...currentItem,
-        progress: currentItem.progress + overflow,
+        progress: currentItem.progress + effectiveProduction,
       })
       overflow = 0
       itemIndex++
@@ -540,9 +979,18 @@ export function getProductionTurnsRemaining(
   const currentItem = settlement.productionQueue[0]!
   const remaining = currentItem.cost - currentItem.progress - settlement.currentProduction
 
+  const tribeBonuses = getPlayerTribeBonuses(state, settlement.owner)
   const baseYields = calculateSettlementYields(state, settlement)
-  const buildingYields = calculateBuildingYields(state, settlement)
-  const totalProduction = baseYields.production + buildingYields.production
+  const buildingYields = calculateBuildingYields(state, settlement, tribeBonuses)
+  let totalProduction = baseYields.production + buildingYields.production
+
+  // Apply unit production bonus for turn estimate
+  if (currentItem.type === 'unit' && tribeBonuses) {
+    const unitBonus = getUnitProductionBonus(currentItem.id, tribeBonuses)
+    if (unitBonus > 0) {
+      totalProduction = Math.floor(totalProduction * (1 + unitBonus))
+    }
+  }
 
   if (totalProduction <= 0) {
     return Infinity
@@ -564,16 +1012,27 @@ export function processPlayerEconomy(
 ): GameState {
   const goldIncome = calculateGoldIncome(state, tribeId)
 
-  // Update player treasury
+  // Update player treasury and great people accumulator
   const newPlayers = state.players.map((p) => {
     if (p.tribeId !== tribeId) return p
 
     const newTreasury = Math.max(0, p.treasury + goldIncome.net)
 
-    return {
+    // Track gross gold earned for Great People accumulator
+    const goldEarned = goldIncome.gross
+    const updatedPlayer: Player = {
       ...p,
       treasury: newTreasury,
+      greatPeople: {
+        ...p.greatPeople,
+        accumulator: {
+          ...p.greatPeople.accumulator,
+          gold: p.greatPeople.accumulator.gold + goldEarned,
+        },
+      },
     }
+
+    return updatedPlayer
   })
 
   return {
@@ -713,8 +1172,9 @@ export function calculateTurnsRemaining(
   cost: number,
   currentProgress: number = 0
 ): number | null {
+  const tribeBonuses = getPlayerTribeBonuses(state, settlement.owner)
   const baseYields = calculateSettlementYields(state, settlement)
-  const buildingYields = calculateBuildingYields(state, settlement)
+  const buildingYields = calculateBuildingYields(state, settlement, tribeBonuses)
   const totalProduction = baseYields.production + buildingYields.production
 
   if (totalProduction <= 0) {
