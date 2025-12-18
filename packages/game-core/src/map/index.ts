@@ -236,11 +236,14 @@ export function generateMap(config: MapGenerationConfig): {
   const rng = createRng(seed)
   const tiles = new Map<string, Tile>()
 
-  // Generate base terrain using noise-like approach
+  // Generate biome seeds for clustered terrain
+  const biomeSeeds = generateBiomeSeeds(width, height, rng)
+
+  // Generate base terrain using biome clustering
   for (let q = 0; q < width; q++) {
     for (let r = 0; r < height; r++) {
       const coord = hex(q, r)
-      const terrain = generateTerrain(q, r, width, height, rng)
+      const terrain = generateTerrain(q, r, width, height, rng, biomeSeeds)
       const feature = generateFeature(terrain, rng)
 
       const tile: Tile = {
@@ -277,12 +280,149 @@ export function generateMap(config: MapGenerationConfig): {
   }
 }
 
+// Biome seed for terrain clustering
+interface BiomeSeed {
+  q: number
+  r: number
+  terrain: TerrainType
+  radius: number
+}
+
+function generateBiomeSeeds(
+  width: number,
+  height: number,
+  rng: () => number
+): BiomeSeed[] {
+  const seeds: BiomeSeed[] = []
+
+  // Number of biome seeds based on map size
+  const numSeeds = Math.floor((width * height) / 40) + 4
+
+  // Biome types with weights (excludes water/mountain which are placed specially)
+  const biomeTypes: { terrain: TerrainType; weight: number }[] = [
+    { terrain: 'grassland', weight: 25 },
+    { terrain: 'plains', weight: 25 },
+    { terrain: 'forest', weight: 15 },
+    { terrain: 'hills', weight: 10 },
+    { terrain: 'desert', weight: 10 },
+    { terrain: 'jungle', weight: 10 },
+    { terrain: 'marsh', weight: 5 },
+  ]
+
+  const totalWeight = biomeTypes.reduce((sum, b) => sum + b.weight, 0)
+
+  for (let i = 0; i < numSeeds; i++) {
+    // Random position (avoiding edges)
+    const q = 2 + Math.floor(rng() * (width - 4))
+    const r = 2 + Math.floor(rng() * (height - 4))
+
+    // Weighted random terrain selection
+    let roll = rng() * totalWeight
+    let terrain: TerrainType = 'grassland'
+    for (const biome of biomeTypes) {
+      roll -= biome.weight
+      if (roll <= 0) {
+        terrain = biome.terrain
+        break
+      }
+    }
+
+    // Variable radius for organic shapes
+    const radius = 3 + Math.floor(rng() * 4)
+
+    seeds.push({ q, r, terrain, radius })
+  }
+
+  return seeds
+}
+
+function getTerrainFromBiomes(
+  q: number,
+  r: number,
+  seeds: BiomeSeed[],
+  rng: () => number
+): TerrainType {
+  // Find nearest biome seed
+  let nearestSeed: BiomeSeed | null = null
+  let nearestDist = Infinity
+
+  for (const seed of seeds) {
+    // Use hex distance approximation
+    const dq = Math.abs(q - seed.q)
+    const dr = Math.abs(r - seed.r)
+    const dist = Math.max(dq, dr, Math.abs(dq - dr))
+
+    // Weight by seed radius
+    const weightedDist = dist / seed.radius
+
+    if (weightedDist < nearestDist) {
+      nearestDist = weightedDist
+      nearestSeed = seed
+    }
+  }
+
+  if (!nearestSeed) return 'grassland'
+
+  // At biome edges, chance to blend with adjacent terrain types
+  if (nearestDist > 0.7 && rng() < 0.3) {
+    // Pick a related terrain for natural transitions
+    return getTransitionTerrain(nearestSeed.terrain, rng)
+  }
+
+  // Small chance of variation within biome
+  if (rng() < 0.15) {
+    return getVariationTerrain(nearestSeed.terrain, rng)
+  }
+
+  return nearestSeed.terrain
+}
+
+function getTransitionTerrain(base: TerrainType, rng: () => number): TerrainType {
+  // Natural terrain transitions
+  const transitions: Record<TerrainType, TerrainType[]> = {
+    grassland: ['plains', 'forest'],
+    plains: ['grassland', 'hills', 'desert'],
+    forest: ['grassland', 'jungle', 'hills'],
+    hills: ['plains', 'mountain', 'forest'],
+    mountain: ['hills'],
+    desert: ['plains', 'hills'],
+    jungle: ['forest', 'marsh'],
+    marsh: ['jungle', 'grassland'],
+    water: ['marsh'],
+  }
+
+  const options = transitions[base]
+  return options[Math.floor(rng() * options.length)] ?? base
+}
+
+function getVariationTerrain(base: TerrainType, rng: () => number): TerrainType {
+  // Minor variations within a biome
+  const variations: Record<TerrainType, TerrainType[]> = {
+    grassland: ['plains', 'grassland'],
+    plains: ['grassland', 'plains'],
+    forest: ['forest', 'jungle'],
+    hills: ['hills', 'plains'],
+    mountain: ['hills', 'mountain'],
+    desert: ['desert', 'plains'],
+    jungle: ['jungle', 'forest'],
+    marsh: ['marsh', 'jungle'],
+    water: ['water'],
+  }
+
+  const options = variations[base]
+  return options[Math.floor(rng() * options.length)] ?? base
+}
+
+// Cache biome seeds per generation
+let cachedBiomeSeeds: BiomeSeed[] = []
+
 function generateTerrain(
   q: number,
   r: number,
   width: number,
   height: number,
-  rng: () => number
+  rng: () => number,
+  biomeSeeds?: BiomeSeed[]
 ): TerrainType {
   // Edge of map is water
   if (q === 0 || q === width - 1 || r === 0 || r === height - 1) {
@@ -294,7 +434,20 @@ function generateTerrain(
     if (rng() < 0.3) return 'water'
   }
 
-  // Random terrain distribution
+  // Use biome seeds for clustered terrain
+  const seeds = biomeSeeds ?? cachedBiomeSeeds
+  if (seeds.length > 0) {
+    const terrain = getTerrainFromBiomes(q, r, seeds, rng)
+
+    // Scatter some mountains in hilly areas
+    if (terrain === 'hills' && rng() < 0.15) {
+      return 'mountain'
+    }
+
+    return terrain
+  }
+
+  // Fallback to random (shouldn't happen)
   const roll = rng()
   if (roll < 0.25) return 'grassland'
   if (roll < 0.45) return 'plains'

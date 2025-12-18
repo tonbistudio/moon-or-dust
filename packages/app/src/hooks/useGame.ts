@@ -1,6 +1,6 @@
 // Hook for easy access to game state and actions
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import type {
   HexCoord,
   SettlementId,
@@ -202,6 +202,73 @@ export function useTileClick() {
       selectSettlement(null)
     },
     [state, selectedUnit, selectedSettlement, dispatch, selectTile, selectUnit, selectSettlement]
+  )
+}
+
+/**
+ * Hook for handling right-click (movement/attack)
+ * Uses refs to avoid stale closure issues with selectedUnit
+ */
+export function useTileRightClick() {
+  const { state, selectedUnit, dispatch } = useGameContext()
+
+  // Use refs to always get the latest values in the callback
+  const stateRef = useRef(state)
+  const selectedUnitRef = useRef(selectedUnit)
+  stateRef.current = state
+  selectedUnitRef.current = selectedUnit
+
+  return useCallback(
+    (coord: HexCoord) => {
+      const currentState = stateRef.current
+      const currentSelectedUnit = selectedUnitRef.current
+
+      if (!currentState || !currentSelectedUnit) return
+
+      const unit = currentState.units.get(currentSelectedUnit)
+      if (!unit || unit.owner !== currentState.currentPlayer) return
+
+      const key = hexKey(coord)
+
+      // Check for enemy units at target
+      const enemyUnitsAtTile: Unit[] = []
+      for (const u of currentState.units.values()) {
+        if (hexKey(u.position) === key && u.owner !== currentState.currentPlayer) {
+          enemyUnitsAtTile.push(u)
+        }
+      }
+
+      // If there are enemy units, try to attack
+      if (enemyUnitsAtTile.length > 0 && !unit.hasActed) {
+        const target = enemyUnitsAtTile[0]!
+        const result = dispatch({
+          type: 'ATTACK',
+          attackerId: currentSelectedUnit,
+          targetId: target.id,
+        })
+        if (result.success) {
+          // Keep unit selected after attack
+          return
+        }
+      }
+
+      // Otherwise, try to move
+      if (unit.movementRemaining > 0) {
+        // Don't move if clicking the same tile
+        if (hexKey(unit.position) !== key) {
+          const result = dispatch({
+            type: 'MOVE_UNIT',
+            unitId: currentSelectedUnit,
+            to: coord,
+          })
+          if (result.success) {
+            // Keep unit selected after move
+            return
+          }
+        }
+      }
+    },
+    [dispatch]
   )
 }
 

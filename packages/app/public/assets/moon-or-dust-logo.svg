@@ -1,0 +1,99 @@
+<svg viewBox="0 0 400 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE55C" />
+      <stop offset="40%" stop-color="#FFD700" />
+      <stop offset="70%" stop-color="#B8860B" />
+      <stop offset="100%" stop-color="#8B6914" />
+    </linearGradient>
+    <linearGradient id="solanaGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#9945FF" />
+      <stop offset="50%" stop-color="#14F195" />
+      <stop offset="100%" stop-color="#00C2FF" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="1" dy="2" stdDeviation="1" flood-color="#000" flood-opacity="0.8"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Banner -->
+  <path 
+    d="M 20 110 L 50 30 L 350 30 L 380 110 L 350 190 L 50 190 Z" 
+    fill="#1a1a2e"
+    stroke="url(#goldGrad)"
+    stroke-width="3"
+  />
+  <path 
+    d="M 35 110 L 60 40 L 340 40 L 365 110 L 340 180 L 60 180 Z" 
+    fill="#0d0d1a"
+    stroke="#3d3d5c"
+    stroke-width="1"
+  />
+  
+  <!-- Moon - left -->
+  <g transform="translate(78, 110)">
+    <circle cx="0" cy="0" r="22" fill="#14F195" opacity="0.9" filter="url(#glow)"/>
+    <circle cx="8" cy="-5" r="18" fill="#0d0d1a"/>
+  </g>
+  
+  <!-- Dust - right -->
+  <g transform="translate(322, 110)">
+    <circle cx="0" cy="0" r="16" fill="#9945FF" opacity="0.8" filter="url(#glow)"/>
+    <circle cx="0" cy="0" r="10" fill="#ff6b6b" opacity="0.9"/>
+    <circle cx="0" cy="0" r="5" fill="#ffd93d"/>
+    <circle cx="-18" cy="-12" r="3" fill="#9945FF" opacity="0.6"/>
+    <circle cx="15" cy="-15" r="2" fill="#9945FF" opacity="0.5"/>
+    <circle cx="18" cy="8" r="2.5" fill="#9945FF" opacity="0.5"/>
+  </g>
+  
+  <!-- MOON -->
+  <text 
+    x="200" 
+    y="85" 
+    text-anchor="middle" 
+    font-family="Cinzel Decorative, Cinzel, Georgia, serif"
+    font-size="36"
+    font-weight="700"
+    fill="url(#goldGrad)"
+    filter="url(#shadow)"
+    letter-spacing="10"
+  >
+    MOON
+  </text>
+  
+  <!-- or -->
+  <text 
+    x="200" 
+    y="115" 
+    text-anchor="middle" 
+    font-family="Cinzel, Georgia, serif"
+    font-size="14"
+    font-style="italic"
+    fill="url(#solanaGrad)"
+    letter-spacing="2"
+  >
+    — or —
+  </text>
+  
+  <!-- DUST -->
+  <text 
+    x="200" 
+    y="155" 
+    text-anchor="middle" 
+    font-family="Cinzel Decorative, Cinzel, Georgia, serif"
+    font-size="36"
+    font-weight="700"
+    fill="url(#goldGrad)"
+    filter="url(#shadow)"
+    letter-spacing="10"
+  >
+    DUST
+  </text>
+</svg>

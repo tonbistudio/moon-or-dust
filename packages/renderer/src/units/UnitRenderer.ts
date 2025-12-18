@@ -1,49 +1,41 @@
-import { Container, Graphics } from 'pixi.js'
-import type { GameState, Unit, UnitRarity, UnitType } from '@tribes/game-core'
+import { Container, Graphics, Sprite, Assets, Texture } from 'pixi.js'
+import type { GameState, Unit, UnitType, TribeName, UnitRarity } from '@tribes/game-core'
 import { hexToPixel, type HexLayout } from '@tribes/game-core'
 
 // =============================================================================
-// Rarity Colors
+// Direction Types
 // =============================================================================
 
-const RARITY_COLORS: Record<UnitRarity, number | null> = {
-  common: null, // No border
-  uncommon: 0x22c55e, // Green
-  rare: 0x3b82f6, // Blue
-  epic: 0xa855f7, // Purple
-  legendary: 0xeab308, // Gold
-}
-
-const RARITY_GLOW_INTENSITY: Record<UnitRarity, number> = {
-  common: 0,
-  uncommon: 0,
-  rare: 0,
-  epic: 0.3,
-  legendary: 0.5,
-}
+type Direction = 'north' | 'north-east' | 'east' | 'south-east' | 'south' | 'south-west' | 'west' | 'north-west'
 
 // =============================================================================
-// Unit Type Icons (simple shapes for now)
+// Category Colors (for glow effect)
 // =============================================================================
 
-// Visual categories for unit types
-type UnitVisualCategory = 'scout' | 'melee' | 'ranged' | 'cavalry' | 'siege' | 'settler' | 'builder' | 'great_person'
+type UnitCategory = 'melee' | 'ranged' | 'cavalry' | 'siege' | 'economy' | 'recon' | 'great_person'
 
-const CATEGORY_COLORS: Record<UnitVisualCategory, number> = {
-  scout: 0x38bdf8, // Light blue - exploration
-  melee: 0xef4444, // Red - melee combat
-  ranged: 0xfbbf24, // Amber - ranged attack
-  cavalry: 0x22d3ee, // Cyan - fast units
-  siege: 0x78716c, // Stone - siege weapons
-  settler: 0x10b981, // Emerald - founding
-  builder: 0x8b5cf6, // Violet - construction
-  great_person: 0xec4899, // Pink - special
+const CATEGORY_COLORS: Record<UnitCategory, number> = {
+  melee: 0xef4444,      // Red
+  ranged: 0x22c55e,     // Green
+  cavalry: 0x3b82f6,    // Blue
+  siege: 0xf97316,      // Orange
+  economy: 0xfbbf24,    // Yellow
+  recon: 0xec4899,      // Pink
+  great_person: 0xa855f7, // Purple
 }
 
-function getUnitVisualCategory(type: UnitType): UnitVisualCategory {
+const RARITY_COLORS: Record<UnitRarity, number> = {
+  common: 0xffffff,     // White
+  uncommon: 0x22c55e,   // Green
+  rare: 0x3b82f6,       // Blue
+  epic: 0xa855f7,       // Purple
+  legendary: 0xfbbf24,  // Gold
+}
+
+function getUnitCategory(type: UnitType): UnitCategory {
   switch (type) {
     case 'scout':
-      return 'scout'
+      return 'recon'
     case 'warrior':
     case 'swordsman':
     case 'bot_fighter':
@@ -64,15 +56,132 @@ function getUnitVisualCategory(type: UnitType): UnitVisualCategory {
     case 'bombard':
       return 'siege'
     case 'settler':
-      return 'settler'
     case 'builder':
-      return 'builder'
+      return 'economy'
     case 'great_person':
       return 'great_person'
     default:
-      return 'melee' // fallback
+      return 'melee'
   }
 }
+
+// =============================================================================
+// Badge Mapping (UnitType -> badge filename)
+// =============================================================================
+
+const UNIT_BADGE_MAP: Partial<Record<UnitType, string>> = {
+  warrior: 'warrior',
+  swordsman: 'swordsman',
+  bot_fighter: 'botfighter',
+  archer: 'archer',
+  sniper: 'sniper',
+  rockeeter: 'rocketeer',
+  horseman: 'horseman',
+  knight: 'knight',
+  tank: 'tank',
+  social_engineer: 'socialengineer',
+  bombard: 'bombard',
+  scout: 'scout',
+  settler: 'settler',
+  builder: 'builder',
+  // Tribal unique units - fallback to base unit badge for now
+  deadgod: 'swordsman',
+  stuckers: 'swordsman',
+  banana_slinger: 'archer',
+  neon_geck: 'sniper',
+}
+
+// =============================================================================
+// Sprite Asset Management
+// =============================================================================
+
+const TRIBE_SPRITES: Record<string, Record<Direction, Texture>> = {}
+const BADGE_TEXTURES: Record<string, Texture> = {}
+const SPRITE_LOAD_PROMISES: Map<string, Promise<void>> = new Map()
+
+const DIRECTIONS: Direction[] = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
+const PLAYABLE_TRIBES: TribeName[] = ['monkes', 'geckos', 'degods', 'cets']
+
+async function loadTribeSprites(tribeName: TribeName): Promise<void> {
+  const key = tribeName
+
+  if (TRIBE_SPRITES[key]) return // Already loaded
+
+  // Check if already loading
+  const existingPromise = SPRITE_LOAD_PROMISES.get(key)
+  if (existingPromise) {
+    await existingPromise
+    return
+  }
+
+  // Start loading
+  const loadPromise = (async () => {
+    const textures: Partial<Record<Direction, Texture>> = {}
+
+    for (const dir of DIRECTIONS) {
+      const url = `/assets/sprites/tribes/${tribeName}/${dir}.png`
+      try {
+        const texture = await Assets.load(url)
+        textures[dir] = texture
+        console.log(`Loaded sprite: ${url}`)
+      } catch (error) {
+        console.warn(`Failed to load sprite: ${url}`, error)
+        // Continue loading other directions even if one fails
+      }
+    }
+
+    TRIBE_SPRITES[key] = textures as Record<Direction, Texture>
+  })()
+
+  SPRITE_LOAD_PROMISES.set(key, loadPromise)
+  await loadPromise
+}
+
+// Load all badge textures
+async function loadBadgeTextures(): Promise<void> {
+  const badgeNames = [...new Set(Object.values(UNIT_BADGE_MAP))]
+
+  for (const badgeName of badgeNames) {
+    if (!badgeName) continue
+    const url = `/assets/sprites/badges/${badgeName}.png`
+    try {
+      const texture = await Assets.load(url)
+      BADGE_TEXTURES[badgeName] = texture
+      console.log(`Loaded badge: ${url}`)
+    } catch (error) {
+      console.warn(`Failed to load badge: ${url}`, error)
+    }
+  }
+}
+
+// Preload all tribe sprites and badges
+export async function preloadAllSprites(): Promise<void> {
+  try {
+    console.log('Preloading tribe sprites and badges...')
+    await Promise.all([
+      ...PLAYABLE_TRIBES.map(tribe => loadTribeSprites(tribe)),
+      loadBadgeTextures(),
+    ])
+    console.log('Sprite and badge preloading complete')
+  } catch (error) {
+    console.error('Failed to preload sprites:', error)
+    // Don't block game initialization - fallback graphics will be used
+  }
+}
+
+function getTribeTexture(tribeName: TribeName, direction: Direction): Texture | null {
+  const tribeTextures = TRIBE_SPRITES[tribeName]
+  if (!tribeTextures) return null
+  return tribeTextures[direction] ?? null
+}
+
+function getBadgeTexture(unitType: UnitType): Texture | null {
+  const badgeName = UNIT_BADGE_MAP[unitType]
+  if (!badgeName) return null
+  return BADGE_TEXTURES[badgeName] ?? null
+}
+
+// Rarity is displayed in UI panel, not on map (see UnitActionsPanel for rarity border)
 
 // =============================================================================
 // UnitRenderer
@@ -85,10 +194,16 @@ export class UnitRenderer {
   private unitsByHex: Map<string, Unit[]> = new Map()
   private selectionGraphic: Graphics | null = null
   private selectedUnitId: string | null = null
+  private unitDirections: Map<string, Direction> = new Map()
+  private unitPreviousPositions: Map<string, { q: number; r: number }> = new Map()
+  private hoverTargetHex: { q: number; r: number } | null = null
 
   constructor(layout: HexLayout) {
     this.layout = layout
     this.container = new Container()
+
+    // Start preloading sprites
+    preloadAllSprites()
   }
 
   getContainer(): Container {
@@ -99,6 +214,104 @@ export class UnitRenderer {
     this.selectedUnitId = unitId
   }
 
+  setHoverTarget(hex: { q: number; r: number } | null): void {
+    this.hoverTargetHex = hex
+    // Immediately update selected unit's direction for responsive hover rotation
+    this.updateSelectedUnitHoverDirection()
+  }
+
+  /**
+   * Update the selected unit's sprite to face the hover target
+   */
+  private updateSelectedUnitHoverDirection(): void {
+    if (!this.selectedUnitId || !this.hoverTargetHex) return
+
+    const unitContainer = this.unitGraphics.get(this.selectedUnitId)
+    if (!unitContainer) return
+
+    const prevPos = this.unitPreviousPositions.get(this.selectedUnitId)
+    if (!prevPos) return
+
+    const hoverDir = this.getDirectionToHex(
+      prevPos.q, prevPos.r,
+      this.hoverTargetHex.q, this.hoverTargetHex.r
+    )
+
+    if (hoverDir) {
+      this.unitDirections.set(this.selectedUnitId, hoverDir)
+      // Update the sprite texture immediately
+      this.updateSpriteDirection(unitContainer, hoverDir)
+    }
+  }
+
+  /**
+   * Update a unit container's sprite to face a direction
+   */
+  private updateSpriteDirection(container: Container, direction: Direction): void {
+    // Extract tribe name from container name (format: unit_tribeName_direction)
+    const nameParts = container.name?.split('_')
+    if (!nameParts || nameParts.length < 2) return
+
+    const tribeName = nameParts[1] as TribeName
+    const texture = getTribeTexture(tribeName, direction)
+
+    const spriteChild = container.getChildByName('sprite')
+    if (spriteChild && spriteChild instanceof Sprite && texture) {
+      spriteChild.texture = texture
+    }
+
+    // Update container name to reflect new direction
+    container.name = `unit_${tribeName}_${direction}`
+  }
+
+  /**
+   * Calculate and store unit facing direction based on movement
+   */
+  private calculateDirection(unitId: string, fromQ: number, fromR: number, toQ: number, toR: number): void {
+    const dq = toQ - fromQ
+    const dr = toR - fromR
+
+    let direction: Direction = 'south' // default
+
+    // Calculate direction based on hex movement
+    if (dq === 0 && dr < 0) direction = 'north'
+    else if (dq > 0 && dr < 0) direction = 'north-east'
+    else if (dq > 0 && dr === 0) direction = 'east'
+    else if (dq > 0 && dr > 0) direction = 'south-east'
+    else if (dq === 0 && dr > 0) direction = 'south'
+    else if (dq < 0 && dr > 0) direction = 'south-west'
+    else if (dq < 0 && dr === 0) direction = 'west'
+    else if (dq < 0 && dr < 0) direction = 'north-west'
+
+    this.unitDirections.set(unitId, direction)
+  }
+
+  /**
+   * Get direction from one hex to another (for hover preview)
+   */
+  private getDirectionToHex(fromQ: number, fromR: number, toQ: number, toR: number): Direction | null {
+    const dq = toQ - fromQ
+    const dr = toR - fromR
+
+    if (dq === 0 && dr === 0) return null // Same hex
+
+    // Calculate direction based on hex movement
+    if (dq === 0 && dr < 0) return 'north'
+    if (dq > 0 && dr < 0) return 'north-east'
+    if (dq > 0 && dr === 0) return 'east'
+    if (dq > 0 && dr > 0) return 'south-east'
+    if (dq === 0 && dr > 0) return 'south'
+    if (dq < 0 && dr > 0) return 'south-west'
+    if (dq < 0 && dr === 0) return 'west'
+    if (dq < 0 && dr < 0) return 'north-west'
+
+    // For diagonal cases not covered above, approximate
+    if (dq > 0 && dr < 0) return 'north-east'
+    if (dq > 0) return 'south-east'
+    if (dq < 0 && dr < 0) return 'north-west'
+    return 'south-west'
+  }
+
   update(state: GameState, currentPlayerId: string): void {
     // Get visible units (respecting fog of war)
     const visibleFog = state.fog.get(state.currentPlayer)
@@ -106,16 +319,14 @@ export class UnitRenderer {
 
     for (const unit of state.units.values()) {
       const hexKey = `${unit.position.q},${unit.position.r}`
-      // Show if in visible area or belongs to current player
       if (visibleFog?.has(hexKey) || unit.owner === currentPlayerId) {
         visibleUnits.push(unit)
       }
     }
 
-    // Track which units to keep
     const visibleUnitIds = new Set(visibleUnits.map((u) => u.id))
 
-    // Remove units that are no longer visible
+    // Remove units no longer visible
     for (const [id, graphics] of this.unitGraphics) {
       if (!visibleUnitIds.has(id as never)) {
         this.container.removeChild(graphics)
@@ -123,7 +334,7 @@ export class UnitRenderer {
       }
     }
 
-    // Group units by hex position for stacking offsets
+    // Group units by hex for stacking
     this.unitsByHex.clear()
     for (const unit of visibleUnits) {
       const key = `${unit.position.q},${unit.position.r}`
@@ -134,13 +345,33 @@ export class UnitRenderer {
 
     // Update or create visible units
     for (const unit of visibleUnits) {
+      // Check if unit moved and update direction
+      const prevPos = this.unitPreviousPositions.get(unit.id)
+      if (prevPos && (prevPos.q !== unit.position.q || prevPos.r !== unit.position.r)) {
+        this.calculateDirection(unit.id, prevPos.q, prevPos.r, unit.position.q, unit.position.r)
+      }
+      this.unitPreviousPositions.set(unit.id, { q: unit.position.q, r: unit.position.r })
+
+      // If this is the selected unit and we have a hover target, temporarily face it
+      if (unit.id === this.selectedUnitId && this.hoverTargetHex) {
+        const hoverDir = this.getDirectionToHex(
+          unit.position.q, unit.position.r,
+          this.hoverTargetHex.q, this.hoverTargetHex.r
+        )
+        if (hoverDir) {
+          this.unitDirections.set(unit.id, hoverDir)
+        }
+      }
+
       let unitContainer = this.unitGraphics.get(unit.id)
 
       if (!unitContainer) {
-        // Create new unit graphic
         unitContainer = this.createUnitGraphic(unit, state)
         this.unitGraphics.set(unit.id, unitContainer)
         this.container.addChild(unitContainer)
+      } else {
+        // Update sprite direction if changed
+        this.updateUnitSprite(unitContainer, unit, state)
       }
 
       // Update position with stacking offset
@@ -153,29 +384,24 @@ export class UnitRenderer {
       unitContainer.x = x + stackOffset.x
       unitContainer.y = y + stackOffset.y
 
-      // Update health bar if needed
       this.updateHealthBar(unitContainer, unit)
     }
 
-    // Update selection highlight
     this.updateSelectionHighlight(state)
   }
 
   private updateSelectionHighlight(state: GameState): void {
-    // Remove existing selection highlight
     if (this.selectionGraphic) {
       this.container.removeChild(this.selectionGraphic)
       this.selectionGraphic = null
     }
 
-    // Draw new selection highlight if a unit is selected
     if (this.selectedUnitId) {
       const unit = state.units.get(this.selectedUnitId as never)
       if (unit) {
         const { x, y } = hexToPixel(unit.position, this.layout)
-        const unitSize = this.layout.size * 0.4
+        const unitSize = this.layout.size * 0.5
 
-        // Calculate stack offset for selection highlight
         const hexKey = `${unit.position.q},${unit.position.r}`
         const unitsAtHex = this.unitsByHex.get(hexKey) ?? []
         const stackIndex = unitsAtHex.findIndex((u) => u.id === unit.id)
@@ -183,12 +409,11 @@ export class UnitRenderer {
 
         this.selectionGraphic = new Graphics()
 
-        // Animated selection ring
-        this.selectionGraphic.circle(0, 0, unitSize * 1.8)
+        // Selection ring
+        this.selectionGraphic.circle(0, 0, unitSize * 1.4)
         this.selectionGraphic.stroke({ color: 0xffffff, width: 3, alpha: 0.8 })
 
-        // Inner pulsing ring
-        this.selectionGraphic.circle(0, 0, unitSize * 1.5)
+        this.selectionGraphic.circle(0, 0, unitSize * 1.2)
         this.selectionGraphic.stroke({ color: 0xf59e0b, width: 2, alpha: 0.6 })
 
         this.selectionGraphic.x = x + stackOffset.x
@@ -200,174 +425,132 @@ export class UnitRenderer {
 
   private createUnitGraphic(unit: Unit, state: GameState): Container {
     const container = new Container()
-    const unitSize = this.layout.size * 0.4
 
-    // Get player color (fallback to white)
+    // Get tribe name from player
     const player = state.players.find((p) => p.tribeId === unit.owner)
-    const playerColor = player ? 0xffffff : 0xffffff // TODO: get tribe color
+    const tribeName: TribeName = player?.tribeName ?? 'cets'
 
-    // Draw rarity glow (for epic and legendary)
-    const glowIntensity = RARITY_GLOW_INTENSITY[unit.rarity]
-    if (glowIntensity > 0) {
-      const glow = new Graphics()
-      const glowColor = RARITY_COLORS[unit.rarity]!
-      glow.circle(0, 0, unitSize * 1.6)
-      glow.fill({ color: glowColor, alpha: glowIntensity })
-      container.addChild(glow)
+    // Get direction (default to south)
+    const direction = this.unitDirections.get(unit.id) ?? 'south'
 
-      // Add outer glow layer
-      const outerGlow = new Graphics()
-      outerGlow.circle(0, 0, unitSize * 2)
-      outerGlow.fill({ color: glowColor, alpha: glowIntensity * 0.5 })
-      container.addChildAt(outerGlow, 0)
+    // 1. Draw category glow (ellipse underneath) - smaller size
+    const category = getUnitCategory(unit.type)
+    const glowColor = CATEGORY_COLORS[category]
+    const glow = new Graphics()
+    glow.ellipse(0, 24, 20, 7)
+    glow.fill({ color: glowColor, alpha: 0.6 })
+    glow.name = 'glow'
+    container.addChild(glow)
+
+    // 2. Add tribe sprite
+    const texture = getTribeTexture(tribeName, direction)
+    if (texture) {
+      const sprite = new Sprite(texture)
+      sprite.anchor.set(0.5, 0.5)
+      sprite.name = 'sprite'
+      // Scale sprite to fit nicely in hex (1.3x for good visibility)
+      const targetSize = this.layout.size * 1.3
+      const scale = targetSize / Math.max(sprite.width, sprite.height)
+      sprite.scale.set(scale)
+      container.addChild(sprite)
+    } else {
+      // Fallback: colored circle if sprite not loaded
+      const fallback = new Graphics()
+      fallback.circle(0, 0, this.layout.size * 0.35)
+      fallback.fill({ color: glowColor })
+      fallback.stroke({ color: 0xffffff, width: 2 })
+      fallback.name = 'sprite'
+      container.addChild(fallback)
     }
 
-    // Draw rarity border (colored ring)
-    const rarityColor = RARITY_COLORS[unit.rarity]
-    if (rarityColor !== null) {
-      const border = new Graphics()
-      border.circle(0, 0, unitSize * 1.2)
-      border.fill({ color: rarityColor })
-      container.addChild(border)
-    }
-
-    // Draw unit base (circle with unit type color)
-    const category = getUnitVisualCategory(unit.type)
-    const base = new Graphics()
-    base.circle(0, 0, unitSize)
-    base.fill({ color: CATEGORY_COLORS[category] })
-    base.stroke({ color: playerColor, width: 2 })
-    container.addChild(base)
-
-    // Draw unit type symbol
-    const symbol = this.createUnitSymbol(category, unitSize * 0.6)
-    container.addChild(symbol)
-
-    // Draw health bar background
-    const healthBarBg = new Graphics()
-    const barWidth = unitSize * 2
+    // 3. Health bar background
+    const barWidth = this.layout.size * 1.0
     const barHeight = 4
-    const barY = unitSize + 8
+    const barY = 34
+
+    const healthBarBg = new Graphics()
     healthBarBg.rect(-barWidth / 2, barY, barWidth, barHeight)
     healthBarBg.fill({ color: 0x1f2937 })
     healthBarBg.name = 'healthBarBg'
     container.addChild(healthBarBg)
 
-    // Draw health bar fill
+    // 4. Health bar fill
     const healthBarFill = new Graphics()
     healthBarFill.name = 'healthBarFill'
     container.addChild(healthBarFill)
+
+    // 5. Badge icon (upper-right corner)
+    const badgeTexture = getBadgeTexture(unit.type)
+    if (badgeTexture) {
+      const badge = new Sprite(badgeTexture)
+      badge.anchor.set(0.5, 0.5)
+      badge.name = 'badge'
+      // Scale badge to ~12px
+      const badgeTargetSize = 12
+      const badgeScale = badgeTargetSize / Math.max(badge.width, badge.height)
+      badge.scale.set(badgeScale)
+      // Tint badge with rarity color
+      const rarityColor = RARITY_COLORS[unit.rarity]
+      badge.tint = rarityColor
+      // Position in upper-right corner
+      badge.x = 18
+      badge.y = -18
+      container.addChild(badge)
+    }
+
+    // Store metadata for updates
+    container.name = `unit_${tribeName}_${direction}`
 
     this.updateHealthBar(container, unit)
 
     return container
   }
 
-  private createUnitSymbol(category: UnitVisualCategory, size: number): Graphics {
-    const symbol = new Graphics()
+  private updateUnitSprite(container: Container, unit: Unit, state: GameState): void {
+    const player = state.players.find((p) => p.tribeId === unit.owner)
+    const tribeName: TribeName = player?.tribeName ?? 'cets'
+    const direction = this.unitDirections.get(unit.id) ?? 'south'
 
-    switch (category) {
-      case 'scout':
-        // Eye symbol (exploration)
-        symbol.circle(0, 0, size * 0.3)
-        symbol.fill({ color: 0xffffff })
-        symbol.circle(0, 0, size * 0.15)
-        symbol.fill({ color: 0x000000 })
-        break
+    // Check if we need to update the sprite
+    const expectedName = `unit_${tribeName}_${direction}`
+    if (container.name === expectedName) return
 
-      case 'melee':
-        // Sword symbol
-        symbol.moveTo(0, -size * 0.5)
-        symbol.lineTo(0, size * 0.3)
-        symbol.moveTo(-size * 0.3, -size * 0.2)
-        symbol.lineTo(size * 0.3, -size * 0.2)
-        symbol.stroke({ color: 0xffffff, width: 3 })
-        break
-
-      case 'ranged':
-        // Bow/arrow symbol
-        symbol.moveTo(-size * 0.3, -size * 0.3)
-        symbol.lineTo(size * 0.3, size * 0.3)
-        symbol.moveTo(size * 0.1, size * 0.3)
-        symbol.lineTo(size * 0.3, size * 0.3)
-        symbol.lineTo(size * 0.3, size * 0.1)
-        symbol.stroke({ color: 0xffffff, width: 2 })
-        break
-
-      case 'cavalry':
-        // Horse head symbol
-        symbol.moveTo(-size * 0.2, size * 0.3)
-        symbol.lineTo(-size * 0.2, -size * 0.1)
-        symbol.lineTo(size * 0.1, -size * 0.4)
-        symbol.lineTo(size * 0.3, -size * 0.2)
-        symbol.lineTo(size * 0.2, size * 0.1)
-        symbol.stroke({ color: 0xffffff, width: 2 })
-        break
-
-      case 'siege':
-        // Catapult/cannon symbol
-        symbol.circle(0, 0, size * 0.25)
-        symbol.stroke({ color: 0xffffff, width: 2 })
-        symbol.moveTo(0, -size * 0.25)
-        symbol.lineTo(0, -size * 0.5)
-        symbol.stroke({ color: 0xffffff, width: 3 })
-        break
-
-      case 'settler':
-        // House symbol
-        symbol.moveTo(0, -size * 0.4)
-        symbol.lineTo(size * 0.4, 0)
-        symbol.lineTo(size * 0.4, size * 0.4)
-        symbol.lineTo(-size * 0.4, size * 0.4)
-        symbol.lineTo(-size * 0.4, 0)
-        symbol.closePath()
-        symbol.fill({ color: 0xffffff })
-        break
-
-      case 'builder':
-        // Hammer symbol
-        symbol.rect(-size * 0.1, -size * 0.4, size * 0.2, size * 0.8)
-        symbol.fill({ color: 0xffffff })
-        symbol.rect(-size * 0.3, -size * 0.4, size * 0.6, size * 0.2)
-        symbol.fill({ color: 0xffffff })
-        break
-
-      case 'great_person':
-        // Star symbol
-        const points: number[] = []
-        for (let i = 0; i < 5; i++) {
-          const outerAngle = (Math.PI / 2) + (i * 2 * Math.PI) / 5
-          const innerAngle = outerAngle + Math.PI / 5
-          points.push(Math.cos(outerAngle) * size * 0.5)
-          points.push(-Math.sin(outerAngle) * size * 0.5)
-          points.push(Math.cos(innerAngle) * size * 0.2)
-          points.push(-Math.sin(innerAngle) * size * 0.2)
-        }
-        symbol.poly(points)
-        symbol.fill({ color: 0xffffff })
-        break
+    // Update glow color (in case unit type changed, unlikely but possible)
+    const glow = container.getChildByName('glow') as Graphics
+    if (glow) {
+      const category = getUnitCategory(unit.type)
+      const glowColor = CATEGORY_COLORS[category]
+      glow.clear()
+      glow.ellipse(0, 26, 28, 10)
+      glow.fill({ color: glowColor, alpha: 0.6 })
     }
 
-    return symbol
+    // Update sprite texture
+    const spriteChild = container.getChildByName('sprite')
+    if (spriteChild && spriteChild instanceof Sprite) {
+      const texture = getTribeTexture(tribeName, direction)
+      if (texture) {
+        spriteChild.texture = texture
+      }
+    }
+
+    container.name = expectedName
   }
 
   private updateHealthBar(container: Container, unit: Unit): void {
     const healthBarFill = container.getChildByName('healthBarFill') as Graphics
     if (!healthBarFill) return
 
-    const unitSize = this.layout.size * 0.4
-    const barWidth = unitSize * 2
+    const barWidth = this.layout.size * 1.0
     const barHeight = 4
-    const barY = unitSize + 8
+    const barY = 34
 
-    // Calculate health percentage
     const healthPercent = unit.health / unit.maxHealth
     const fillWidth = barWidth * healthPercent
 
-    // Color based on health
-    let fillColor = 0x22c55e // Green
-    if (healthPercent < 0.5) fillColor = 0xfbbf24 // Yellow
-    if (healthPercent < 0.25) fillColor = 0xef4444 // Red
+    let fillColor = 0x22c55e
+    if (healthPercent < 0.5) fillColor = 0xfbbf24
+    if (healthPercent < 0.25) fillColor = 0xef4444
 
     healthBarFill.clear()
     healthBarFill.rect(-barWidth / 2, barY, fillWidth, barHeight)
@@ -379,28 +562,22 @@ export class UnitRenderer {
     this.unitGraphics.clear()
   }
 
-  /**
-   * Calculate visual offset for stacked units on the same hex
-   */
   private getStackOffset(index: number, total: number): { x: number; y: number } {
     if (total <= 1) return { x: 0, y: 0 }
 
-    const unitSize = this.layout.size * 0.4
-    const offset = unitSize * 0.8
+    // Increased offset for better separation when stacking
+    const offset = this.layout.size * 0.5
 
-    // For 2 units: offset left and right
     if (total === 2) {
       return index === 0 ? { x: -offset, y: 0 } : { x: offset, y: 0 }
     }
 
-    // For 3 units: triangle arrangement
     if (total === 3) {
       if (index === 0) return { x: 0, y: -offset }
       if (index === 1) return { x: -offset, y: offset * 0.5 }
       return { x: offset, y: offset * 0.5 }
     }
 
-    // For 4+ units: grid
     const col = index % 2
     const row = Math.floor(index / 2)
     return {

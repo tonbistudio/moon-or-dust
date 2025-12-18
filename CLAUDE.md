@@ -20,6 +20,90 @@ Tribes is a turn-based 4X strategy game (Civilization-style) with Solana NFT com
 - **Storage:** IndexedDB (idb library), localStorage for preferences
 - **Deployment:** Vercel (frontend)
 
+## Graphics System (Badge + Glow)
+
+Units are rendered using a **badge + color glow system** instead of unique sprites per unit type. This reduces asset requirements by 90%.
+
+### How It Works
+- **Tribe Sprite:** Each tribe has 8-direction pixel art sprites (64×64)
+- **Category Glow:** Colored ellipse under unit indicates combat category
+- **Badge Icon:** Small 16×16 icon in corner identifies specific unit type
+
+### Unit Category Colors
+| Category | Color | Hex | Units |
+|----------|-------|-----|-------|
+| Melee | Red | #ef4444 | Warrior, Swordsman, Bot Fighter, tribal melee |
+| Ranged | Green | #22c55e | Archer, Sniper, Rocketer, tribal ranged |
+| Cavalry | Blue | #3b82f6 | Horseman, Knight, Tank |
+| Siege | Orange | #f97316 | Social Engineer, Bombard |
+| Economy | Yellow | #fbbf24 | Builder, Settler |
+| Recon | Pink | #ec4899 | Scout |
+| Great Person | Purple | #a855f7 | All Great People |
+
+### Asset Requirements
+| Asset Type | Count | Source |
+|------------|-------|--------|
+| Tribe sprites | 32 | PixelLab (8 directions × 4 tribes) |
+| Badge icons | 17 | PixelLab (one per unit type) |
+| Glow effects | 0 | Pixi.js Graphics (runtime) |
+
+### File Structure
+```
+packages/app/public/assets/
+  sprites/
+    tribes/
+      cets/       (north.png, south.png, east.png, etc.)
+      monkes/
+      geckos/
+      degods/
+    badges/
+      sword.png, bow.png, horse.png, hammer.png, etc.
+    terrain/
+      grassland.png, plains.png, forest.png, etc.
+      settlement.png, settlement_castle.png
+```
+
+## Terrain System (dgbaumgart Tiles)
+
+Terrain is rendered using hand-painted hex tiles from David Baumgart's free hex tile set.
+
+### Terrain Tiles
+| File | Terrain Type | Source Tile |
+|------|--------------|-------------|
+| grassland.png | Grassland | hexPlains00.png |
+| plains.png | Plains | hexDirt00.png |
+| forest.png | Forest | hexForestBroadleaf00.png |
+| hills.png | Hills | hexHills00.png |
+| mountain.png | Mountain | hexMountain00.png |
+| water.png | Water | hexOcean00.png |
+| desert.png | Desert | hexDesertDunes00.png |
+| jungle.png | Jungle | hexWoodlands00.png |
+| marsh.png | Marsh | hexMarsh00.png |
+
+### Settlement Tiles
+| File | Usage |
+|------|-------|
+| settlement.png | Settlement hex (levels 1-9) |
+| settlement_castle.png | Settlement hex (level 10+) |
+
+### Biome Clustering
+Terrain is generated using a seed-and-spread algorithm for realistic clustering:
+- Biome seeds are placed randomly across the map
+- Each seed has a terrain type and radius of influence
+- Tiles adopt the terrain of the nearest biome seed
+- Natural transitions occur at biome edges (e.g., forest → jungle, plains → desert)
+- Mountains spawn within hilly regions
+
+### Sprite Configuration
+```typescript
+// Anchor point adjusted for transparent space in tiles
+sprite.anchor.set(0.5, 0.65)
+
+// Scale with vertical stretch to fit hex grid
+const baseScale = (hexSize * 2.6) / texture.height
+sprite.scale.set(baseScale, baseScale * 1.15)
+```
+
 ## Monorepo Structure
 
 ```
@@ -476,12 +560,11 @@ Hex stacking limits create tactical decisions:
 
 | Stack Limit | Rule |
 |-------------|------|
-| 2 Military | Max 2 combat units per hex |
+| 1 Military | Max 1 combat unit per hex |
 | 1 Civilian | Max 1 non-combat unit (Settler, Builder, Great Person) |
-| Combined | 2 military + 1 civilian max |
+| Combined | 1 military + 1 civilian max |
 
 **Stacking Bonuses:**
-- 2 units in hex: +10% defense for both
 - Adjacent friendly units: +5% combat strength per adjacent ally (max +15%)
 
 ### Golden Ages
@@ -723,7 +806,12 @@ When training military units, they roll a rarity that affects stats. Mirrors the
 **Applies to:** All military units (Scout, Warrior, Ranged, unique units)
 **Does not apply to:** Settlers, Builders, Great People
 
-**Visual:** Colored border around unit sprite (none/green/blue/purple/gold+glow)
+**Visual:** Rarity is NOT shown on map (keeps sprites clean). Instead, rarity is displayed as a colored border around the UnitActionsPanel when a unit is selected:
+- Common: No border
+- Uncommon: Green border
+- Rare: Blue border
+- Epic: Purple border
+- Legendary: Gold border with glow
 
 ```typescript
 type UnitRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
@@ -1085,6 +1173,14 @@ interface MilestoneChoice {
 - ✅ Siege units are "glass cannons" - weak vs units, strong vs settlements
 - ✅ Tank movement reduced from 5 to 4 for balance
 - ✅ Updated combat preview to show siege vs settlement effectiveness
+
+#### Phase 11d: Terrain Art & Biome System
+- ✅ Integrated dgbaumgart hand-painted hex tiles (9 terrain types)
+- ✅ Biome clustering algorithm (seed-and-spread) for realistic terrain distribution
+- ✅ Natural terrain transitions at biome edges
+- ✅ Settlement-specific tiles (village for levels 1-9, castle for level 10+)
+- ✅ Sprite scaling and anchor configuration for hex grid alignment
+- ✅ Removed old settlement marker dots, kept text labels with ★ for capitals
 
 ### Phase 12: UI & Polish
 71. Main menu and tribe selection

@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useMemo } from 'react'
 import { GameRenderer, type GameRendererConfig } from '@tribes/renderer'
 import type { HexCoord } from '@tribes/game-core'
 import { getReachableHexes, getValidTargets, hexKey } from '@tribes/game-core'
-import { useGame, useTileClick } from '../hooks/useGame'
+import { useGame, useTileClick, useTileRightClick } from '../hooks/useGame'
 
 interface GameCanvasProps {
   width: number
@@ -23,11 +23,14 @@ export function GameCanvas({
   const rendererRef = useRef<GameRenderer | null>(null)
   const { state, selectedUnit } = useGame()
   const handleTileClick = useTileClick()
+  const handleTileRightClick = useTileRightClick()
   const [isInitialized, setIsInitialized] = useState(false)
 
-  // Use ref to avoid stale closure in renderer callback
+  // Use refs to avoid stale closure in renderer callbacks
   const tileClickRef = useRef(handleTileClick)
   tileClickRef.current = handleTileClick
+  const tileRightClickRef = useRef(handleTileRightClick)
+  tileRightClickRef.current = handleTileRightClick
 
   // Calculate reachable hexes for selected unit
   const reachableHexes = useMemo(() => {
@@ -56,8 +59,9 @@ export function GameCanvas({
       width,
       height,
       hexSize,
-      // Use ref to always get the latest callback (avoids stale closure)
+      // Use refs to always get the latest callbacks (avoids stale closure)
       onTileClick: (coord: HexCoord) => tileClickRef.current(coord),
+      onTileRightClick: (coord: HexCoord) => tileRightClickRef.current(coord),
       ...(onTileHover && { onTileHover }),
     }
 

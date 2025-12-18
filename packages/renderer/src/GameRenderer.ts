@@ -1,8 +1,8 @@
 import { Application, Container } from 'pixi.js'
 import type { GameState, HexCoord } from '@tribes/game-core'
-import { HexTileRenderer } from './hex/HexTileRenderer'
+import { HexTileRenderer, loadTerrainTextures } from './hex/HexTileRenderer'
 import { CameraController } from './camera/CameraController'
-import { UnitRenderer } from './units/UnitRenderer'
+import { UnitRenderer, preloadAllSprites } from './units/UnitRenderer'
 
 export interface GameRendererConfig {
   readonly canvas: HTMLCanvasElement
@@ -10,6 +10,7 @@ export interface GameRendererConfig {
   readonly height: number
   readonly hexSize: number
   readonly onTileClick?: (coord: HexCoord) => void
+  readonly onTileRightClick?: (coord: HexCoord) => void
   readonly onTileHover?: (coord: HexCoord | null) => void
 }
 
@@ -50,6 +51,12 @@ export class GameRenderer {
 
   async init(): Promise<void> {
     if (this.initialized || this.destroyed) return
+
+    // Preload all sprite assets before initializing (in parallel)
+    await Promise.all([
+      preloadAllSprites(),
+      loadTerrainTextures(),
+    ])
 
     await this.app.init({
       canvas: this.config.canvas,
@@ -99,9 +106,11 @@ export class GameRenderer {
       if (this.currentState && this.isInBounds(hexCoord)) {
         this.config.onTileHover?.(hexCoord)
         this.hexRenderer.setHoveredTile(hexCoord)
+        this.unitRenderer.setHoverTarget(hexCoord)
       } else {
         this.config.onTileHover?.(null)
         this.hexRenderer.setHoveredTile(null)
+        this.unitRenderer.setHoverTarget(null)
       }
 
       // Handle panning
@@ -114,7 +123,8 @@ export class GameRenderer {
     })
 
     canvas.addEventListener('pointerup', (e) => {
-      if (isDragging && Math.abs(e.clientX - lastPosition.x) < 5) {
+      // Only handle left-click (button 0), not right-click (button 2)
+      if (e.button === 0 && isDragging && Math.abs(e.clientX - lastPosition.x) < 5) {
         // This was a click, not a drag
         const worldPos = this.screenToWorld(e.clientX, e.clientY)
         const hexCoord = this.hexRenderer.pixelToHex(worldPos.x, worldPos.y)
@@ -131,6 +141,18 @@ export class GameRenderer {
       isDragging = false
       this.config.onTileHover?.(null)
       this.hexRenderer.setHoveredTile(null)
+      this.unitRenderer.setHoverTarget(null)
+    })
+
+    // Right-click handler (reserved for future use)
+    canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      const worldPos = this.screenToWorld(e.clientX, e.clientY)
+      const hexCoord = this.hexRenderer.pixelToHex(worldPos.x, worldPos.y)
+
+      if (this.currentState && this.isInBounds(hexCoord)) {
+        this.config.onTileRightClick?.(hexCoord)
+      }
     })
 
     // Mouse wheel for zoom
@@ -199,6 +221,18 @@ export class GameRenderer {
     // Update reachable hexes for movement range display
     this.hexRenderer.setReachableHexes(options?.reachableHexes ?? new Set())
     this.hexRenderer.setAttackTargetHexes(options?.attackTargetHexes ?? new Set())
+
+    // Set selected unit position for path arrow
+    if (options?.selectedUnitId) {
+      const unit = state.units.get(options.selectedUnitId as never)
+      if (unit) {
+        this.hexRenderer.setSelectedUnitPosition(unit.position)
+      } else {
+        this.hexRenderer.setSelectedUnitPosition(null)
+      }
+    } else {
+      this.hexRenderer.setSelectedUnitPosition(null)
+    }
 
     // Update hex tiles (adds tileContainer to worldContainer)
     this.hexRenderer.update(state, this.worldContainer)
