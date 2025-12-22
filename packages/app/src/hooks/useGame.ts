@@ -69,7 +69,7 @@ export function useSelectedUnit(): Unit | null {
  * Hook for handling tile clicks
  */
 export function useTileClick() {
-  const { state, selectedUnit, selectedSettlement, dispatch, selectTile, selectUnit, selectSettlement } = useGameContext()
+  const { state, selectedUnit, selectedSettlement, dispatch, selectTile, selectUnit, selectSettlement, addEvent } = useGameContext()
 
   return useCallback(
     (coord: HexCoord) => {
@@ -105,12 +105,39 @@ export function useTileClick() {
         const attacker = state.units.get(selectedUnit)
         if (attacker && attacker.owner === state.currentPlayer && !attacker.hasActed) {
           const target = enemyUnitsAtTile[0]!
+          const attackerHealthBefore = attacker.health
+          const targetHealthBefore = target.health
           const result = dispatch({
             type: 'ATTACK',
             attackerId: selectedUnit,
             targetId: target.id,
           })
-          if (result.success) {
+          if (result.success && result.state) {
+            // Calculate damage from new state
+            const newAttacker = result.state.units.get(selectedUnit)
+            const newTarget = result.state.units.get(target.id)
+            const attackerDamage = newAttacker ? attackerHealthBefore - newAttacker.health : attackerHealthBefore
+            const targetDamage = newTarget ? targetHealthBefore - newTarget.health : targetHealthBefore
+
+            // Find tribe names for the message
+            const attackerPlayer = state.players.find(p => p.tribeId === attacker.owner)
+            const targetPlayer = state.players.find(p => p.tribeId === target.owner)
+            const attackerTribe = attackerPlayer?.tribeName ?? 'Unknown'
+            const targetTribe = targetPlayer?.tribeName ?? 'Unknown'
+
+            // Format unit type names
+            const formatType = (type: string) => type.replace(/_/g, ' ')
+
+            // Build message
+            let message = `${attackerTribe} ${formatType(attacker.type)}`
+            if (attackerDamage > 0) message += ` (-${attackerDamage} HP)`
+            message += ` attacks ${targetTribe} ${formatType(target.type)}`
+            message += ` (-${targetDamage} HP)`
+            if (!newTarget) message += ' - KILLED!'
+            if (!newAttacker) message += ' - Attacker died!'
+
+            addEvent(message, 'combat')
+
             // Keep unit selected after attack (if still alive)
             return
           }
@@ -201,7 +228,7 @@ export function useTileClick() {
       selectUnit(null)
       selectSettlement(null)
     },
-    [state, selectedUnit, selectedSettlement, dispatch, selectTile, selectUnit, selectSettlement]
+    [state, selectedUnit, selectedSettlement, dispatch, selectTile, selectUnit, selectSettlement, addEvent]
   )
 }
 
@@ -210,18 +237,21 @@ export function useTileClick() {
  * Uses refs to avoid stale closure issues with selectedUnit
  */
 export function useTileRightClick() {
-  const { state, selectedUnit, dispatch } = useGameContext()
+  const { state, selectedUnit, dispatch, addEvent } = useGameContext()
 
   // Use refs to always get the latest values in the callback
   const stateRef = useRef(state)
   const selectedUnitRef = useRef(selectedUnit)
+  const addEventRef = useRef(addEvent)
   stateRef.current = state
   selectedUnitRef.current = selectedUnit
+  addEventRef.current = addEvent
 
   return useCallback(
     (coord: HexCoord) => {
       const currentState = stateRef.current
       const currentSelectedUnit = selectedUnitRef.current
+      const currentAddEvent = addEventRef.current
 
       if (!currentState || !currentSelectedUnit) return
 
@@ -241,12 +271,39 @@ export function useTileRightClick() {
       // If there are enemy units, try to attack
       if (enemyUnitsAtTile.length > 0 && !unit.hasActed) {
         const target = enemyUnitsAtTile[0]!
+        const attackerHealthBefore = unit.health
+        const targetHealthBefore = target.health
         const result = dispatch({
           type: 'ATTACK',
           attackerId: currentSelectedUnit,
           targetId: target.id,
         })
-        if (result.success) {
+        if (result.success && result.state) {
+          // Calculate damage from new state
+          const newAttacker = result.state.units.get(currentSelectedUnit)
+          const newTarget = result.state.units.get(target.id)
+          const attackerDamage = newAttacker ? attackerHealthBefore - newAttacker.health : attackerHealthBefore
+          const targetDamage = newTarget ? targetHealthBefore - newTarget.health : targetHealthBefore
+
+          // Find tribe names for the message
+          const attackerPlayer = currentState.players.find(p => p.tribeId === unit.owner)
+          const targetPlayer = currentState.players.find(p => p.tribeId === target.owner)
+          const attackerTribe = attackerPlayer?.tribeName ?? 'Unknown'
+          const targetTribe = targetPlayer?.tribeName ?? 'Unknown'
+
+          // Format unit type names
+          const formatType = (type: string) => type.replace(/_/g, ' ')
+
+          // Build message
+          let message = `${attackerTribe} ${formatType(unit.type)}`
+          if (attackerDamage > 0) message += ` (-${attackerDamage} HP)`
+          message += ` attacks ${targetTribe} ${formatType(target.type)}`
+          message += ` (-${targetDamage} HP)`
+          if (!newTarget) message += ' - KILLED!'
+          if (!newAttacker) message += ' - Attacker died!'
+
+          currentAddEvent(message, 'combat')
+
           // Keep unit selected after attack
           return
         }

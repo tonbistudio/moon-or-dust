@@ -184,6 +184,39 @@ export function hasReachedNewLevel(settlement: Settlement, newPopulation: number
   return newLevel > oldLevel
 }
 
+/**
+ * Gets the population needed for a specific level
+ */
+export function getPopulationForLevel(level: number): number {
+  if (level <= 1) return 0
+  if (level > POPULATION_THRESHOLDS.length) return POPULATION_THRESHOLDS[POPULATION_THRESHOLDS.length - 1]!
+  return POPULATION_THRESHOLDS[level - 1]!
+}
+
+/**
+ * Gets the progress toward the next level as a percentage (0-100)
+ * Also returns the population needed for next level
+ */
+export function getLevelProgress(population: number): {
+  progress: number
+  currentLevelPop: number
+  nextLevelPop: number | null
+} {
+  const level = getSettlementLevel(population)
+  const currentLevelPop = getPopulationForLevel(level)
+  const nextLevelPop = level < POPULATION_THRESHOLDS.length ? getPopulationForLevel(level + 1) : null
+
+  if (nextLevelPop === null) {
+    return { progress: 100, currentLevelPop, nextLevelPop }
+  }
+
+  const populationIntoLevel = population - currentLevelPop
+  const populationNeeded = nextLevelPop - currentLevelPop
+  const progress = Math.min(100, Math.floor((populationIntoLevel / populationNeeded) * 100))
+
+  return { progress, currentLevelPop, nextLevelPop }
+}
+
 // =============================================================================
 // Tile Yield Calculation
 // =============================================================================
@@ -283,11 +316,14 @@ export function getSettlementTiles(state: GameState, settlement: Settlement): Ti
 export function calculateSettlementYields(state: GameState, settlement: Settlement): Yields {
   const tiles = getSettlementTiles(state, settlement)
 
-  // Base settlement yields (center tile gives +2 production, +2 gold)
+  // Base settlement yields
+  // Capitals: 10 Alpha, 10 Vibes, +2 production, +2 gold
+  // Regular cities: 5 Alpha, 5 Vibes, +2 production, +2 gold
+  const baseAlphaVibes = settlement.isCapital ? 10 : 5
   let yields: Yields = {
     gold: 2,
-    alpha: 0,
-    vibes: 0,
+    alpha: baseAlphaVibes,
+    vibes: baseAlphaVibes,
     production: 2,
     growth: 0,
   }

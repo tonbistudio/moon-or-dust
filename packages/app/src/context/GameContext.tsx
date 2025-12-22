@@ -13,6 +13,8 @@ import type {
   HexCoord,
   SettlementId,
   UnitId,
+  LootboxReward,
+  TribeId,
 } from '@tribes/game-core'
 import {
   createInitialState,
@@ -22,13 +24,29 @@ import {
   addUnit,
   createRng,
   generateAIActions,
+  areAtWar,
   type GameConfig,
   type ActionResult,
 } from '@tribes/game-core'
+import type { GameEvent } from '../components/EventLog'
 
 // =============================================================================
 // Types
 // =============================================================================
+
+// Lootbox reward info for popup display
+export interface LootboxRewardInfo {
+  reward: LootboxReward
+  details: string
+}
+
+// Pending war attack info for confirmation popup
+export interface PendingWarAttack {
+  attackerId: UnitId
+  targetId: UnitId
+  attackerTribe: string
+  defenderTribe: string
+}
 
 export interface GameContextValue {
   // Game state
@@ -41,12 +59,25 @@ export interface GameContextValue {
   selectedUnit: UnitId | null
   selectedSettlement: SettlementId | null
 
+  // Lootbox reward popup
+  pendingLootboxReward: LootboxRewardInfo | null
+
+  // War confirmation popup
+  pendingWarAttack: PendingWarAttack | null
+
+  // Event log
+  events: GameEvent[]
+
   // Actions
   startGame: (config: GameConfig) => void
   dispatch: (action: GameAction) => ActionResult
   selectTile: (coord: HexCoord | null) => void
   selectUnit: (unitId: UnitId | null) => void
   selectSettlement: (settlementId: SettlementId | null) => void
+  dismissLootboxReward: () => void
+  addEvent: (message: string, type: GameEvent['type']) => void
+  confirmWarAttack: () => void
+  cancelWarAttack: () => void
 }
 
 // =============================================================================
@@ -60,15 +91,23 @@ interface InternalState {
   selectedTile: HexCoord | null
   selectedUnit: UnitId | null
   selectedSettlement: SettlementId | null
+  pendingLootboxReward: LootboxRewardInfo | null
+  pendingWarAttack: PendingWarAttack | null
+  events: GameEvent[]
+  eventIdCounter: number
 }
 
 type InternalAction =
   | { type: 'START_GAME'; config: GameConfig }
-  | { type: 'SET_STATE'; state: GameState }
+  | { type: 'SET_STATE'; state: GameState; lootboxReward?: LootboxRewardInfo }
+  | { type: 'SET_PENDING_WAR_ATTACK'; attack: PendingWarAttack | null }
   | { type: 'SET_ERROR'; error: string }
   | { type: 'SELECT_TILE'; coord: HexCoord | null }
   | { type: 'SELECT_UNIT'; unitId: UnitId | null }
   | { type: 'SELECT_SETTLEMENT'; settlementId: SettlementId | null }
+  | { type: 'DISMISS_LOOTBOX_REWARD' }
+  | { type: 'ADD_EVENT'; message: string; eventType: GameEvent['type']; turn: number }
+  | { type: 'CLEAR_EVENTS' }
 
 function internalReducer(state: InternalState, action: InternalAction): InternalState {
   switch (action.type) {
@@ -146,11 +185,18 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
         selectedTile: null,
         selectedUnit: null,
         selectedSettlement: null,
+        pendingLootboxReward: null,
+        events: [],
+        eventIdCounter: 0,
       }
     }
 
     case 'SET_STATE':
-      return { ...state, gameState: action.state }
+      return {
+        ...state,
+        gameState: action.state,
+        pendingLootboxReward: action.lootboxReward ?? state.pendingLootboxReward,
+      }
 
     case 'SET_ERROR':
       return { ...state, error: action.error, isLoading: false }
@@ -164,6 +210,31 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
     case 'SELECT_SETTLEMENT':
       return { ...state, selectedSettlement: action.settlementId }
 
+    case 'DISMISS_LOOTBOX_REWARD':
+      return { ...state, pendingLootboxReward: null }
+
+    case 'SET_PENDING_WAR_ATTACK':
+      return { ...state, pendingWarAttack: action.attack }
+
+    case 'ADD_EVENT': {
+      const newEvent: GameEvent = {
+        id: `event-${state.eventIdCounter}`,
+        message: action.message,
+        type: action.eventType,
+        turn: action.turn,
+      }
+      // Keep newest events first, max 10 events
+      const newEvents = [newEvent, ...state.events].slice(0, 10)
+      return {
+        ...state,
+        events: newEvents,
+        eventIdCounter: state.eventIdCounter + 1,
+      }
+    }
+
+    case 'CLEAR_EVENTS':
+      return { ...state, events: [] }
+
     default:
       return state
   }
@@ -176,10 +247,20 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
 const GameContext = createContext<GameContextValue | null>(null)
 
 /**
- * Runs AI turns until we reach a human player
+ * Combat event info for AI attacks on human player
  */
-function runAITurns(state: GameState): GameState {
+interface AICombatEvent {
+  message: string
+  turn: number
+}
+
+/**
+ * Runs AI turns until we reach a human player
+ * Returns the new state and any combat events where AI attacked human units
+ */
+function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState; events: AICombatEvent[] } {
   let currentState = state
+  const events: AICombatEvent[] = []
   const maxIterations = 10 // Safety limit
 
   for (let i = 0; i < maxIterations; i++) {
@@ -196,6 +277,49 @@ function runAITurns(state: GameState): GameState {
     const actions = generateAIActions(currentState, currentState.currentPlayer)
 
     for (const action of actions) {
+      // Track attack actions targeting human player's units
+      if (action.type === 'ATTACK') {
+        const attacker = currentState.units.get(action.attackerId)
+        const target = currentState.units.get(action.targetId)
+
+        // Only track attacks on human player's units
+        if (attacker && target && target.owner === humanTribeId) {
+          const attackerHealthBefore = attacker.health
+          const targetHealthBefore = target.health
+
+          const result = applyAction(currentState, action)
+          if (result.success && result.state) {
+            currentState = result.state
+
+            // Calculate damage from new state
+            const newAttacker = currentState.units.get(action.attackerId)
+            const newTarget = currentState.units.get(action.targetId)
+            const attackerDamage = newAttacker ? attackerHealthBefore - newAttacker.health : attackerHealthBefore
+            const targetDamage = newTarget ? targetHealthBefore - newTarget.health : targetHealthBefore
+
+            // Find tribe names
+            const attackerPlayer = currentState.players.find(p => p.tribeId === attacker.owner)
+            const targetPlayer = currentState.players.find(p => p.tribeId === target.owner)
+            const attackerTribe = attackerPlayer?.tribeName ?? 'Unknown'
+            const targetTribe = targetPlayer?.tribeName ?? 'Unknown'
+
+            // Format unit type names
+            const formatType = (type: string) => type.replace(/_/g, ' ')
+
+            // Build message
+            let message = `${attackerTribe} ${formatType(attacker.type)}`
+            if (attackerDamage > 0) message += ` (-${attackerDamage} HP)`
+            message += ` attacks ${targetTribe} ${formatType(target.type)}`
+            message += ` (-${targetDamage} HP)`
+            if (!newTarget) message += ' - KILLED!'
+            if (!newAttacker) message += ' - Attacker died!'
+
+            events.push({ message, turn: currentState.turn })
+          }
+          continue // Skip the normal action application below
+        }
+      }
+
       const result = applyAction(currentState, action)
       if (result.success && result.state) {
         currentState = result.state
@@ -208,7 +332,7 @@ function runAITurns(state: GameState): GameState {
     }
   }
 
-  return currentState
+  return { state: currentState, events }
 }
 
 const initialState: InternalState = {
@@ -218,6 +342,64 @@ const initialState: InternalState = {
   selectedTile: null,
   selectedUnit: null,
   selectedSettlement: null,
+  pendingLootboxReward: null,
+  pendingWarAttack: null,
+  events: [],
+  eventIdCounter: 0,
+}
+
+// Helper to detect lootbox claims by comparing states
+function detectLootboxClaim(
+  oldState: GameState,
+  newState: GameState
+): LootboxRewardInfo | null {
+  // Find a lootbox that was unclaimed in old state but claimed in new state
+  for (let i = 0; i < newState.lootboxes.length; i++) {
+    const newLb = newState.lootboxes[i]
+    const oldLb = oldState.lootboxes[i]
+    if (newLb && oldLb && newLb.claimed && !oldLb.claimed && newLb.reward) {
+      // Generate human-readable details
+      const details = getRewardDetails(newLb.reward, newState)
+      return { reward: newLb.reward, details }
+    }
+  }
+  return null
+}
+
+// Generate human-readable reward description
+function getRewardDetails(reward: LootboxReward, _state: GameState): string {
+  switch (reward) {
+    case 'airdrop':
+      return 'Gold bonus received!'
+    case 'alpha_leak':
+      return 'Research boost received!'
+    case 'og_holder':
+      return 'Free warrior unit spawned!'
+    case 'community_growth':
+      return '+3 population to your capital!'
+    case 'scout':
+      return 'Large area revealed on the map!'
+    default:
+      return 'Reward claimed!'
+  }
+}
+
+// Format reward name for event log
+function formatRewardName(reward: LootboxReward): string {
+  switch (reward) {
+    case 'airdrop':
+      return 'Airdrop'
+    case 'alpha_leak':
+      return 'Alpha Leak'
+    case 'og_holder':
+      return 'OG Holder'
+    case 'community_growth':
+      return 'Community Growth'
+    case 'scout':
+      return 'Scout'
+    default:
+      return 'Mystery'
+  }
 }
 
 export function GameProvider({ children }: { children: ReactNode }): JSX.Element {
@@ -233,7 +415,34 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         return { success: false, error: 'Game not started' }
       }
 
-      const result = applyAction(state.gameState, action)
+      const oldState = state.gameState
+
+      // Check if this is an attack on a non-war target - if so, show confirmation
+      if (action.type === 'ATTACK') {
+        const attacker = oldState.units.get(action.attackerId)
+        const target = oldState.units.get(action.targetId)
+
+        if (attacker && target && !areAtWar(oldState, attacker.owner, target.owner)) {
+          // Find tribe names for the popup
+          const attackerPlayer = oldState.players.find(p => p.tribeId === attacker.owner)
+          const targetPlayer = oldState.players.find(p => p.tribeId === target.owner)
+
+          internalDispatch({
+            type: 'SET_PENDING_WAR_ATTACK',
+            attack: {
+              attackerId: action.attackerId,
+              targetId: action.targetId,
+              attackerTribe: attackerPlayer?.tribeName ?? 'Unknown',
+              defenderTribe: targetPlayer?.tribeName ?? 'Unknown',
+            },
+          })
+
+          // Return success: false to prevent the attack from happening yet
+          return { success: false, error: 'War confirmation required' }
+        }
+      }
+
+      const result = applyAction(oldState, action)
       if (!result.success) {
         console.error('Action failed:', result.error)
         return result
@@ -241,12 +450,55 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
 
       let currentState = result.state
 
-      // After END_TURN, run AI turns until we get back to a human player
-      if (action.type === 'END_TURN') {
-        currentState = runAITurns(currentState)
+      // Detect lootbox claims (only for human player actions like MOVE_UNIT)
+      let lootboxReward: LootboxRewardInfo | null = null
+      if (action.type === 'MOVE_UNIT') {
+        lootboxReward = detectLootboxClaim(oldState, currentState)
+
+        // Add lootbox event if claimed
+        if (lootboxReward) {
+          const unit = currentState.units.get(action.unitId)
+          const player = currentState.players.find(p => p.tribeId === currentState.currentPlayer)
+          const tribeName = player?.tribeName ?? 'Unknown'
+          const unitType = unit?.type.replace(/_/g, ' ') ?? 'unit'
+          const rewardName = formatRewardName(lootboxReward.reward)
+          const message = `${tribeName} ${unitType} opens ${rewardName} lootbox!`
+          internalDispatch({
+            type: 'ADD_EVENT',
+            message,
+            eventType: 'lootbox',
+            turn: currentState.turn,
+          })
+        }
       }
 
-      internalDispatch({ type: 'SET_STATE', state: currentState })
+      // Clear events and run AI after END_TURN
+      if (action.type === 'END_TURN') {
+        internalDispatch({ type: 'CLEAR_EVENTS' })
+
+        // Find human player's tribe ID to track attacks on their units
+        const humanPlayer = currentState.players.find(p => p.isHuman)
+        const humanTribeId = humanPlayer?.tribeId ?? currentState.currentPlayer
+
+        const aiResult = runAITurns(currentState, humanTribeId)
+        currentState = aiResult.state
+
+        // Dispatch combat events for AI attacks on human units
+        for (const event of aiResult.events) {
+          internalDispatch({
+            type: 'ADD_EVENT',
+            message: event.message,
+            eventType: 'combat',
+            turn: event.turn,
+          })
+        }
+      }
+
+      internalDispatch(
+        lootboxReward
+          ? { type: 'SET_STATE', state: currentState, lootboxReward }
+          : { type: 'SET_STATE', state: currentState }
+      )
       return result
     },
     [state.gameState]
@@ -264,6 +516,72 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     internalDispatch({ type: 'SELECT_SETTLEMENT', settlementId })
   }, [])
 
+  const dismissLootboxReward = useCallback(() => {
+    internalDispatch({ type: 'DISMISS_LOOTBOX_REWARD' })
+  }, [])
+
+  const addEvent = useCallback(
+    (message: string, eventType: GameEvent['type']) => {
+      const turn = state.gameState?.turn ?? 0
+      internalDispatch({ type: 'ADD_EVENT', message, eventType, turn })
+    },
+    [state.gameState?.turn]
+  )
+
+  const confirmWarAttack = useCallback(() => {
+    if (!state.gameState || !state.pendingWarAttack) return
+
+    const { attackerId, targetId } = state.pendingWarAttack
+    const attacker = state.gameState.units.get(attackerId)
+    const target = state.gameState.units.get(targetId)
+
+    if (!attacker || !target) {
+      // Units no longer exist, just clear the pending attack
+      internalDispatch({ type: 'SET_PENDING_WAR_ATTACK', attack: null })
+      return
+    }
+
+    // First declare war
+    const warResult = applyAction(state.gameState, {
+      type: 'DECLARE_WAR',
+      target: target.owner,
+    })
+
+    if (!warResult.success) {
+      console.error('Failed to declare war:', warResult.error)
+      internalDispatch({ type: 'SET_PENDING_WAR_ATTACK', attack: null })
+      return
+    }
+
+    // Add war declaration event
+    const attackerPlayer = warResult.state.players.find(p => p.tribeId === attacker.owner)
+    const targetPlayer = warResult.state.players.find(p => p.tribeId === target.owner)
+    internalDispatch({
+      type: 'ADD_EVENT',
+      message: `${attackerPlayer?.tribeName ?? 'You'} declared war on ${targetPlayer?.tribeName ?? 'enemy'}!`,
+      eventType: 'diplomacy',
+      turn: warResult.state.turn,
+    })
+
+    // Now execute the attack
+    const attackResult = applyAction(warResult.state, {
+      type: 'ATTACK',
+      attackerId,
+      targetId,
+    })
+
+    if (attackResult.success && attackResult.state) {
+      internalDispatch({ type: 'SET_STATE', state: attackResult.state })
+    }
+
+    // Clear the pending attack
+    internalDispatch({ type: 'SET_PENDING_WAR_ATTACK', attack: null })
+  }, [state.gameState, state.pendingWarAttack])
+
+  const cancelWarAttack = useCallback(() => {
+    internalDispatch({ type: 'SET_PENDING_WAR_ATTACK', attack: null })
+  }, [])
+
   const value: GameContextValue = {
     state: state.gameState,
     isLoading: state.isLoading,
@@ -271,11 +589,18 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     selectedTile: state.selectedTile,
     selectedUnit: state.selectedUnit,
     selectedSettlement: state.selectedSettlement,
+    pendingLootboxReward: state.pendingLootboxReward,
+    pendingWarAttack: state.pendingWarAttack,
+    events: state.events,
     startGame,
     dispatch,
     selectTile,
     selectUnit,
     selectSettlement,
+    dismissLootboxReward,
+    addEvent,
+    confirmWarAttack,
+    cancelWarAttack,
   }
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>

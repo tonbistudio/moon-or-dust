@@ -96,11 +96,15 @@ const UNIT_BADGE_MAP: Partial<Record<UnitType, string>> = {
 // =============================================================================
 
 const TRIBE_SPRITES: Record<string, Record<Direction, Texture>> = {}
+const UNIQUE_UNIT_SPRITES: Record<string, Record<Direction, Texture>> = {}
 const BADGE_TEXTURES: Record<string, Texture> = {}
 const SPRITE_LOAD_PROMISES: Map<string, Promise<void>> = new Map()
 
 const DIRECTIONS: Direction[] = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
 const PLAYABLE_TRIBES: TribeName[] = ['monkes', 'geckos', 'degods', 'cets']
+
+// Unique units that have their own sprite sheets (instead of using tribe sprites)
+const UNIQUE_UNIT_TYPES: UnitType[] = ['banana_slinger', 'neon_geck', 'deadgod', 'stuckers']
 
 async function loadTribeSprites(tribeName: TribeName): Promise<void> {
   const key = tribeName
@@ -137,6 +141,41 @@ async function loadTribeSprites(tribeName: TribeName): Promise<void> {
   await loadPromise
 }
 
+// Load sprites for a unique unit type
+async function loadUniqueUnitSprites(unitType: UnitType): Promise<void> {
+  const key = unitType
+
+  if (UNIQUE_UNIT_SPRITES[key]) return // Already loaded
+
+  // Check if already loading
+  const existingPromise = SPRITE_LOAD_PROMISES.get(`unit_${key}`)
+  if (existingPromise) {
+    await existingPromise
+    return
+  }
+
+  // Start loading
+  const loadPromise = (async () => {
+    const textures: Partial<Record<Direction, Texture>> = {}
+
+    for (const dir of DIRECTIONS) {
+      const url = `/assets/sprites/units/${unitType}/${dir}.png`
+      try {
+        const texture = await Assets.load(url)
+        textures[dir] = texture
+        console.log(`Loaded unique unit sprite: ${url}`)
+      } catch (error) {
+        console.warn(`Failed to load unique unit sprite: ${url}`, error)
+      }
+    }
+
+    UNIQUE_UNIT_SPRITES[key] = textures as Record<Direction, Texture>
+  })()
+
+  SPRITE_LOAD_PROMISES.set(`unit_${key}`, loadPromise)
+  await loadPromise
+}
+
 // Load all badge textures
 async function loadBadgeTextures(): Promise<void> {
   const badgeNames = [...new Set(Object.values(UNIT_BADGE_MAP))]
@@ -154,12 +193,13 @@ async function loadBadgeTextures(): Promise<void> {
   }
 }
 
-// Preload all tribe sprites and badges
+// Preload all tribe sprites, unique unit sprites, and badges
 export async function preloadAllSprites(): Promise<void> {
   try {
-    console.log('Preloading tribe sprites and badges...')
+    console.log('Preloading tribe sprites, unique unit sprites, and badges...')
     await Promise.all([
       ...PLAYABLE_TRIBES.map(tribe => loadTribeSprites(tribe)),
+      ...UNIQUE_UNIT_TYPES.map(unitType => loadUniqueUnitSprites(unitType)),
       loadBadgeTextures(),
     ])
     console.log('Sprite and badge preloading complete')
@@ -173,6 +213,16 @@ function getTribeTexture(tribeName: TribeName, direction: Direction): Texture | 
   const tribeTextures = TRIBE_SPRITES[tribeName]
   if (!tribeTextures) return null
   return tribeTextures[direction] ?? null
+}
+
+function getUniqueUnitTexture(unitType: UnitType, direction: Direction): Texture | null {
+  const unitTextures = UNIQUE_UNIT_SPRITES[unitType]
+  if (!unitTextures) return null
+  return unitTextures[direction] ?? null
+}
+
+function isUniqueUnitType(unitType: UnitType): boolean {
+  return UNIQUE_UNIT_TYPES.includes(unitType)
 }
 
 function getBadgeTexture(unitType: UnitType): Texture | null {
@@ -248,20 +298,28 @@ export class UnitRenderer {
    * Update a unit container's sprite to face a direction
    */
   private updateSpriteDirection(container: Container, direction: Direction): void {
-    // Extract tribe name from container name (format: unit_tribeName_direction)
+    // Extract info from container name
+    // Format: unit_tribeName_direction OR unique_unitType_direction
     const nameParts = container.name?.split('_')
-    if (!nameParts || nameParts.length < 2) return
+    if (!nameParts || nameParts.length < 3) return
 
-    const tribeName = nameParts[1] as TribeName
-    const texture = getTribeTexture(tribeName, direction)
+    const isUnique = nameParts[0] === 'unique'
+    let texture: Texture | null = null
+
+    if (isUnique) {
+      const unitType = nameParts[1] as UnitType
+      texture = getUniqueUnitTexture(unitType, direction)
+      container.name = `unique_${unitType}_${direction}`
+    } else {
+      const tribeName = nameParts[1] as TribeName
+      texture = getTribeTexture(tribeName, direction)
+      container.name = `unit_${tribeName}_${direction}`
+    }
 
     const spriteChild = container.getChildByName('sprite')
     if (spriteChild && spriteChild instanceof Sprite && texture) {
       spriteChild.texture = texture
     }
-
-    // Update container name to reflect new direction
-    container.name = `unit_${tribeName}_${direction}`
   }
 
   /**
@@ -442,8 +500,12 @@ export class UnitRenderer {
     glow.name = 'glow'
     container.addChild(glow)
 
-    // 2. Add tribe sprite
-    const texture = getTribeTexture(tribeName, direction)
+    // 2. Add unit sprite - check for unique unit sprite first, then fall back to tribe sprite
+    const isUnique = isUniqueUnitType(unit.type)
+    const texture = isUnique
+      ? getUniqueUnitTexture(unit.type, direction)
+      : getTribeTexture(tribeName, direction)
+
     if (texture) {
       const sprite = new Sprite(texture)
       sprite.anchor.set(0.5, 0.5)
@@ -492,14 +554,18 @@ export class UnitRenderer {
       // Tint badge with rarity color
       const rarityColor = RARITY_COLORS[unit.rarity]
       badge.tint = rarityColor
+      // Use additive blend mode to make black background transparent
+      badge.blendMode = 'add'
       // Position in upper-right corner
       badge.x = 18
       badge.y = -18
       container.addChild(badge)
     }
 
-    // Store metadata for updates
-    container.name = `unit_${tribeName}_${direction}`
+    // Store metadata for updates - include unit type for unique units
+    container.name = isUnique
+      ? `unique_${unit.type}_${direction}`
+      : `unit_${tribeName}_${direction}`
 
     this.updateHealthBar(container, unit)
 
@@ -510,9 +576,12 @@ export class UnitRenderer {
     const player = state.players.find((p) => p.tribeId === unit.owner)
     const tribeName: TribeName = player?.tribeName ?? 'cets'
     const direction = this.unitDirections.get(unit.id) ?? 'south'
+    const isUnique = isUniqueUnitType(unit.type)
 
     // Check if we need to update the sprite
-    const expectedName = `unit_${tribeName}_${direction}`
+    const expectedName = isUnique
+      ? `unique_${unit.type}_${direction}`
+      : `unit_${tribeName}_${direction}`
     if (container.name === expectedName) return
 
     // Update glow color (in case unit type changed, unlikely but possible)
@@ -525,10 +594,12 @@ export class UnitRenderer {
       glow.fill({ color: glowColor, alpha: 0.6 })
     }
 
-    // Update sprite texture
+    // Update sprite texture - use unique unit sprite if applicable
     const spriteChild = container.getChildByName('sprite')
     if (spriteChild && spriteChild instanceof Sprite) {
-      const texture = getTribeTexture(tribeName, direction)
+      const texture = isUnique
+        ? getUniqueUnitTexture(unit.type, direction)
+        : getTribeTexture(tribeName, direction)
       if (texture) {
         spriteChild.texture = texture
       }

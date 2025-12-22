@@ -1,19 +1,49 @@
 // HUD overlay container for game UI elements
 
-import { useState } from 'react'
-import type { TechId } from '@tribes/game-core'
-import { getTech, getResearchProgress, getTurnsToComplete } from '@tribes/game-core'
+import { useState, useMemo } from 'react'
+import type { TechId, HexCoord, Unit } from '@tribes/game-core'
+import { getTech, getResearchProgress, getTurnsToComplete, hexKey, getValidTargets } from '@tribes/game-core'
 import { useGame, useCurrentPlayer, useSelectedSettlement, useSelectedUnit } from '../hooks/useGame'
+import { useGameContext } from '../context/GameContext'
 import { SettlementPanel } from './SettlementPanel'
 import { UnitActionsPanel } from './UnitActionsPanel'
 import { TechTreePanel } from './tech'
+import { LootboxRewardPopup } from './LootboxRewardPopup'
+import { YieldIcon } from './YieldIcon'
+import { CombatPreviewPanel } from './CombatPreviewPanel'
+import { EventLog } from './EventLog'
+import { DiplomacyPanel } from './DiplomacyPanel'
+import { WarConfirmationPopup } from './WarConfirmationPopup'
 
-export function GameUI(): JSX.Element | null {
+interface GameUIProps {
+  hoveredTile?: HexCoord | null
+}
+
+export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
   const { state, dispatch } = useGame()
+  const {
+    pendingLootboxReward,
+    dismissLootboxReward,
+    pendingWarAttack,
+    confirmWarAttack,
+    cancelWarAttack,
+    events,
+  } = useGameContext()
   const currentPlayer = useCurrentPlayer()
   const selectedSettlement = useSelectedSettlement()
   const selectedUnit = useSelectedUnit()
   const [showTechTree, setShowTechTree] = useState(false)
+
+  // Find enemy unit on hovered tile for combat preview
+  const hoveredEnemy: Unit | null = useMemo(() => {
+    if (!state || !hoveredTile || !selectedUnit) return null
+    if (selectedUnit.owner !== state.currentPlayer) return null
+
+    // Check if hovered tile has valid attack target
+    const targets = getValidTargets(state, selectedUnit)
+    const hoveredKey = hexKey(hoveredTile)
+    return targets.find(t => hexKey(t.position) === hoveredKey) ?? null
+  }, [state, hoveredTile, selectedUnit])
 
   if (!state || !currentPlayer) return null
 
@@ -63,9 +93,11 @@ export function GameUI(): JSX.Element | null {
           pointerEvents: 'auto',
         }}
       >
-        <div style={{ display: 'flex', gap: '24px', color: '#fff', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '20px', color: '#fff', alignItems: 'center' }}>
           <span>Turn {state.turn}/{state.maxTurns}</span>
-          <span style={{ color: '#ffd700' }}>Gold: {currentPlayer.treasury}</span>
+          <YieldIcon type="gold" value={currentPlayer.treasury} />
+          <YieldIcon type="alpha" value={currentPlayer.yields.alpha} />
+          <YieldIcon type="vibes" value={currentPlayer.cultureProgress} />
 
           {/* Research Button with Progress */}
           <button
@@ -95,7 +127,8 @@ export function GameUI(): JSX.Element | null {
             )}
           </button>
 
-          <span style={{ color: '#ba68c8' }}>Vibes: {currentPlayer.cultureProgress}</span>
+          {/* Diplomacy Panel */}
+          <DiplomacyPanel currentPlayer={currentPlayer} />
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
           <span style={{ color: '#4caf50', fontWeight: 'bold' }}>
@@ -118,22 +151,25 @@ export function GameUI(): JSX.Element | null {
         </div>
       </div>
 
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
+      {/* Main content area with side panel */}
+      <div style={{ flex: 1, display: 'flex' }}>
+        {/* Left Side Panel - Settlement or Unit info */}
+        {canInteractWithSettlement && (
+          <div style={{ pointerEvents: 'auto', height: '100%' }}>
+            <SettlementPanel settlement={selectedSettlement} />
+          </div>
+        )}
 
-      {/* Bottom Panel - Selected settlement info (only if owned by current player) */}
-      {canInteractWithSettlement && (
-        <div style={{ pointerEvents: 'auto' }}>
-          <SettlementPanel settlement={selectedSettlement} />
-        </div>
-      )}
+        {/* Unit Actions Panel (only if owned by current player and no settlement selected) */}
+        {canInteractWithUnit && !canInteractWithSettlement && (
+          <div style={{ pointerEvents: 'auto' }}>
+            <UnitActionsPanel unit={selectedUnit} />
+          </div>
+        )}
 
-      {/* Unit Actions Panel (only if owned by current player and no settlement selected) */}
-      {canInteractWithUnit && !canInteractWithSettlement && (
-        <div style={{ pointerEvents: 'auto' }}>
-          <UnitActionsPanel unit={selectedUnit} />
-        </div>
-      )}
+        {/* Spacer for game view */}
+        <div style={{ flex: 1 }} />
+      </div>
 
       {/* Tech Tree Modal */}
       {showTechTree && (
@@ -145,6 +181,41 @@ export function GameUI(): JSX.Element | null {
           />
         </div>
       )}
+
+      {/* Lootbox Reward Popup */}
+      {pendingLootboxReward && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <LootboxRewardPopup
+            reward={pendingLootboxReward}
+            onDismiss={dismissLootboxReward}
+          />
+        </div>
+      )}
+
+      {/* War Confirmation Popup */}
+      {pendingWarAttack && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <WarConfirmationPopup
+            attackerTribe={pendingWarAttack.attackerTribe}
+            defenderTribe={pendingWarAttack.defenderTribe}
+            onConfirm={confirmWarAttack}
+            onCancel={cancelWarAttack}
+          />
+        </div>
+      )}
+
+      {/* Combat Preview Panel - shows when hovering over enemy with unit selected */}
+      {hoveredEnemy && selectedUnit && (
+        <div style={{ pointerEvents: 'none' }}>
+          <CombatPreviewPanel
+            attacker={selectedUnit}
+            defender={hoveredEnemy}
+          />
+        </div>
+      )}
+
+      {/* Event Log - bottom right */}
+      <EventLog events={events} />
     </div>
   )
 }

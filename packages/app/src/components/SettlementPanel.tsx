@@ -1,15 +1,25 @@
-// Settlement info panel shown when a settlement is selected
+// Settlement info panel shown when a settlement is selected (side panel)
 
 import { useState } from 'react'
 import type { Settlement } from '@tribes/game-core'
+import { calculateSettlementYields, getLevelProgress } from '@tribes/game-core'
+import { useGame } from '../hooks/useGame'
 import { ProductionPanel } from './production'
+import { YieldIcon } from './YieldIcon'
 
 interface SettlementPanelProps {
   settlement: Settlement
 }
 
 export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Element {
+  const { state } = useGame()
   const [showProductionPanel, setShowProductionPanel] = useState(false)
+
+  // Calculate settlement yields
+  const yields = state ? calculateSettlementYields(state, settlement) : null
+
+  // Calculate level progress
+  const levelProgress = getLevelProgress(settlement.population)
 
   const currentItem = settlement.productionQueue[0]
   const progressPercent = currentItem
@@ -23,40 +33,115 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
     <>
       <div
         style={{
-          padding: '16px',
-          background: 'linear-gradient(0deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 100%)',
-          borderTop: '1px solid #2a2a4a',
+          width: '280px',
+          height: '100%',
+          padding: '12px',
+          background: 'linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.9) 100%)',
+          borderRight: '1px solid #2a2a4a',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
         }}
       >
         {/* Settlement Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h3 style={{ margin: 0, color: '#fff', fontSize: '18px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 style={{ margin: 0, color: '#fff', fontSize: '16px', flex: 1 }}>
               {settlement.name}
-              {settlement.isCapital && (
-                <span
-                  style={{
-                    marginLeft: '8px',
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    background: '#ffc107',
-                    color: '#000',
-                    borderRadius: '4px',
-                    verticalAlign: 'middle',
-                  }}
-                >
-                  CAPITAL
-                </span>
-              )}
             </h3>
-            <div style={{ color: '#888', fontSize: '13px', marginTop: '4px' }}>
-              Level {settlement.level} | Population {settlement.population}
-            </div>
+            {settlement.isCapital && (
+              <span
+                style={{
+                  fontSize: '9px',
+                  padding: '2px 5px',
+                  background: '#ffc107',
+                  color: '#000',
+                  borderRadius: '3px',
+                  fontWeight: 'bold',
+                }}
+              >
+                CAPITAL
+              </span>
+            )}
           </div>
         </div>
 
+        {/* Population Level Progress */}
+        <div
+          style={{
+            padding: '10px',
+            background: 'rgba(255,255,255,0.05)',
+            borderRadius: '6px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <span style={{ color: '#4caf50', fontWeight: 'bold', fontSize: '13px' }}>
+              Pop. Level {settlement.level}
+            </span>
+            {levelProgress.nextLevelPop !== null && (
+              <span style={{ color: '#888', fontSize: '11px' }}>
+                {settlement.population}/{levelProgress.nextLevelPop}
+              </span>
+            )}
+          </div>
+          {/* Level progress bar */}
+          {levelProgress.nextLevelPop !== null ? (
+            <div
+              style={{
+                height: '6px',
+                background: '#1a1a2a',
+                borderRadius: '3px',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: `${levelProgress.progress}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #2e7d32, #4caf50)',
+                  transition: 'width 0.3s',
+                }}
+              />
+            </div>
+          ) : (
+            <div style={{ color: '#4caf50', fontSize: '11px' }}>Max level reached</div>
+          )}
+          {yields && yields.growth > 0 && (
+            <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
+              +{yields.growth} growth/turn
+            </div>
+          )}
+        </div>
+
+        {/* Settlement Yields */}
+        {yields && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '8px',
+              padding: '10px',
+              background: 'rgba(255,255,255,0.05)',
+              borderRadius: '6px',
+            }}
+          >
+            <YieldIcon type="gold" value={yields.gold} size={16} />
+            <YieldIcon type="production" value={yields.production} size={16} />
+            <YieldIcon type="alpha" value={yields.alpha} size={16} />
+            <YieldIcon type="vibes" value={yields.vibes} size={16} />
+          </div>
+        )}
+
         {/* Current Production */}
-        <div style={{ marginTop: '16px' }}>
+        <div
+          style={{
+            padding: '10px',
+            background: 'rgba(255,255,255,0.05)',
+            borderRadius: '6px',
+          }}
+        >
           <div
             style={{
               display: 'flex',
@@ -65,9 +150,9 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
               marginBottom: '6px',
             }}
           >
-            <span style={{ color: '#aaa', fontSize: '12px' }}>Current Production</span>
+            <span style={{ color: '#aaa', fontSize: '11px', textTransform: 'uppercase' }}>Production</span>
             {currentItem && (
-              <span style={{ color: '#888', fontSize: '11px' }}>
+              <span style={{ color: '#888', fontSize: '10px' }}>
                 {currentItem.progress + settlement.currentProduction}/{currentItem.cost}
               </span>
             )}
@@ -75,16 +160,16 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
 
           {currentItem ? (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <span style={{ color: '#fff', fontWeight: 'bold' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '13px' }}>
                   {formatItemName(currentItem.id)}
                 </span>
                 <span
                   style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
+                    fontSize: '9px',
+                    padding: '1px 4px',
                     background: getTypeBadgeColor(currentItem.type),
-                    borderRadius: '4px',
+                    borderRadius: '3px',
                     color: '#fff',
                     textTransform: 'uppercase',
                   }}
@@ -96,9 +181,9 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
               {/* Progress bar */}
               <div
                 style={{
-                  height: '8px',
+                  height: '6px',
                   background: '#1a1a2a',
-                  borderRadius: '4px',
+                  borderRadius: '3px',
                   overflow: 'hidden',
                 }}
               >
@@ -106,45 +191,42 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
                   style={{
                     width: `${progressPercent}%`,
                     height: '100%',
-                    background: 'linear-gradient(90deg, #4caf50, #8bc34a)',
+                    background: 'linear-gradient(90deg, #ff9800, #ffb74d)',
                     transition: 'width 0.3s',
                   }}
                 />
               </div>
             </>
           ) : (
-            <div style={{ color: '#666', fontStyle: 'italic' }}>
+            <div style={{ color: '#666', fontStyle: 'italic', fontSize: '12px' }}>
               Nothing in production
             </div>
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => setShowProductionPanel(true)}
-            style={{
-              flex: 1,
-              padding: '10px 16px',
-              background: '#2196f3',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#fff',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              fontSize: '13px',
-            }}
-          >
-            {currentItem ? 'Change Production' : 'Select Production'}
-          </button>
-        </div>
-
         {/* Queue preview if more items */}
         {settlement.productionQueue.length > 1 && (
-          <div style={{ marginTop: '12px', color: '#666', fontSize: '12px' }}>
+          <div style={{ color: '#666', fontSize: '11px', textAlign: 'center' }}>
             +{settlement.productionQueue.length - 1} more in queue
           </div>
         )}
+
+        {/* Action Button */}
+        <button
+          onClick={() => setShowProductionPanel(true)}
+          style={{
+            padding: '10px',
+            background: '#2196f3',
+            border: 'none',
+            borderRadius: '6px',
+            color: '#fff',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            fontSize: '12px',
+          }}
+        >
+          {currentItem ? 'Change Production' : 'Select Production'}
+        </button>
       </div>
 
       {/* Production Panel Overlay */}

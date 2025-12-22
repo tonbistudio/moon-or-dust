@@ -1,5 +1,5 @@
 import { Application, Container } from 'pixi.js'
-import type { GameState, HexCoord } from '@tribes/game-core'
+import type { GameState, HexCoord, Settlement } from '@tribes/game-core'
 import { HexTileRenderer, loadTerrainTextures } from './hex/HexTileRenderer'
 import { CameraController } from './camera/CameraController'
 import { UnitRenderer, preloadAllSprites } from './units/UnitRenderer'
@@ -16,6 +16,7 @@ export interface GameRendererConfig {
 
 export interface RenderOptions {
   selectedUnitId?: string | null
+  selectedSettlement?: Settlement | null
   reachableHexes?: Set<string>
   attackTargetHexes?: Set<string>
 }
@@ -221,6 +222,9 @@ export class GameRenderer {
     // Update reachable hexes for movement range display
     this.hexRenderer.setReachableHexes(options?.reachableHexes ?? new Set())
     this.hexRenderer.setAttackTargetHexes(options?.attackTargetHexes ?? new Set())
+
+    // Update selected settlement for yield display
+    this.hexRenderer.setSelectedSettlement(options?.selectedSettlement ?? null)
 
     // Set selected unit position for path arrow
     if (options?.selectedUnitId) {

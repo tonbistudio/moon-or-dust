@@ -12,6 +12,7 @@ function GameView(): JSX.Element {
     width: window.innerWidth,
     height: window.innerHeight,
   })
+  const [hoveredTile, setHoveredTile] = useState<{ q: number; r: number } | null>(null)
 
   useEffect(() => {
     const handleResize = () => {
@@ -27,8 +28,13 @@ function GameView(): JSX.Element {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <GameCanvas width={dimensions.width} height={dimensions.height} hexSize={40} />
-      <GameUI />
+      <GameCanvas
+        width={dimensions.width}
+        height={dimensions.height}
+        hexSize={40}
+        onTileHover={setHoveredTile}
+      />
+      <GameUI hoveredTile={hoveredTile} />
     </div>
   )
 }

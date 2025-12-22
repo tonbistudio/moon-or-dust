@@ -22,6 +22,7 @@ import {
 } from '../units'
 import { damageSettlement } from '../settlements'
 import { pillageSettlementTradeRoutes } from '../economy'
+import { areAtWar } from '../diplomacy'
 
 // =============================================================================
 // Combat Constants
@@ -52,10 +53,36 @@ const TERRAIN_DEFENSE_BONUS: Record<TerrainType, number> = {
 }
 
 // River crossing penalty: -25% when attacking across river
-// TODO: Implement river edge detection in hex system
+// Applied when attacker attacks a unit on a river tile (crossing into river)
+const RIVER_CROSSING_PENALTY = -0.25
 
 // Fortification bonus (for units that haven't moved)
 const FORTIFICATION_BONUS = 0.1 // +10% defense
+
+// =============================================================================
+// River Crossing Detection
+// =============================================================================
+
+/**
+ * Checks if attacking from one position to another crosses a river
+ * Returns true if the defender is on a river tile (attacker must cross to engage)
+ */
+export function isRiverCrossing(
+  state: GameState,
+  attackerPos: HexCoord,
+  defenderPos: HexCoord
+): boolean {
+  // Check if defender is on a river tile
+  const defenderTile = state.map.tiles.get(hexKey(defenderPos))
+  if (defenderTile?.feature === 'river') {
+    // Attacker is not on river - they're crossing into it
+    const attackerTile = state.map.tiles.get(hexKey(attackerPos))
+    if (attackerTile?.feature !== 'river') {
+      return true
+    }
+  }
+  return false
+}
 
 // =============================================================================
 // Combat Queries
@@ -107,8 +134,10 @@ export function canAttack(
 
 /**
  * Gets all valid attack targets for a unit
+ * Returns all enemy units in range (regardless of war status - for preview purposes)
+ * @param onlyAtWar - If true, only returns units of tribes at war (default: false)
  */
-export function getValidTargets(state: GameState, attacker: Unit): Unit[] {
+export function getValidTargets(state: GameState, attacker: Unit, onlyAtWar: boolean = false): Unit[] {
   const targets: Unit[] = []
   const attackerDef = UNIT_DEFINITIONS[attacker.type]
 
@@ -121,6 +150,9 @@ export function getValidTargets(state: GameState, attacker: Unit): Unit[] {
 
   for (const unit of state.units.values()) {
     if (unit.owner === attacker.owner) continue
+
+    // Optionally filter to only war enemies
+    if (onlyAtWar && !areAtWar(state, attacker.owner, unit.owner)) continue
 
     const distance = hexDistance(attacker.position, unit.position)
     if (distance <= maxRange) {
@@ -144,16 +176,22 @@ export interface CombatStrengthBreakdown {
   fortificationBonus: number
   healthPenalty: number
   promotionBonus: number
+  riverCrossingPenalty: number
   total: number
 }
 
 /**
  * Calculates effective combat strength for a unit
+ * @param state - Current game state
+ * @param unit - The unit to calculate strength for
+ * @param isDefending - Whether the unit is defending (vs attacking)
+ * @param targetPosition - Optional target position (for river crossing calculation when attacking)
  */
 export function calculateCombatStrength(
   state: GameState,
   unit: Unit,
-  isDefending: boolean
+  isDefending: boolean,
+  targetPosition?: HexCoord
 ): CombatStrengthBreakdown {
   const def = UNIT_DEFINITIONS[unit.type]
   const tile = state.map.tiles.get(hexKey(unit.position))
@@ -195,6 +233,14 @@ export function calculateCombatStrength(
   // Promotion bonuses (calculated from promotions list)
   const promotionBonus = calculatePromotionBonus(unit, isDefending)
 
+  // River crossing penalty (only for attackers crossing into river)
+  let riverCrossingPenalty = 0
+  if (!isDefending && targetPosition) {
+    if (isRiverCrossing(state, unit.position, targetPosition)) {
+      riverCrossingPenalty = Math.floor(base * RIVER_CROSSING_PENALTY)
+    }
+  }
+
   const total = Math.max(
     1,
     base +
@@ -203,7 +249,8 @@ export function calculateCombatStrength(
       adjacencyBonus +
       fortificationBonus -
       healthPenalty +
-      promotionBonus
+      promotionBonus +
+      riverCrossingPenalty // This is negative, so adding it reduces strength
   )
 
   return {
@@ -215,6 +262,7 @@ export function calculateCombatStrength(
     fortificationBonus,
     healthPenalty,
     promotionBonus,
+    riverCrossingPenalty,
     total,
   }
 }
@@ -271,8 +319,8 @@ export function resolveCombat(
   const attackerDef = UNIT_DEFINITIONS[attacker.type]
   const isRanged = attackerDef.baseRangedStrength > 0
 
-  // Calculate combat strengths
-  const attackerStrength = calculateCombatStrength(state, attacker, false)
+  // Calculate combat strengths (pass defender position for river crossing check)
+  const attackerStrength = calculateCombatStrength(state, attacker, false, defender.position)
   const defenderStrength = calculateCombatStrength(state, defender, true)
 
   // Calculate damage
@@ -282,9 +330,10 @@ export function resolveCombat(
   const defenderDamage = Math.floor(BASE_COMBAT_DAMAGE * strengthRatio)
 
   // Damage to attacker (only for melee combat)
+  // Add 0.5 to ratio to reduce attacker damage (makes attacking less punishing)
   const attackerDamage = isRanged
     ? 0
-    : Math.floor(BASE_COMBAT_DAMAGE / strengthRatio)
+    : Math.floor(BASE_COMBAT_DAMAGE / (strengthRatio + 0.5))
 
   // Apply damage
   const newDefenderHealth = Math.max(0, defender.health - defenderDamage)
@@ -571,7 +620,7 @@ export function getCombatPreview(
   attacker: Unit,
   defender: Unit
 ): CombatPreview {
-  const attackerStrength = calculateCombatStrength(state, attacker, false)
+  const attackerStrength = calculateCombatStrength(state, attacker, false, defender.position)
   const defenderStrength = calculateCombatStrength(state, defender, true)
 
   const attackerDef = UNIT_DEFINITIONS[attacker.type]
@@ -582,7 +631,7 @@ export function getCombatPreview(
   const estimatedDefenderDamage = Math.floor(BASE_COMBAT_DAMAGE * strengthRatio)
   const estimatedAttackerDamage = isRanged
     ? 0
-    : Math.floor(BASE_COMBAT_DAMAGE / strengthRatio)
+    : Math.floor(BASE_COMBAT_DAMAGE / (strengthRatio + 0.5))
 
   // Calculate survival chances
   const attackerSurvivalChance =
@@ -672,6 +721,7 @@ export function canAttackSettlement(
 
 /**
  * Get all settlements that can be attacked by a unit
+ * Only returns settlements of tribes the attacker is at war with
  */
 export function getAttackableSettlements(state: GameState, attacker: Unit): Settlement[] {
   const settlements: Settlement[] = []
@@ -686,6 +736,9 @@ export function getAttackableSettlements(state: GameState, attacker: Unit): Sett
 
   for (const settlement of state.settlements.values()) {
     if (settlement.owner === attacker.owner) continue
+
+    // Must be at war to attack
+    if (!areAtWar(state, attacker.owner, settlement.owner)) continue
 
     const distance = hexDistance(attacker.position, settlement.position)
     if (distance <= maxRange) {
@@ -808,7 +861,7 @@ export function getSettlementCombatPreview(
   attacker: Unit,
   settlement: Settlement
 ): SettlementCombatPreview {
-  const attackerStrength = calculateCombatStrength(state, attacker, false)
+  const attackerStrength = calculateCombatStrength(state, attacker, false, settlement.position)
 
   // Use settlementStrength for attacking settlements
   const settlementAttackStrength = attacker.settlementStrength

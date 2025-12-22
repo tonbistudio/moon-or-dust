@@ -57,20 +57,48 @@ export function UnitActionsPanel({ unit }: UnitActionsPanelProps): JSX.Element {
       <div style={{ marginBottom: '12px' }}>
         <div style={{ fontWeight: 'bold', fontSize: '14px', textTransform: 'capitalize' }}>
           {unit.type}
+          {unit.rarity !== 'common' && (
+            <span
+              style={{
+                fontSize: '11px',
+                marginLeft: '8px',
+                color: getRarityColor(unit.rarity),
+                textTransform: 'capitalize',
+              }}
+            >
+              ({unit.rarity})
+            </span>
+          )}
         </div>
-        <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+
+        {/* Health and Movement */}
+        <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
           HP: {unit.health}/{unit.maxHealth} | Moves: {unit.movementRemaining}/{unit.maxMovement}
         </div>
-        {unit.rarity !== 'common' && (
-          <div
-            style={{
-              fontSize: '11px',
-              marginTop: '4px',
-              color: getRarityColor(unit.rarity),
-              textTransform: 'capitalize',
-            }}
-          >
-            {unit.rarity}
+
+        {/* Combat Stats */}
+        <div style={{ fontSize: '12px', marginTop: '6px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {unit.combatStrength > 0 && (
+            <span style={{ color: '#ef4444' }} title="Melee Strength">
+              ⚔️ {unit.combatStrength}
+            </span>
+          )}
+          {unit.rangedStrength > 0 && (
+            <span style={{ color: '#22c55e' }} title="Ranged Strength">
+              🏹 {unit.rangedStrength}
+            </span>
+          )}
+          {unit.settlementStrength > 0 && unit.settlementStrength !== unit.combatStrength && (
+            <span style={{ color: '#f97316' }} title="Siege Strength (vs Settlements)">
+              🏰 {unit.settlementStrength}
+            </span>
+          )}
+        </div>
+
+        {/* XP and Level */}
+        {unit.level > 0 && (
+          <div style={{ fontSize: '11px', color: '#a855f7', marginTop: '4px' }}>
+            Level {unit.level} | XP: {unit.experience}
           </div>
         )}
       </div>

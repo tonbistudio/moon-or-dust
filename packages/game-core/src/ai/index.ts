@@ -12,8 +12,10 @@ import type {
   Player,
   Tech,
   Culture,
+  ImprovementType,
+  Tile,
 } from '../types'
-import { hexDistance, hexNeighbors } from '../hex'
+import { hexDistance, hexNeighbors, hexKey } from '../hex'
 import { getReachableHexes } from '../units'
 import { getValidTargets } from '../combat'
 import {
@@ -33,6 +35,10 @@ import {
   isWonderInProgress,
   type WonderDefinition,
 } from '../wonders'
+import {
+  getValidImprovements,
+  getBestImprovementForResource,
+} from '../improvements'
 import { getAvailableTechs, hasResearched } from '../tech'
 import { getAvailableCultures, hasUnlockedCulture } from '../cultures'
 import { getUnclaimedLootboxes } from '../lootbox'
@@ -536,11 +542,14 @@ export function generateAIActions(state: GameState, tribeId: TribeId): GameActio
     }
   }
 
-  // Process builders (simple for now - stay near settlements)
+  // Process builders - find and build improvements
   for (const builder of builders) {
     if (builder.hasActed) continue
-    // TODO: Implement builder AI for improvements
-    // For now, builders don't act autonomously
+
+    const builderAction = generateBuilderAction(state, builder)
+    if (builderAction) {
+      actions.push(builderAction)
+    }
   }
 
   // =========================================================================
@@ -1626,6 +1635,216 @@ function generateBarbarianHuntAction(
     return {
       type: 'MOVE_UNIT',
       unitId: unit.id,
+      to: bestHex,
+    }
+  }
+
+  return null
+}
+
+// =============================================================================
+// Builder AI - Improvement Placement
+// =============================================================================
+
+/**
+ * Resource priority for improvement AI
+ * Higher values = more important to improve
+ */
+const RESOURCE_PRIORITY: Record<string, number> = {
+  // Strategic resources - highest priority
+  iron: 10,
+  horses: 10,
+  // Luxury resources - high priority
+  gems: 8,
+  marble: 8,
+  whitelists: 7,
+  rpcs: 7,
+  // Bonus resources - medium priority
+  wheat: 5,
+  cattle: 5,
+}
+
+/**
+ * Find tiles owned by a tribe that could use improvements
+ * Sorted by priority (resources first, then by yield potential)
+ */
+function findTilesNeedingImprovement(
+  state: GameState,
+  tribeId: TribeId
+): Array<{ coord: HexCoord; tile: Tile; priority: number; bestImprovement: ImprovementType | null }> {
+  const results: Array<{ coord: HexCoord; tile: Tile; priority: number; bestImprovement: ImprovementType | null }> = []
+
+  for (const [, tile] of state.map.tiles) {
+    // Skip tiles not owned by this tribe
+    if (tile.owner !== tribeId) continue
+
+    // Skip tiles that already have improvements
+    if (tile.improvement) continue
+
+    // Skip impassable terrain
+    if (tile.terrain === 'water' || tile.terrain === 'mountain') continue
+
+    // Get valid improvements for this tile
+    const validImprovements = getValidImprovements(state, tile.coord, tribeId)
+    if (validImprovements.length === 0) continue
+
+    // Calculate priority
+    let priority = 1
+
+    // Resource tiles get high priority
+    if (tile.resource?.revealed) {
+      priority = RESOURCE_PRIORITY[tile.resource.type] || 5
+
+      // Find the improvement that works the resource
+      const resourceImprovement = getBestImprovementForResource(tile.resource.type)
+      if (resourceImprovement && validImprovements.includes(resourceImprovement)) {
+        results.push({
+          coord: tile.coord,
+          tile,
+          priority,
+          bestImprovement: resourceImprovement,
+        })
+        continue
+      }
+    }
+
+    // Non-resource tiles - prefer farms on grassland, mines on hills
+    let bestImprovement: ImprovementType | null = null
+    if (validImprovements.includes('farm') && (tile.terrain === 'grassland' || tile.terrain === 'plains')) {
+      bestImprovement = 'farm'
+      priority = 3
+    } else if (validImprovements.includes('mine') && tile.terrain === 'hills') {
+      bestImprovement = 'mine'
+      priority = 3
+    } else if (validImprovements.length > 0) {
+      bestImprovement = validImprovements[0]!
+      priority = 2
+    }
+
+    if (bestImprovement) {
+      results.push({
+        coord: tile.coord,
+        tile,
+        priority,
+        bestImprovement,
+      })
+    }
+  }
+
+  // Sort by priority descending
+  results.sort((a, b) => b.priority - a.priority)
+
+  return results
+}
+
+/**
+ * Find the best target tile for a builder to work on
+ */
+function findBestBuilderTarget(
+  state: GameState,
+  builder: Unit
+): { coord: HexCoord; improvement: ImprovementType } | null {
+  const tilesNeedingWork = findTilesNeedingImprovement(state, builder.owner)
+  if (tilesNeedingWork.length === 0) return null
+
+  // Find the closest high-priority tile
+  let bestTarget: { coord: HexCoord; improvement: ImprovementType } | null = null
+  let bestScore = -Infinity
+
+  for (const target of tilesNeedingWork) {
+    if (!target.bestImprovement) continue
+
+    const distance = hexDistance(builder.position, target.coord)
+
+    // Score = priority - distance penalty
+    // High priority tiles are worth traveling for
+    const score = target.priority * 2 - distance
+
+    if (score > bestScore) {
+      bestScore = score
+      bestTarget = { coord: target.coord, improvement: target.bestImprovement }
+    }
+  }
+
+  return bestTarget
+}
+
+/**
+ * Generate action for builder units
+ */
+function generateBuilderAction(
+  state: GameState,
+  builder: Unit
+): GameAction | null {
+  // Check if builder has charges remaining
+  // For simplicity, we track via hasActed per turn
+
+  // First, check if we can build something at current location
+  const currentTile = state.map.tiles.get(hexKey(builder.position))
+  if (currentTile && !currentTile.improvement && currentTile.owner === builder.owner) {
+    const validImprovements = getValidImprovements(state, builder.position, builder.owner)
+    if (validImprovements.length > 0) {
+      // Check for resource-specific improvement first
+      let bestImprovement: ImprovementType | null = null
+      if (currentTile.resource?.revealed) {
+        const resourceImprovement = getBestImprovementForResource(currentTile.resource.type)
+        if (resourceImprovement && validImprovements.includes(resourceImprovement)) {
+          bestImprovement = resourceImprovement
+        }
+      }
+
+      // Fall back to default improvement choices
+      if (!bestImprovement) {
+        if (validImprovements.includes('farm') && (currentTile.terrain === 'grassland' || currentTile.terrain === 'plains')) {
+          bestImprovement = 'farm'
+        } else if (validImprovements.includes('mine') && currentTile.terrain === 'hills') {
+          bestImprovement = 'mine'
+        } else {
+          bestImprovement = validImprovements[0]!
+        }
+      }
+
+      if (bestImprovement) {
+        return {
+          type: 'BUILD_IMPROVEMENT',
+          builderId: builder.id,
+          improvement: bestImprovement,
+        }
+      }
+    }
+  }
+
+  // If we can't build here, move toward best target
+  if (builder.movementRemaining <= 0) return null
+
+  const target = findBestBuilderTarget(state, builder)
+  if (!target) return null
+
+  // Already at target? This shouldn't happen, but handle it
+  if (target.coord.q === builder.position.q && target.coord.r === builder.position.r) {
+    return null
+  }
+
+  // Get reachable hexes and find one closest to target
+  const reachable = getReachableHexes(state, builder)
+  let bestHex: HexCoord | null = null
+  let bestDist = hexDistance(builder.position, target.coord)
+
+  for (const [key] of reachable) {
+    const [q, r] = key.split(',').map(Number)
+    const coord: HexCoord = { q: q!, r: r! }
+    const dist = hexDistance(coord, target.coord)
+
+    if (dist < bestDist) {
+      bestDist = dist
+      bestHex = coord
+    }
+  }
+
+  if (bestHex) {
+    return {
+      type: 'MOVE_UNIT',
+      unitId: builder.id,
       to: bestHex,
     }
   }

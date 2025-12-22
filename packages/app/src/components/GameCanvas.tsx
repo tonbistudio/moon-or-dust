@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useMemo } from 'react'
 import { GameRenderer, type GameRendererConfig } from '@tribes/renderer'
 import type { HexCoord } from '@tribes/game-core'
 import { getReachableHexes, getValidTargets, hexKey } from '@tribes/game-core'
-import { useGame, useTileClick, useTileRightClick } from '../hooks/useGame'
+import { useGame, useTileClick, useTileRightClick, useSelectedSettlement } from '../hooks/useGame'
 
 interface GameCanvasProps {
   width: number
@@ -22,6 +22,7 @@ export function GameCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<GameRenderer | null>(null)
   const { state, selectedUnit } = useGame()
+  const selectedSettlement = useSelectedSettlement()
   const handleTileClick = useTileClick()
   const handleTileRightClick = useTileRightClick()
   const [isInitialized, setIsInitialized] = useState(false)
@@ -84,8 +85,15 @@ export function GameCanvas({
   // Update renderer when game state changes
   useEffect(() => {
     if (!isInitialized || !rendererRef.current || !state) return
-    rendererRef.current.update(state, { selectedUnitId: selectedUnit, reachableHexes, attackTargetHexes })
-  }, [state, isInitialized, selectedUnit, reachableHexes, attackTargetHexes])
+    // Only pass settlement if owned by current player
+    const ownedSettlement = selectedSettlement?.owner === state.currentPlayer ? selectedSettlement : null
+    rendererRef.current.update(state, {
+      selectedUnitId: selectedUnit,
+      selectedSettlement: ownedSettlement,
+      reachableHexes,
+      attackTargetHexes
+    })
+  }, [state, isInitialized, selectedUnit, selectedSettlement, reachableHexes, attackTargetHexes])
 
   // Handle resize
   useEffect(() => {

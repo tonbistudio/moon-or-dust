@@ -386,8 +386,9 @@ export function createUnit(options: CreateUnitOptions): Unit {
   // Calculate final stats with rarity bonuses
   const maxHealth = def.baseHealth
   const combatStrength = def.baseCombatStrength + rarityBonuses.combat
-  const rangedStrength = def.baseRangedStrength + rarityBonuses.combat // Use combat bonus for ranged too
-  const settlementStrength = def.baseSettlementStrength + rarityBonuses.combat // Settlement strength also gets combat bonus
+  // Only apply rarity bonus to ranged/settlement if unit has base value > 0
+  const rangedStrength = def.baseRangedStrength > 0 ? def.baseRangedStrength + rarityBonuses.combat : 0
+  const settlementStrength = def.baseSettlementStrength + rarityBonuses.combat
   const maxMovement = def.baseMovement + rarityBonuses.movement
 
   return {

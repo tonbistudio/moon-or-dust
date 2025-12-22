@@ -46,6 +46,7 @@ import {
   addSettlement,
   canFoundSettlement,
   calculateSettlementYields,
+  processSettlementGrowth,
 } from '../settlements'
 import {
   resolveCombat,
@@ -63,6 +64,7 @@ import {
   canDeclareWar,
   canProposePeace,
   canProposeAlliance,
+  areAtWar,
 } from '../diplomacy'
 import { processBarbarianSpawning } from '../barbarians'
 import { applyPromotion, getAvailablePromotions } from '../promotions'
@@ -465,6 +467,9 @@ function applyEndTurn(state: GameState): ActionResult {
   // Process production for all settlements owned by current player
   newState = processSettlementProduction(newState, currentPlayer)
 
+  // Process growth for all settlements owned by current player
+  newState = processSettlementGrowthForPlayer(newState, currentPlayer)
+
   // Process economy (gold income/maintenance)
   newState = processPlayerEconomy(newState, currentPlayer)
 
@@ -526,6 +531,29 @@ function applyEndTurn(state: GameState): ActionResult {
       turn: newTurn,
       currentPlayer: nextPlayer,
     },
+  }
+}
+
+/**
+ * Processes growth for all settlements owned by a player
+ */
+function processSettlementGrowthForPlayer(state: GameState, tribeId: TribeId): GameState {
+  const newSettlements = new Map(state.settlements)
+
+  for (const [settlementId, settlement] of state.settlements) {
+    if (settlement.owner !== tribeId) continue
+
+    // Calculate growth yield for this settlement
+    const yields = calculateSettlementYields(state, settlement)
+
+    // Apply growth
+    const result = processSettlementGrowth(settlement, yields.growth)
+    newSettlements.set(settlementId, result.settlement)
+  }
+
+  return {
+    ...state,
+    settlements: newSettlements,
   }
 }
 
@@ -1247,6 +1275,11 @@ function applyAttack(
     return { success: false, error: 'Cannot attack friendly units' }
   }
 
+  // Check diplomatic status - must be at war to attack
+  if (!areAtWar(state, attacker.owner, target.owner)) {
+    return { success: false, error: 'Cannot attack units of tribes you are not at war with' }
+  }
+
   // Check if unit can attack
   const attackerDef = UNIT_DEFINITIONS[attacker.type]
   if (!attackerDef.canAttack) {
@@ -1325,6 +1358,11 @@ function applyAttackSettlement(
   // Validate ownership
   if (attacker.owner !== state.currentPlayer) {
     return { success: false, error: 'Attacker not owned by current player' }
+  }
+
+  // Check diplomatic status - must be at war to attack settlement
+  if (!areAtWar(state, attacker.owner, settlement.owner)) {
+    return { success: false, error: 'Cannot attack settlements of tribes you are not at war with' }
   }
 
   // Resolve settlement combat

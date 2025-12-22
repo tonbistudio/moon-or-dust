@@ -1,6 +1,6 @@
 import { Container, Graphics, Text, TextStyle, Sprite, Texture, Assets } from 'pixi.js'
-import type { GameState, HexCoord, Tile, TerrainType, Lootbox, TribeId } from '@tribes/game-core'
-import { hexToPixel, getTribe, type HexLayout } from '@tribes/game-core'
+import type { GameState, HexCoord, Tile, TerrainType, Lootbox, TribeId, Settlement } from '@tribes/game-core'
+import { hexToPixel, getTribe, hexRange, hexKey, calculateTileYields, type HexLayout } from '@tribes/game-core'
 
 // Terrain sprite system loaded
 
@@ -28,6 +28,32 @@ let texturesLoaded = false
 // Settlement textures
 let settlementTexture: Texture | null = null
 let settlementCastleTexture: Texture | null = null
+
+// Resource textures
+const RESOURCE_TEXTURES: Map<string, Texture> = new Map()
+const RESOURCE_SPRITE_FILES: Record<string, string> = {
+  iron: 'iron.svg',
+  horses: 'horse.svg',
+  gems: 'gem.svg',
+  marble: 'marble.svg',
+  wheat: 'wheat.svg',
+  cattle: 'cattle.svg',
+  whitelists: 'whitelist.svg',
+  rpcs: 'rpc.svg',
+  oasis: 'oasis.svg',
+}
+
+// Resource colors based on their yield/nature
+const RESOURCE_COLORS: Record<string, number> = {
+  iron: 0x78716c,      // Stone grey (production)
+  horses: 0xfbbf24,    // Amber (gold/movement)
+  gems: 0xa855f7,      // Purple (luxury/gold)
+  marble: 0xe0e0e0,    // Light grey/white (vibes)
+  wheat: 0xfde047,     // Yellow (growth)
+  cattle: 0x92400e,    // Brown (growth/production)
+  whitelists: 0x4ade80, // Green (growth/NFT)
+  rpcs: 0x64b5f6,      // Blue (alpha/tech)
+}
 
 /**
  * Load all terrain sprite textures
@@ -57,6 +83,17 @@ export async function loadTerrainTextures(): Promise<void> {
     settlementCastleTexture = await Assets.load(basePath + 'settlement_castle.png')
   } catch (err) {
     console.warn('Failed to load settlement castle texture:', err)
+  }
+
+  // Load resource textures
+  const resourceBasePath = '/assets/icons/resources/'
+  for (const [resource, filename] of Object.entries(RESOURCE_SPRITE_FILES)) {
+    try {
+      const texture = await Assets.load(resourceBasePath + filename)
+      RESOURCE_TEXTURES.set(resource, texture)
+    } catch (err) {
+      console.warn(`Failed to load resource texture for ${resource}:`, err)
+    }
   }
 
   texturesLoaded = true
@@ -100,6 +137,14 @@ const UI_COLORS = {
   fogOverlay: 0x000000,
 }
 
+const YIELD_COLORS = {
+  gold: 0xffd700,
+  alpha: 0x64b5f6,
+  vibes: 0xba68c8,
+  production: 0xff9800,
+  growth: 0x4caf50,
+}
+
 // =============================================================================
 // HexTileRenderer
 // =============================================================================
@@ -117,6 +162,7 @@ export class HexTileRenderer {
   private tileGraphics: Map<string, Container> = new Map()
   private lastState: GameState | null = null
   private selectedUnitPosition: HexCoord | null = null
+  private selectedSettlement: Settlement | null = null
 
   constructor(hexSize: number) {
     this.hexSize = hexSize
@@ -159,6 +205,7 @@ export class HexTileRenderer {
       newState.map.tiles.size !== oldState.map.tiles.size ||
       newState.settlements.size !== oldState.settlements.size ||
       newState.lootboxes.length !== oldState.lootboxes.length ||
+      this.lootboxClaimedChanged(newState, oldState) ||
       // Check if any tile ownership changed
       this.tileOwnershipChanged(newState, oldState) ||
       // Check if any settlement level changed (for castle upgrade)
@@ -175,6 +222,17 @@ export class HexTileRenderer {
             (oldSettlement.level >= 10 && newSettlement.level < 10)) {
           return true
         }
+      }
+    }
+    return false
+  }
+
+  private lootboxClaimedChanged(newState: GameState, oldState: GameState): boolean {
+    for (let i = 0; i < newState.lootboxes.length; i++) {
+      const newLootbox = newState.lootboxes[i]
+      const oldLootbox = oldState.lootboxes[i]
+      if (newLootbox && oldLootbox && newLootbox.claimed !== oldLootbox.claimed) {
+        return true
       }
     }
     return false
@@ -278,16 +336,18 @@ export class HexTileRenderer {
 
     // Draw oasis if present
     if (tile.feature === 'oasis') {
-      const oasisGraphics = new Graphics()
-      this.drawOasis(oasisGraphics, 0, 0)
-      container.addChild(oasisGraphics)
+      const oasisSprite = this.createOasisSprite()
+      if (oasisSprite) {
+        container.addChild(oasisSprite)
+      }
     }
 
     // Draw resource indicator if revealed
     if (tile.resource?.revealed) {
-      const resourceGraphics = new Graphics()
-      this.drawResourceIndicator(resourceGraphics, 0, 0, tile.resource.improved)
-      container.addChild(resourceGraphics)
+      const resourceContainer = this.createResourceIndicator(tile.resource.type, tile.resource.improved)
+      if (resourceContainer) {
+        container.addChild(resourceContainer)
+      }
     }
 
     // Draw territory border if owned
@@ -324,35 +384,92 @@ export class HexTileRenderer {
   }
 
   private drawRiver(graphics: Graphics, x: number, y: number): void {
-    // Draw a wavy line through the hex
-    graphics.moveTo(x - this.hexSize * 0.4, y - this.hexSize * 0.3)
-    graphics.bezierCurveTo(
-      x - this.hexSize * 0.1,
-      y - this.hexSize * 0.1,
-      x + this.hexSize * 0.1,
-      y + this.hexSize * 0.1,
-      x + this.hexSize * 0.4,
-      y + this.hexSize * 0.3
+    // Draw river along ONE hex edge (bottom-left edge)
+    // For pointy-top hexes, vertices are at angles: -30°, 30°, 90°, 150°, 210°, 270°
+
+    const getVertex = (index: number) => {
+      const angleDeg = 60 * index - 30 // pointy-top
+      const angleRad = (Math.PI / 180) * angleDeg
+      return {
+        x: x + this.hexSize * Math.cos(angleRad),
+        y: y + this.hexSize * Math.sin(angleRad),
+      }
+    }
+
+    // Bottom-left edge: from bottom vertex (90°) to lower-left vertex (150°)
+    const v2 = getVertex(2) // 90° - bottom
+    const v3 = getVertex(3) // 150° - lower-left
+
+    // Draw river along this edge, slightly inset
+    const inset = 0.95
+    graphics.moveTo(
+      x + (v2.x - x) * inset,
+      y + (v2.y - y) * inset
     )
-    graphics.stroke({ color: FEATURE_COLORS.river, width: 3 })
+    graphics.lineTo(
+      x + (v3.x - x) * inset,
+      y + (v3.y - y) * inset
+    )
+    graphics.stroke({ color: FEATURE_COLORS.river, width: 5, alpha: 0.9 })
   }
 
-  private drawOasis(graphics: Graphics, x: number, y: number): void {
-    // Draw a small circle for oasis
-    graphics.circle(x, y, this.hexSize * 0.25)
-    graphics.fill({ color: FEATURE_COLORS.oasis })
+  private createOasisSprite(): Container | null {
+    const texture = RESOURCE_TEXTURES.get('oasis')
+    if (!texture) {
+      // Fallback to simple circle if texture not loaded
+      const graphics = new Graphics()
+      graphics.circle(0, 0, this.hexSize * 0.25)
+      graphics.fill({ color: FEATURE_COLORS.oasis })
+      return graphics
+    }
+
+    const container = new Container()
+    const sprite = new Sprite(texture)
+    sprite.anchor.set(0.5)
+    sprite.width = this.hexSize * 0.8
+    sprite.height = this.hexSize * 0.8
+    // No tint - SVG already has correct colors (green trees, blue pool)
+    container.addChild(sprite)
+    return container
   }
 
-  private drawResourceIndicator(
-    graphics: Graphics,
-    x: number,
-    y: number,
-    improved: boolean
-  ): void {
-    const size = this.hexSize * 0.15
-    graphics.circle(x, y + this.hexSize * 0.3, size)
-    graphics.fill({ color: improved ? 0x22c55e : 0x94a3b8 })
-    graphics.stroke({ color: 0x000000, width: 1 })
+  private createResourceIndicator(resourceType: string, improved: boolean): Container | null {
+    const texture = RESOURCE_TEXTURES.get(resourceType)
+    const color = RESOURCE_COLORS[resourceType] ?? 0xffffff
+
+    const container = new Container()
+    const size = this.hexSize * 0.4
+    const yOffset = this.hexSize * 0.3
+
+    if (texture) {
+      // Create sprite with resource icon
+      const sprite = new Sprite(texture)
+      sprite.anchor.set(0.5)
+      sprite.width = size
+      sprite.height = size
+      sprite.y = yOffset
+      sprite.tint = color
+      container.addChild(sprite)
+
+      // Add gold border if improved
+      if (improved) {
+        const border = new Graphics()
+        border.circle(0, yOffset, size * 0.6)
+        border.stroke({ color: 0xffd700, width: 3 })
+        container.addChild(border)
+      }
+    } else {
+      // Fallback to colored circle if texture not loaded
+      const graphics = new Graphics()
+      graphics.circle(0, yOffset, size * 0.4)
+      graphics.fill({ color })
+      if (improved) {
+        graphics.stroke({ color: 0xffd700, width: 2 })
+      }
+      container.addChild(graphics)
+    }
+
+    return container
   }
 
   private drawTerritoryBorder(
@@ -458,15 +575,15 @@ export class HexTileRenderer {
   private updateOverlays(state: GameState): void {
     this.overlayContainer.removeChildren()
 
-    // Draw fog of war
+    // Draw fog of war (fully opaque to hide terrain)
     const currentPlayerFog = state.fog.get(state.currentPlayer)
     if (currentPlayerFog) {
       for (const [key, tile] of state.map.tiles) {
         if (!currentPlayerFog.has(key)) {
           const { x, y } = hexToPixel(tile.coord, this.layout)
           const fog = new Graphics()
-          this.drawHex(fog, x, y, UI_COLORS.fogOverlay)
-          fog.alpha = 0.7
+          this.drawHex(fog, x, y, UI_COLORS.fog)
+          fog.alpha = 1.0
           this.overlayContainer.addChild(fog)
         }
       }
@@ -525,6 +642,84 @@ export class HexTileRenderer {
       const selection = new Graphics()
       this.drawHexOutline(selection, x, y, UI_COLORS.selected, 3)
       this.overlayContainer.addChild(selection)
+    }
+
+    // Draw yield indicators when a settlement is selected
+    if (this.selectedSettlement && this.selectedSettlement.owner === state.currentPlayer) {
+      this.drawSettlementYields(state)
+    }
+  }
+
+  private drawSettlementYields(state: GameState): void {
+    if (!this.selectedSettlement) return
+
+    // Get all tiles in settlement's working range (radius 2)
+    const settlementCoord = this.selectedSettlement.position
+    const workableTiles = hexRange(settlementCoord, 2)
+
+    for (const coord of workableTiles) {
+      const key = hexKey(coord)
+      const tile = state.map.tiles.get(key)
+      if (!tile) continue
+
+      // Skip the settlement tile itself
+      if (coord.q === settlementCoord.q && coord.r === settlementCoord.r) continue
+
+      // Check if visible
+      const currentPlayerFog = state.fog.get(state.currentPlayer)
+      if (currentPlayerFog && !currentPlayerFog.has(key)) continue
+
+      // Calculate yields for this tile
+      const yields = calculateTileYields(tile)
+      const { x, y } = hexToPixel(coord, this.layout)
+
+      // Draw yield indicators
+      this.drawTileYields(x, y, yields)
+    }
+  }
+
+  private drawTileYields(
+    x: number,
+    y: number,
+    yields: { gold: number; alpha: number; vibes: number; production: number; growth: number }
+  ): void {
+    const yieldEntries: Array<{ value: number; color: number; label: string }> = []
+
+    if (yields.gold > 0) yieldEntries.push({ value: yields.gold, color: YIELD_COLORS.gold, label: 'G' })
+    if (yields.production > 0) yieldEntries.push({ value: yields.production, color: YIELD_COLORS.production, label: 'P' })
+    if (yields.alpha > 0) yieldEntries.push({ value: yields.alpha, color: YIELD_COLORS.alpha, label: 'A' })
+    if (yields.vibes > 0) yieldEntries.push({ value: yields.vibes, color: YIELD_COLORS.vibes, label: 'V' })
+    if (yields.growth > 0) yieldEntries.push({ value: yields.growth, color: YIELD_COLORS.growth, label: 'F' })
+
+    if (yieldEntries.length === 0) return
+
+    // Position yields in a row at bottom of hex
+    const spacing = 18
+    const totalWidth = yieldEntries.length * spacing
+    const startX = x - totalWidth / 2 + spacing / 2
+    const yPos = y + this.hexSize * 0.35
+
+    for (let i = 0; i < yieldEntries.length; i++) {
+      const entry = yieldEntries[i]!
+      const xPos = startX + i * spacing
+
+      // Background circle
+      const bg = new Graphics()
+      bg.circle(xPos, yPos, 10)
+      bg.fill({ color: 0x000000, alpha: 0.7 })
+      this.overlayContainer.addChild(bg)
+
+      // Yield number
+      const style = new TextStyle({
+        fontSize: 12,
+        fontWeight: 'bold',
+        fill: entry.color,
+      })
+      const text = new Text({ text: entry.value.toString(), style })
+      text.anchor.set(0.5)
+      text.x = xPos
+      text.y = yPos
+      this.overlayContainer.addChild(text)
     }
   }
 
@@ -643,6 +838,14 @@ export class HexTileRenderer {
 
   setSelectedUnitPosition(coord: HexCoord | null): void {
     this.selectedUnitPosition = coord
+  }
+
+  setSelectedSettlement(settlement: Settlement | null): void {
+    this.selectedSettlement = settlement
+    // Redraw overlays immediately
+    if (this.lastState) {
+      this.updateOverlays(this.lastState)
+    }
   }
 
   hexToPixel(q: number, r: number): { x: number; y: number } {

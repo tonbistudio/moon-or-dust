@@ -312,8 +312,9 @@ canvas.on('click', (hex) => {
 | Quarry | Mining | +Production, works Marble |
 | Farm | Farming | +Growth |
 | Pasture | Animal Husbandry | Works Horses, Cattle |
-| Mint | Minting | Works Whitelists |
-| Roads | Horseback Riding | +Movement speed |
+| Brewery | PFPs | Works Hops |
+| Airdrop Farm | Minting, Farming | Works Airdrops |
+| Server Farm | Smart Contracts | Works RPCs |
 
 ### Tribes (4 playable)
 | Tribe | Primary | Secondary | Unique Unit | Unique Building |
@@ -373,10 +374,11 @@ Resources add yields when improved:
 |----------|------|-------|-------------|
 | Iron | Strategic | +1 Production | Mine |
 | Horses | Strategic | +1 Production, +1 Gold | Pasture |
-| Gems | Luxury | +3 Gold | Mine |
-| Marble | Luxury | +2 Vibes | Quarry |
-| Whitelists | Luxury | +2 Growth, +1 Gold | Mint (NFT) |
-| RPCs | Luxury | +3 Alpha | Server Farm (NFT) |
+| Gems | Luxury | +1 Gold | Mine |
+| Marble | Luxury | +1 Vibes | Quarry |
+| Hops | Luxury | +2 Vibes | Brewery |
+| Airdrop | Luxury | +2 Gold | Airdrop Farm |
+| RPCs | Luxury | +2 Alpha | Server Farm |
 | Wheat | Bonus | +1 Growth | Farm |
 | Cattle | Bonus | +1 Growth, +1 Production | Pasture |
 
@@ -1266,3 +1268,7 @@ interface MilestoneChoice {
 - Batch sprite updates in Pixi.js
 - Memoize expensive pathfinding results
 - Use `Map` and `Set` for O(1) lookups on units/settlements
+
+## TODO / Future Improvements
+
+- **River System Overhaul:** Currently rivers are stored per-tile and rendered as a simple line on one edge. Needs proper edge-based river data model where rivers flow along hex edges between tiles, with connected river segments that form natural waterways. See `HexTileRenderer.drawRiver()` for current implementation.
