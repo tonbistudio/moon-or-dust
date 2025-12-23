@@ -247,21 +247,30 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
 const GameContext = createContext<GameContextValue | null>(null)
 
 /**
- * Combat event info for AI attacks on human player
+ * Event info for AI actions affecting human player
  */
-interface AICombatEvent {
+interface AIEvent {
   message: string
   turn: number
+  type: 'combat' | 'diplomacy'
 }
 
 /**
  * Runs AI turns until we reach a human player
- * Returns the new state and any combat events where AI attacked human units
+ * Returns the new state and any events where AI affected human player
  */
-function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState; events: AICombatEvent[] } {
+function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState; events: AIEvent[] } {
   let currentState = state
-  const events: AICombatEvent[] = []
+  const events: AIEvent[] = []
   const maxIterations = 10 // Safety limit
+
+  // Helper to get tribe display name
+  const getTribeName = (tribeId: TribeId): string => {
+    const player = currentState.players.find(p => p.tribeId === tribeId)
+    return player?.tribeName
+      ? player.tribeName.charAt(0).toUpperCase() + player.tribeName.slice(1)
+      : 'Unknown'
+  }
 
   for (let i = 0; i < maxIterations; i++) {
     const currentPlayer = currentState.players.find(
@@ -277,6 +286,21 @@ function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState
     const actions = generateAIActions(currentState, currentState.currentPlayer)
 
     for (const action of actions) {
+      // Track war declarations against human player
+      if (action.type === 'DECLARE_WAR' && action.target === humanTribeId) {
+        const result = applyAction(currentState, action)
+        if (result.success && result.state) {
+          currentState = result.state
+          const attackerName = getTribeName(currentState.currentPlayer)
+          events.push({
+            message: `${attackerName} DECLARES WAR on You!`,
+            turn: currentState.turn,
+            type: 'diplomacy',
+          })
+        }
+        continue
+      }
+
       // Track attack actions targeting human player's units
       if (action.type === 'ATTACK') {
         const attacker = currentState.units.get(action.attackerId)
@@ -298,10 +322,8 @@ function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState
             const targetDamage = newTarget ? targetHealthBefore - newTarget.health : targetHealthBefore
 
             // Find tribe names
-            const attackerPlayer = currentState.players.find(p => p.tribeId === attacker.owner)
-            const targetPlayer = currentState.players.find(p => p.tribeId === target.owner)
-            const attackerTribe = attackerPlayer?.tribeName ?? 'Unknown'
-            const targetTribe = targetPlayer?.tribeName ?? 'Unknown'
+            const attackerTribe = getTribeName(attacker.owner)
+            const targetTribe = getTribeName(target.owner)
 
             // Format unit type names
             const formatType = (type: string) => type.replace(/_/g, ' ')
@@ -314,7 +336,7 @@ function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState
             if (!newTarget) message += ' - KILLED!'
             if (!newAttacker) message += ' - Attacker died!'
 
-            events.push({ message, turn: currentState.turn })
+            events.push({ message, turn: currentState.turn, type: 'combat' })
           }
           continue // Skip the normal action application below
         }
@@ -483,12 +505,12 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         const aiResult = runAITurns(currentState, humanTribeId)
         currentState = aiResult.state
 
-        // Dispatch combat events for AI attacks on human units
+        // Dispatch events for AI actions affecting human player
         for (const event of aiResult.events) {
           internalDispatch({
             type: 'ADD_EVENT',
             message: event.message,
-            eventType: 'combat',
+            eventType: event.type,
             turn: event.turn,
           })
         }
@@ -554,11 +576,13 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     }
 
     // Add war declaration event
-    const attackerPlayer = warResult.state.players.find(p => p.tribeId === attacker.owner)
     const targetPlayer = warResult.state.players.find(p => p.tribeId === target.owner)
+    const targetName = targetPlayer?.tribeName
+      ? targetPlayer.tribeName.charAt(0).toUpperCase() + targetPlayer.tribeName.slice(1)
+      : 'enemy'
     internalDispatch({
       type: 'ADD_EVENT',
-      message: `${attackerPlayer?.tribeName ?? 'You'} declared war on ${targetPlayer?.tribeName ?? 'enemy'}!`,
+      message: `You DECLARE WAR on ${targetName}!`,
       eventType: 'diplomacy',
       turn: warResult.state.turn,
     })

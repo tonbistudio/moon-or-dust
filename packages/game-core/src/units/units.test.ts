@@ -65,8 +65,8 @@ describe('Unit Definitions', () => {
     )
   })
 
-  it('gives builders 3 build charges', () => {
-    expect(UNIT_DEFINITIONS.builder.buildCharges).toBe(3)
+  it('gives builders 2 build charges', () => {
+    expect(UNIT_DEFINITIONS.builder.buildCharges).toBe(2)
   })
 })
 

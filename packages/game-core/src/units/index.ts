@@ -86,7 +86,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
   },
   builder: {
     type: 'builder',
-    baseHealth: 50,
+    baseHealth: 10,
     baseMovement: 2,
     baseCombatStrength: 0,
     baseRangedStrength: 0,
@@ -95,7 +95,7 @@ export const UNIT_DEFINITIONS: Record<UnitType, UnitDefinition> = {
     isCivilian: true,
     canAttack: false,
     canFound: false,
-    buildCharges: 3,
+    buildCharges: 2,
   },
   great_person: {
     type: 'great_person',
@@ -409,6 +409,7 @@ export function createUnit(options: CreateUnitOptions): Unit {
     rarity,
     rarityBonuses,
     hasActed: false,
+    buildCharges: def.buildCharges,
   }
 }
 

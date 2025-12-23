@@ -19,15 +19,15 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 | Tech | Cost | Prerequisites | Unlocks |
 |------|------|---------------|---------|
 | **Mining** | 20 | None | Mine improvement, Quarry improvement, reveals Iron resource |
-| **Farming** | 20 | Animal Husbandry | Farm improvement, Granary building (+Population) |
-| **Animal Husbandry** | 20 | None | Pasture improvement, reveals Horses resource |
-| **Smart Contracts** | 25 | Coding | Unlocks Trade, +1 Trading Route, Candy Machine Wonder |
-| **Coding** | 25 | None | Library building (+Alpha) |
+| **Animal Husbandry** | 20 | None | Pasture improvement, Sty improvement, reveals Horses resource |
+| **Farming** | 20 | Animal Husbandry | Granary building (+Population), prereq for Airdrop Farm |
+| **Coding** | 25 | None | Library building (+Alpha), prereq for Airdrop Farm |
+| **Smart Contracts** | 25 | Coding | Unlocks Trade, +1 Trade Route, Candy Machine Wonder |
 | **Archery** | 25 | Animal Husbandry | Archer unit |
-| **Minting** | 30 | None | Mint improvement, Solanart building (+Gold)|
+| **Minting** | 30 | None | Solanart building (+Gold), Server Farm improvement |
 | **Bronze Working** | 35 | Mining | Warrior unit upgrade, Barracks building (+Combat unit production) |
-| **PFPs** | 35 | Coding | Gallery building (+Vibes) |
-| **Horseback Riding** | 40 | Farming | Horseman unit, Roads |
+| **PFPs** | 35 | Coding | Gallery building (+Vibes), Brewery improvement |
+| **Horseback Riding** | 40 | Farming | Horseman unit |
 
 ---
 
@@ -156,6 +156,9 @@ Coding → Smart Contracts ──┬─┘
 MOBILITY PATH:
 Animal Husbandry ──┬──→ Archery
                    └──→ Farming → Horseback Riding → (Hacking)
+
+DUAL-PREREQ IMPROVEMENTS:
+Airdrop Farm = Coding + Farming
 ```
 
 ---
@@ -181,16 +184,16 @@ interface Tech {
   }
 }
 
-// Example - simple tech
-const MINING: Tech = {
-  id: 'mining' as TechId,
-  name: 'Mining',
+// Example - simple tech with multiple improvements
+const ANIMAL_HUSBANDRY: Tech = {
+  id: 'animal_husbandry' as TechId,
+  name: 'Animal Husbandry',
   era: 1,
   cost: 20,
   prerequisites: { techs: [], cultures: [] },
   unlocks: {
-    improvements: ['quarry', 'mine'],
-    resources: ['iron'],
+    improvements: ['pasture', 'sty'],
+    resources: ['horses'],
   },
 }
 

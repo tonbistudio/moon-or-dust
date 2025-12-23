@@ -25,7 +25,7 @@ function createTestState(
         tribeName: 'monkes',
         isHuman: false,
         treasury: 100,
-        researchedTechs: ['farming', 'mining'] as never[],
+        researchedTechs: ['farming', 'mining', 'animal_husbandry'] as never[],
         currentResearch: null,
         researchProgress: 0,
         unlockedCultures: [],
@@ -101,11 +101,16 @@ function createTile(
 }
 
 describe('Builder AI', () => {
-  it('generates BUILD_IMPROVEMENT action when builder is on owned unimproved tile', () => {
+  it('generates BUILD_IMPROVEMENT action when builder is on owned unimproved tile with resource', () => {
     const builderPos: HexCoord = { q: 0, r: 0 }
 
     const state = createTestState([
-      createTile(builderPos, 'grassland', 'tribe_1'), // Owned, unimproved
+      createTile(builderPos, 'grassland', 'tribe_1', undefined, {
+        type: 'pig',
+        category: 'bonus',
+        revealed: true,
+        improved: false,
+      }), // Owned, unimproved, has pig resource
     ])
 
     const builder = createUnit({
@@ -135,7 +140,12 @@ describe('Builder AI', () => {
     const state = createTestState([
       createTile(builderPos, 'grassland'), // No owner, can't build here
       createTile({ q: 1, r: 0 }, 'grassland'), // Path
-      createTile(targetPos, 'grassland', 'tribe_1'), // Owned, needs improvement
+      createTile(targetPos, 'grassland', 'tribe_1', undefined, {
+        type: 'pig',
+        category: 'bonus',
+        revealed: true,
+        improved: false,
+      }), // Owned, has pig resource, needs improvement
     ])
 
     const builder = createUnit({
@@ -281,11 +291,16 @@ describe('Builder AI', () => {
     expect(builderActions.length).toBe(0)
   })
 
-  it('chooses appropriate improvement for terrain (farm on grassland)', () => {
+  it('chooses appropriate improvement for terrain (sty on grassland with pig)', () => {
     const builderPos: HexCoord = { q: 0, r: 0 }
 
     const state = createTestState([
-      createTile(builderPos, 'grassland', 'tribe_1'),
+      createTile(builderPos, 'grassland', 'tribe_1', undefined, {
+        type: 'pig',
+        category: 'bonus',
+        revealed: true,
+        improved: false,
+      }),
     ])
 
     const builder = createUnit({
@@ -307,14 +322,19 @@ describe('Builder AI', () => {
       | undefined
 
     expect(buildAction).toBeDefined()
-    expect(buildAction!.improvement).toBe('farm')
+    expect(buildAction!.improvement).toBe('sty')
   })
 
-  it('chooses mine improvement for hills terrain', () => {
+  it('chooses mine improvement for hills terrain with iron', () => {
     const builderPos: HexCoord = { q: 0, r: 0 }
 
     const state = createTestState([
-      createTile(builderPos, 'hills', 'tribe_1'),
+      createTile(builderPos, 'hills', 'tribe_1', undefined, {
+        type: 'iron',
+        category: 'strategic',
+        revealed: true,
+        improved: false,
+      }),
     ])
 
     const builder = createUnit({

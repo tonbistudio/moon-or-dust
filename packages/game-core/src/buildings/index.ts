@@ -52,7 +52,7 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     adjacencyBonus: {
       yield: 'growth',
       amount: 1,
-      condition: { type: 'improvement', improvement: 'farm' },
+      condition: { type: 'improvement', improvement: 'pasture' },
     },
     prerequisiteTech: 'farming',
   },
@@ -411,7 +411,7 @@ function getResourceCategory(
   resourceType: string
 ): 'strategic' | 'luxury' | 'bonus' {
   const strategic = ['iron', 'horses']
-  const luxury = ['gems', 'marble', 'whitelists', 'rpcs']
+  const luxury = ['gems', 'marble', 'hops', 'airdrop', 'silicon']
   if (strategic.includes(resourceType)) return 'strategic'
   if (luxury.includes(resourceType)) return 'luxury'
   return 'bonus'

@@ -34,7 +34,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 20,
     prerequisites: { techs: [], cultures: [] },
-    unlocks: { improvements: ['pasture'], resources: ['horses'] },
+    unlocks: { improvements: ['pasture', 'sty'], resources: ['horses'] },
   },
   farming: {
     id: 'farming' as TechId,
@@ -42,7 +42,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 20,
     prerequisites: { techs: ['animal_husbandry' as TechId], cultures: [] },
-    unlocks: { improvements: ['farm'], buildings: ['granary' as BuildingId] },
+    unlocks: { buildings: ['granary' as BuildingId] },
   },
   coding: {
     id: 'coding' as TechId,
@@ -75,7 +75,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 30,
     prerequisites: { techs: [], cultures: [] },
-    unlocks: { improvements: ['mint'], buildings: ['solanart' as BuildingId] },
+    unlocks: { improvements: ['server_farm'], buildings: ['solanart' as BuildingId] },
   },
   bronze_working: {
     id: 'bronze_working' as TechId,
@@ -91,7 +91,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 35,
     prerequisites: { techs: ['coding' as TechId], cultures: [] },
-    unlocks: { buildings: ['gallery' as BuildingId] },
+    unlocks: { improvements: ['brewery'], buildings: ['gallery' as BuildingId] },
   },
   horseback_riding: {
     id: 'horseback_riding' as TechId,
@@ -99,7 +99,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     era: 1,
     cost: 40,
     prerequisites: { techs: ['farming' as TechId], cultures: [] },
-    unlocks: { units: ['horseman'], improvements: ['roads'] },
+    unlocks: { units: ['horseman'] },
   },
 
   // ==========================================================================

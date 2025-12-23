@@ -247,11 +247,12 @@ const FEATURE_YIELDS: Record<string, Yields> = {
 const RESOURCE_YIELDS: Record<string, Yields> = {
   iron: { gold: 0, alpha: 0, vibes: 0, production: 1, growth: 0 },
   horses: { gold: 1, alpha: 0, vibes: 0, production: 1, growth: 0 },
-  gems: { gold: 3, alpha: 0, vibes: 0, production: 0, growth: 0 },
-  marble: { gold: 0, alpha: 0, vibes: 2, production: 0, growth: 0 },
-  whitelists: { gold: 1, alpha: 0, vibes: 0, production: 0, growth: 2 },
-  rpcs: { gold: 0, alpha: 3, vibes: 0, production: 0, growth: 0 },
-  wheat: { gold: 0, alpha: 0, vibes: 0, production: 0, growth: 1 },
+  gems: { gold: 1, alpha: 0, vibes: 0, production: 0, growth: 0 },
+  marble: { gold: 0, alpha: 0, vibes: 1, production: 0, growth: 0 },
+  hops: { gold: 0, alpha: 0, vibes: 2, production: 0, growth: 0 },
+  airdrop: { gold: 2, alpha: 0, vibes: 0, production: 0, growth: 0 },
+  silicon: { gold: 0, alpha: 2, vibes: 0, production: 0, growth: 0 },
+  pig: { gold: 0, alpha: 0, vibes: 0, production: 0, growth: 1 },
   cattle: { gold: 0, alpha: 0, vibes: 0, production: 1, growth: 1 },
 }
 

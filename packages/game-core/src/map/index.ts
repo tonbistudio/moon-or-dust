@@ -137,33 +137,39 @@ export const RESOURCES: Record<ResourceType, ResourceDefinition> = {
   gems: {
     type: 'gems',
     category: 'luxury',
-    yields: { gold: 3, alpha: 0, vibes: 0, production: 0, growth: 0 },
+    yields: { gold: 1, alpha: 0, vibes: 0, production: 0, growth: 0 },
     validTerrain: ['hills', 'jungle'],
   },
   marble: {
     type: 'marble',
     category: 'luxury',
-    yields: { gold: 0, alpha: 0, vibes: 2, production: 0, growth: 0 },
+    yields: { gold: 0, alpha: 0, vibes: 1, production: 0, growth: 0 },
     validTerrain: ['hills', 'plains'],
   },
-  whitelists: {
-    type: 'whitelists',
+  hops: {
+    type: 'hops',
     category: 'luxury',
-    yields: { gold: 1, alpha: 0, vibes: 0, production: 0, growth: 2 },
+    yields: { gold: 0, alpha: 0, vibes: 2, production: 0, growth: 0 },
     validTerrain: ['grassland', 'plains', 'forest'],
   },
-  rpcs: {
-    type: 'rpcs',
+  airdrop: {
+    type: 'airdrop',
     category: 'luxury',
-    yields: { gold: 0, alpha: 3, vibes: 0, production: 0, growth: 0 },
+    yields: { gold: 2, alpha: 0, vibes: 0, production: 0, growth: 0 },
+    validTerrain: ['grassland', 'plains', 'desert'],
+  },
+  silicon: {
+    type: 'silicon',
+    category: 'luxury',
+    yields: { gold: 0, alpha: 2, vibes: 0, production: 0, growth: 0 },
     validTerrain: ['hills', 'plains', 'desert'],
   },
   // Bonus
-  wheat: {
-    type: 'wheat',
+  pig: {
+    type: 'pig',
     category: 'bonus',
     yields: { gold: 0, alpha: 0, vibes: 0, production: 0, growth: 1 },
-    validTerrain: ['grassland', 'plains'],
+    validTerrain: ['grassland', 'plains', 'forest'],
   },
   cattle: {
     type: 'cattle',

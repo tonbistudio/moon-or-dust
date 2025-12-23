@@ -20,6 +20,36 @@ Tribes is a turn-based 4X strategy game (Civilization-style) with Solana NFT com
 - **Storage:** IndexedDB (idb library), localStorage for preferences
 - **Deployment:** Vercel (frontend)
 
+## Blockchain Integration (MagicBlock)
+
+Integrating with [MagicBlock](https://docs.magicblock.gg) for on-chain features:
+
+### Tier 1 - Planned (Hackathon)
+
+**VRF (Verifiable Randomness)**
+- Provably fair unit rarity rolls (replaces `Math.random()` in `rollRarity()`)
+- Verifiable lootbox rewards
+- SDK: `@magicblock-labs/bolt-sdk`
+- Integration: `packages/app/src/magicblock/vrf.ts`
+
+**SOAR (On-Chain Achievements & Leaderboards)**
+- Global Floor Price leaderboards
+- On-chain achievements ("First Wonder", "10 Kills", etc.)
+- Player profiles with game history
+- SDK: TypeScript client via `@magicblock-labs/bolt-sdk`
+- Integration: `packages/app/src/magicblock/soar.ts`
+
+### Tier 2 - Planned (Post-Hackathon)
+
+**Achievement NFTs**
+- Mint achievement NFTs for major accomplishments
+- Per-tribe leaderboards
+
+### Future Consideration
+
+**BOLT Framework** - ECS for fully on-chain game state (requires Rust/Anchor rewrite)
+**Ephemeral Rollups** - 50ms latency, zero-fee transactions (requires BOLT first)
+
 ## Graphics System (Badge + Glow)
 
 Units are rendered using a **badge + color glow system** instead of unique sprites per unit type. This reduces asset requirements by 90%.
@@ -308,13 +338,13 @@ canvas.on('click', (hex) => {
 
 | Improvement | Unlocked By | Effect |
 |-------------|-------------|--------|
-| Mine | Mining | +Production, works Iron |
+| Mine | Mining | +Production, works Iron, Gems |
 | Quarry | Mining | +Production, works Marble |
-| Farm | Farming | +Growth |
 | Pasture | Animal Husbandry | Works Horses, Cattle |
+| Sty | Animal Husbandry | Works Pig |
 | Brewery | PFPs | Works Hops |
-| Airdrop Farm | Minting, Farming | Works Airdrops |
-| Server Farm | Smart Contracts | Works RPCs |
+| Airdrop Farm | Coding + Farming | Works Airdrops |
+| Server Farm | Minting | Works Silicon |
 
 ### Tribes (4 playable)
 | Tribe | Primary | Secondary | Unique Unit | Unique Building |
@@ -378,8 +408,8 @@ Resources add yields when improved:
 | Marble | Luxury | +1 Vibes | Quarry |
 | Hops | Luxury | +2 Vibes | Brewery |
 | Airdrop | Luxury | +2 Gold | Airdrop Farm |
-| RPCs | Luxury | +2 Alpha | Server Farm |
-| Wheat | Bonus | +1 Growth | Farm |
+| Silicon | Luxury | +2 Alpha | Server Farm |
+| Pig | Bonus | +1 Growth | Sty |
 | Cattle | Bonus | +1 Growth, +1 Production | Pasture |
 
 ### Unit Promotions
@@ -920,337 +950,55 @@ interface MilestoneChoice {
 
 ---
 
-## Implementation Phases
+## Implementation Status
 
-### Phase 1: Foundation
-1. ✅ Project scaffold (pnpm workspaces, Vite, TypeScript configs)
-2. ✅ Core type definitions (all interfaces in game-core/types)
-3. ✅ Hex grid system (coordinates, neighbors, distance, pathfinding)
-4. ✅ Game state structure and action system
-5. ✅ Basic test infrastructure
+### Completed Phases (1-11)
 
-### Phase 2: Map & Rendering
-6. ✅ Terrain types with yield modifiers (rivers, forests, resources)
-7. ✅ Resource placement (strategic, luxury, bonus)
-8. ✅ Lootbox placement (4-6 per map, edge/corner biased)
-9. ✅ Pixi.js setup and hex tile rendering
-10. ✅ Camera controls (pan, zoom)
-11. ✅ Fog of war system
-12. ✅ Tile selection and hover states
-13. ✅ Lootbox tile rendering (mystery box icon)
+| Phase | Summary |
+|-------|---------|
+| **1. Foundation** | Monorepo, TypeScript, hex grid, state system |
+| **2. Map & Rendering** | Terrain, resources, Pixi.js, fog of war, lootboxes |
+| **3. Core Gameplay** | Turns, units with rarity, settlements, Floor Price |
+| **4. Economy & Growth** | Population, milestones, buildings, improvements, trade routes |
+| **5. Combat & Military** | Combat resolution, promotions, barbarians |
+| **6. Tech & Cultures** | 30 techs, 29 cultures, policy cards, cross-prerequisites |
+| **7. Wonders & React** | 10 wonders, GameContext, all action handlers, basic AI |
+| **8. Diplomacy & Trade** | 5 diplomatic states, war/peace/alliance, AI diplomacy |
+| **9. Tribes & Identity** | 4 unique units, 4 unique buildings, tribe bonuses, AI personalities |
+| **10. Advanced Systems** | 23 great people, golden ages, policy swapping |
+| **11. AI Opponents** | Full AI: expansion, military, research, diplomacy, trade, wonders |
 
-### Phase 3: Core Gameplay
-14. ✅ Turn system and player switching
-15. ✅ Unit spawning with rarity rolls
-16. ✅ Unit rarity visual rendering (colored borders)
-17. ✅ Unit selection and movement with stacking limits
-18. ✅ Lootbox claiming and reward distribution
-19. ✅ Settlement founding and rendering
-20. ✅ Basic yield calculation with terrain modifiers
-21. ✅ Floor Price calculation and display
+### Remaining Work
 
-### Phase 4: Economy & Growth
-22. ✅ Population growth system with progress bar
-23. ✅ Settlement milestone system (level-up choices)
-24. ✅ Building construction with adjacency bonuses
-25. ✅ Tile improvements (farms, mines, pastures, NFT improvements)
-26. ✅ Gold income and maintenance
-27. ✅ Production queue
-28. ✅ Trade route system (internal and external)
+**Phase 12: UI & Polish**
+- Main menu and tribe selection
+- Tooltips and info panels
+- End game screen with Floor Price breakdown
+- Turn notifications (golden age, great person, wonder)
+- Promotion/policy/milestone selection UIs
+- Unit minting animation (rarity reveal)
 
-### Phase 5: Combat & Military
-29. ✅ Combat resolution system with stacking bonuses
-30. ✅ Rarity bonuses applied to combat
-31. ✅ Unit health and death
-32. ✅ Zone of control
-33. ✅ XP gain and promotion system (3 paths)
-34. ✅ Barbarian camp spawning and AI
-35. ✅ Barbarian clearing rewards
+**Phase 13: Blockchain Integration**
+- Solana wallet connection (@solana/wallet-adapter)
+- MagicBlock VRF for provably fair rarity rolls
+- MagicBlock SOAR for leaderboards and achievements
+- Player identity from wallet
 
-### Phase 6: Tech & Cultures
-36. ✅ Tech tree data and UI
-37. ✅ Research queue and progress
-38. ✅ Tech unlocks (units, buildings, resource visibility)
-39. ✅ Resource requirements for units/buildings
-40. ✅ Cultures tree with policy card choices
-41. ✅ Border expansion (from Vibes)
-
-#### Phase 6b: Tech Tree Update
-- ✅ Updated tech tree with crypto/Solana-themed names (30 techs across 3 eras)
-- ✅ Prerequisites and cross-tree dependencies (tech ↔ culture)
-- Era 1: Mining, Animal Husbandry, Farming, Coding, Smart Contracts, Archery, Minting, Bronze Working, PFPs, Horseback Riding
-- Era 2: Iron Working, Discord, Currency, Staking, Lending, Matrica, Botting, On-chain Gaming, Priority Fees, Defi
-- Era 3: Artificial Intelligence, Ponzinomics, Hacking, Tokenomics, Hardware Wallets, Siege Weapons, Wolf Game, Liquidity Pools, Firedancer, OHM
-- Note: Some tech unlocks (new unit types, bonuses) are documented but types not yet extended
-
-#### Phase 6c: Cultures Tree Update
-- ✅ Renamed Civics → Cultures system-wide
-- ✅ Renamed Culture yield → Vibes yield
-- ✅ Updated policy slot types: Military [M], Economy [E], Progress [P], Wildcard [W]
-- ✅ 29 NFT/crypto-themed cultures across 3 eras (see CULTURES.md)
-- ✅ Cross-tree prerequisites (culture ↔ tech)
-- ✅ 12 slot unlock progression points
-- ✅ Full policy card definitions with concrete effects
-
-### Phase 7: Wonders & Game Integration
-42. ✅ Wonder data definitions (10 wonders)
-43. ✅ Wonder construction (exclusive race mechanic)
-44. ✅ Wonder effects implementation
-45. ✅ Wonder UI (available, in-progress, completed) - via ProductionPanel
-46. ✅ AI wonder prioritization
-
-#### Phase 7b: React Game Integration
-- ✅ GameContext for React state management
-- ✅ useGame, useCurrentPlayer, useSelectedSettlement hooks
-- ✅ GameCanvas component (Pixi.js wrapper)
-- ✅ GameUI HUD overlay (top bar with yields, floor price, end turn)
-- ✅ SettlementPanel (settlement info when selected)
-- ✅ ProductionPanel with tabs (Units/Buildings/Wonders)
-- ✅ ProductionQueue display with progress bars
-- ✅ ItemCard and AvailableItems components
-- ✅ START_PRODUCTION action handler
-
-#### Phase 7c: Core Action Handlers
-- ✅ MOVE_UNIT action (pathfinding-based movement)
-- ✅ FOUND_SETTLEMENT action (settler creates settlement)
-- ✅ ATTACK action (combat resolution with kill tracking)
-- ✅ BUILD_IMPROVEMENT action (builder creates tile improvements)
-- ✅ START_RESEARCH action (set tech research target)
-- ✅ START_CULTURE action (set culture unlock target)
-- ✅ DECLARE_WAR, PROPOSE_PEACE, PROPOSE_ALLIANCE actions (diplomacy)
-- ✅ SELECT_POLICY action (choose A/B policy when completing culture)
-- ✅ SWAP_POLICIES action (slot/unslot policies after culture completion)
-- ✅ SELECT_PROMOTION action (choose promotion for leveled unit)
-- ✅ SELECT_MILESTONE action (choose settlement level-up reward)
-- ✅ CREATE_TRADE_ROUTE action (establish trade between settlements)
-- ✅ CANCEL_TRADE_ROUTE action (cancel existing trade route)
-- ✅ USE_GREAT_PERSON action (use great person's one-time ability)
-
-#### Phase 7d: Wonder Prerequisites & Era Scaling
-- ✅ Wonders now require tech or culture prerequisites
-- ✅ Era 1 wonders: Floor Price +25, Cost 80-120, weaker effects
-- ✅ Era 2 wonders: Floor Price +50, Cost 150-200, moderate effects
-- ✅ Era 3 wonders: Floor Price +75, Cost 250-350, powerful effects
-- ✅ Renamed SolBear Lair → Balloonsville Lair
-- ✅ Changed The Portal effect: reveal map → +50% gold in settlement
-- ✅ Wonder prereqs documented in TECH.md and CULTURES.md
-
-#### Phase 7e: Basic AI
-- ✅ AI turn execution (runs after human ends turn)
-- ✅ AI unit movement (toward nearest enemy)
-- ✅ AI combat (attacks enemies in range, prioritizes weak targets)
-- ✅ Fog of war updates on unit movement
-
-### Phase 8: Diplomacy & Trade
-47. ✅ Diplomatic state tracking (5 states)
-48. ✅ War declaration and reputation system
-49. ✅ Alliance formation and shared vision
-50. ✅ AI diplomacy decisions
-51. ✅ Trade route yields and external bonuses
-
-#### Phase 8b: Diplomacy Action Handlers & AI
-- ✅ DECLARE_WAR action handler (with reputation penalties, alliance obligations)
-- ✅ PROPOSE_PEACE action handler (war → hostile transition)
-- ✅ PROPOSE_ALLIANCE action handler (friendly → allied)
-- ✅ AI military strength calculation
-- ✅ AI peace decisions (war weariness, losing wars)
-- ✅ AI war decisions (military advantage, settlement targets)
-- ✅ AI alliance decisions (shared enemies, strongest ally)
-
-### Phase 9: Tribes & Identity
-52. ✅ Tribe bonuses and modifiers
-53. ✅ Unique units implementation
-54. ✅ Unique buildings with adjacency bonuses
-55. ✅ Tribe-specific golden age triggers
-56. ✅ Tribe AI personalities
-57. ✅ Visual differentiation per tribe
-
-#### Phase 9a: Tribal Unique Units & Buildings
-- ✅ Added 4 unique unit types to UnitType
-- ✅ Banana Slinger (Monkes): replaces Archer, 3 range, 15/30 strength
-- ✅ Neon Geck (Geckos): replaces Sniper, 3 mobility, kills grant +5 Alpha
-- ✅ DeadGod (DeGods): replaces Swordsman, 45 strength, kills grant +20 Gold
-- ✅ Stuckers (Cets): replaces Swordsman, 35 strength, 3 mobility, debuffs enemy mobility
-- ✅ Unit definitions with stats, production costs, maintenance costs
-- ✅ Degen Mints Cabana (Monkes): +2 Gold per adjacent Jungle/Forest, unlocked by Lending
-- ✅ The Garage (Geckos): +2 Alpha per adjacent Coast/Desert, unlocked by Staking
-- ✅ Eternal Bridge (DeGods): +20% combat unit production, unlocked by Matrica
-- ✅ Creckhouse (Cets): +1 Vibes per adjacent building, unlocked by Discord
-- ✅ Multi-terrain adjacency logic for unique buildings
-- ✅ Tech unlock integration for unique buildings
-
-#### Phase 9b: Tribe Bonuses System
-- ✅ TribeBonuses interface with optional bonus fields
-- ✅ Tribes module with tribe definitions and helper functions
-- ✅ Monkes: +5% Vibes yield, +1 trade route capacity
-- ✅ Geckos: +5% Alpha yield, +10% production on ranged units
-- ✅ DeGods: +10% production on melee units, +10% gold from gold-yield buildings
-- ✅ Cets: +10% Vibes from culture buildings, +10% production from production buildings
-- ✅ Yield bonuses applied in state turn processing (alpha, vibes)
-- ✅ Building category bonuses applied in calculateBuildingYields
-- ✅ Unit production bonuses applied in processProduction
-- ✅ Trade route capacity bonus applied in getMaxTradeRoutes
-
-#### Phase 9c: Tribe AI Personalities
-- ✅ TribePersonality interface with 7 behavioral modifiers
-- ✅ Personality-based war declaration (aggressionMultiplier, warStrengthRatioModifier)
-- ✅ Personality-based peace-seeking (peacefulnessMultiplier, peaceStrengthRatioModifier)
-- ✅ Personality-based alliance formation (allianceMultiplier)
-- ✅ Target prioritization by personality (weakest/strongest/closest)
-- ✅ War weariness tolerance per tribe
-- ✅ Monkes: Diplomatic, trade-focused (low aggression, high alliance, seeks peace early)
-- ✅ Geckos: Cautious, research-focused (moderate, efficient fighters)
-- ✅ DeGods: Aggressive, war-focused (high aggression, targets strongest, holds out in wars)
-- ✅ Cets: Diplomatic, builder-focused (very low aggression, defensive, prioritizes nearby threats)
-
-#### Phase 9d: Visual Tribe Differentiation
-- ✅ Territory borders now use tribe colors (gold, neon green, dark red, royal blue)
-- ✅ Settlement markers rendered on map with tribe colors
-- ✅ Capital indicators with star icon
-- ✅ Settlement names displayed with drop shadow
-- ✅ Map rebuilds on territory/settlement changes
-- ✅ Unit visual categories for new unit types (melee, ranged, cavalry, siege)
-- ✅ getTribeColor helper converts hex string to Pixi number
-
-### Phase 10: Advanced Systems
-58. ✅ Great People accumulation and spawning
-59. ✅ Great Person one-time actions
-60. ✅ Golden age triggers (universal + tribe-specific)
-61. ✅ Golden age effects
-62. ✅ Policy swapping (SWAP_POLICIES action)
-
-#### Phase 10a: Great People System
-- ✅ 19 universal great people with unique thresholds and actions
-- ✅ 4 tribal great people (Nom, Frank, Genuine Articles, Peblo)
-- ✅ GreatPeopleAccumulator tracking (combat, alpha, gold, vibes, kills, captures, trade routes, wonders, buildings)
-- ✅ Threshold checking and spawn logic with configurable spawn chance
-- ✅ Policy bonuses for GP spawn chance (Clout 65%, Big Addition 80%, Collector 100%)
-- ✅ Great person one-time actions (yield buffs, instant production, promotions, golden ages)
-- ✅ USE_GREAT_PERSON action handler
-
-#### Phase 10b: Golden Age System
-- ✅ 7 universal triggers (3 techs in 5 turns, capture capital, 4th settlement, 20 pop, 2 wonders, 3 great people, 6 trade routes first)
-- ✅ 4 tribal triggers (Monkes 500 gold, Geckos Era 3 tech first, DeGods 10 kills, Cets Era 3 culture first)
-- ✅ Era-based random effect selection (17 effects across 3 eras)
-- ✅ Golden age yield bonuses applied to alpha, vibes, production, gold
-- ✅ Combat and mobility bonuses from golden age effects
-- ✅ Tech completion tracking for "3 techs in 5 turns" trigger
-- ✅ Golden age turn processing (decrement duration, cleanup)
-
-### Phase 11: AI Opponents
-63. ✅ AI decision framework
-64. ✅ Expansion logic
-65. ✅ Military logic with barbarian handling
-66. ✅ Research and culture priorities
-67. ✅ Diplomacy AI (when to ally, when to war)
-68. ✅ Trade route optimization
-69. ✅ Wonder race decisions
-70. ✅ Lootbox hunting priority
-
-#### Phase 11a: Comprehensive AI System
-- ✅ TribePersonality system with behavioral modifiers (aggression, peacefulness, alliance tendencies)
-- ✅ Priority-based decision framework (diplomacy → research → culture → production → units)
-- ✅ Research AI with tribe-specific tech prioritization
-- ✅ Culture AI with tribe-specific culture prioritization
-- ✅ Expansion AI (settler movement and settlement founding)
-- ✅ Military AI with barbarian hunting priority
-- ✅ Scout AI with lootbox hunting and exploration
-- ✅ Wonder AI with tribe-specific wonder prioritization
-
-#### Phase 11b: Trade Route System
-- ✅ Tech-based trade route capacity (Smart Contracts: 1, Currency: +1, Lending: +1)
-- ✅ Monkes tribe bonus: +1 trade route capacity
-- ✅ 2-turn formation delay before routes become active
-- ✅ Trade route yields: 20% of combined Gold (25% for Allied) + 1 per luxury
-- ✅ Pillaging trade routes when settlement takes HP damage
-- ✅ UI helpers: getAvailableTradeDestinations(), canCreateTradeRoute(), getTradeRouteSummary()
-- ✅ AI trade route optimization with tribe-specific priorities
-- ✅ 20 tests for trade route system
-
-#### Phase 11c: Settlement HP & Siege System
-- ✅ Settlement HP system (settlements have HP, can be damaged/captured)
-- ✅ Siege weapon dual-strength system (separate combatStrength vs settlementStrength)
-- ✅ Social Engineer: 20 combat strength, 60 settlement strength (3x)
-- ✅ Bombard: 25 combat strength, 75 settlement strength (3x)
-- ✅ Siege units are "glass cannons" - weak vs units, strong vs settlements
-- ✅ Tank movement reduced from 5 to 4 for balance
-- ✅ Updated combat preview to show siege vs settlement effectiveness
-
-#### Phase 11d: Terrain Art & Biome System
-- ✅ Integrated dgbaumgart hand-painted hex tiles (9 terrain types)
-- ✅ Biome clustering algorithm (seed-and-spread) for realistic terrain distribution
-- ✅ Natural terrain transitions at biome edges
-- ✅ Settlement-specific tiles (village for levels 1-9, castle for level 10+)
-- ✅ Sprite scaling and anchor configuration for hex grid alignment
-- ✅ Removed old settlement marker dots, kept text labels with ★ for capitals
-
-### Phase 12: UI & Polish
-71. Main menu and tribe selection
-72. In-game HUD (Floor Price, yields, diplomacy, golden age status)
-73. Tooltips and info panels (adjacency previews, trade route info, rarity stats)
-74. End game screen with Floor Price breakdown
-75. Turn notifications (golden age, great person, diplomacy, wonder completion)
-76. Promotion selection UI
-77. Policy card selection UI
-78. Trade route management UI
-79. Milestone choice UI (settlement level-up)
-80. Lootbox reward popup
-81. Unit minting animation (rarity reveal)
-
-### Phase 13: Integration
-82. Solana wallet connection
-83. Player identity from wallet
-84. IndexedDB save/load
-85. PWA manifest and service worker
-86. Mobile touch controls
-
-### Phase 14: Final Polish
-87. Balance tuning (yields, thresholds, costs, rarity odds)
-88. Performance optimization
-89. Mobile responsiveness
-90. Loading states and error handling
-91. Deployment to Vercel
+**Phase 14: Final Polish**
+- IndexedDB save/load
+- PWA manifest and service worker
+- Mobile touch controls
+- Balance tuning
+- Performance optimization
+- Deployment to Vercel
 
 ## Testing Strategy
 
-### game-core (Unit Tests)
-- Every pure function has tests
-- State transitions tested with snapshots
-- Hex math verified against known values
-- AI decisions tested with fixed seeds
-- Diplomacy state machine transitions
-- Trade route yield calculations
-- Golden age trigger detection
-- Great People threshold tracking
-- Adjacency bonus calculations
-- Promotion effect stacking
-- Barbarian behavior within camp radius
-- Rarity roll distribution (verify odds over many runs)
-- Floor Price calculation accuracy
-- Lootbox reward distribution
-- Wonder exclusivity (only one builder)
-- Settlement milestone progression
-
-### renderer (Integration Tests)
-- Pixi.js scene setup/teardown
-- Sprite creation for state changes
-- Input event translation
-- Rarity border rendering
-- Lootbox icon visibility in fog
-
-### app (E2E Tests)
-- Full game flow: start → 20 turns → victory screen
-- Save/load round-trip
-- Wallet connect flow
-- Mobile viewport tests
-- Trade route creation flow
-- Policy card selection
-- Great Person action usage
-- Diplomacy UI interactions
-- Lootbox claim flow
-- Settlement milestone choice
-- Wonder race (AI completes first)
-- Unit minting animation
+| Package | Type | Focus |
+|---------|------|-------|
+| **game-core** | Unit | Pure functions, state transitions, hex math, AI decisions |
+| **renderer** | Integration | Pixi.js setup, sprite creation, input events |
+| **app** | E2E (Playwright) | Full game flow, save/load, wallet, mobile |
 
 ## Code Style
 

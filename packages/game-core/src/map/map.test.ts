@@ -66,12 +66,13 @@ describe('resource definitions', () => {
   it('defines luxury resources', () => {
     expect(RESOURCES.gems.category).toBe('luxury')
     expect(RESOURCES.marble.category).toBe('luxury')
-    expect(RESOURCES.whitelists.category).toBe('luxury')
-    expect(RESOURCES.rpcs.category).toBe('luxury')
+    expect(RESOURCES.hops.category).toBe('luxury')
+    expect(RESOURCES.airdrop.category).toBe('luxury')
+    expect(RESOURCES.silicon.category).toBe('luxury')
   })
 
   it('defines bonus resources', () => {
-    expect(RESOURCES.wheat.category).toBe('bonus')
+    expect(RESOURCES.pig.category).toBe('bonus')
     expect(RESOURCES.cattle.category).toBe('bonus')
   })
 
@@ -143,7 +144,7 @@ describe('getTileYields', () => {
     }
 
     const yields = getTileYields(tile)
-    expect(yields.gold).toBe(3) // gems bonus
+    expect(yields.gold).toBe(1) // gems bonus (+1 gold)
     expect(yields.production).toBe(2) // hills base
   })
 

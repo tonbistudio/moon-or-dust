@@ -32,27 +32,17 @@ let settlementCastleTexture: Texture | null = null
 // Resource textures
 const RESOURCE_TEXTURES: Map<string, Texture> = new Map()
 const RESOURCE_SPRITE_FILES: Record<string, string> = {
-  iron: 'iron.svg',
-  horses: 'horse.svg',
-  gems: 'gem.svg',
-  marble: 'marble.svg',
-  wheat: 'wheat.svg',
-  cattle: 'cattle.svg',
-  whitelists: 'whitelist.svg',
-  rpcs: 'rpc.svg',
-  oasis: 'oasis.svg',
-}
-
-// Resource colors based on their yield/nature
-const RESOURCE_COLORS: Record<string, number> = {
-  iron: 0x78716c,      // Stone grey (production)
-  horses: 0xfbbf24,    // Amber (gold/movement)
-  gems: 0xa855f7,      // Purple (luxury/gold)
-  marble: 0xe0e0e0,    // Light grey/white (vibes)
-  wheat: 0xfde047,     // Yellow (growth)
-  cattle: 0x92400e,    // Brown (growth/production)
-  whitelists: 0x4ade80, // Green (growth/NFT)
-  rpcs: 0x64b5f6,      // Blue (alpha/tech)
+  iron: 'iron.png',
+  horses: 'horses.png',
+  gems: 'gem.png',
+  marble: 'marble.png',
+  hops: 'hops.png',
+  airdrop: 'airdrop.png',
+  silicon: 'silicon.png',
+  pig: 'pig.png',
+  cattle: 'cattle.png',
+  oasis: 'oasis.png',
+  lootbox: 'lootbox.png',
 }
 
 /**
@@ -89,7 +79,8 @@ export async function loadTerrainTextures(): Promise<void> {
   const resourceBasePath = '/assets/icons/resources/'
   for (const [resource, filename] of Object.entries(RESOURCE_SPRITE_FILES)) {
     try {
-      const texture = await Assets.load(resourceBasePath + filename)
+      const fullPath = resourceBasePath + filename
+      const texture = await Assets.load(fullPath)
       RESOURCE_TEXTURES.set(resource, texture)
     } catch (err) {
       console.warn(`Failed to load resource texture for ${resource}:`, err)
@@ -177,7 +168,13 @@ export class HexTileRenderer {
   update(state: GameState, parent: Container): void {
     const needsFullRebuild = !this.lastState || this.mapChanged(state, this.lastState)
 
+    // Debug: log when tiles should change
+    if (this.lastState && state.map.tiles !== this.lastState.map.tiles) {
+      console.log('[HexTileRenderer] Tiles Map changed, needsFullRebuild:', needsFullRebuild)
+    }
+
     if (needsFullRebuild) {
+      console.log('[HexTileRenderer] Rebuilding tiles')
       this.rebuildTiles(state)
     }
 
@@ -199,15 +196,26 @@ export class HexTileRenderer {
   }
 
   private mapChanged(newState: GameState, oldState: GameState): boolean {
+    // Count improvements to detect changes (more reliable than reference comparison)
+    const countImprovements = (state: GameState) => {
+      let count = 0
+      for (const tile of state.map.tiles.values()) {
+        if (tile.improvement) count++
+        if (tile.resource?.improved) count += 100 // Different weight for improved resources
+      }
+      return count
+    }
+
     return (
       newState.map.width !== oldState.map.width ||
       newState.map.height !== oldState.map.height ||
-      newState.map.tiles.size !== oldState.map.tiles.size ||
+      // Rebuild if tiles Map is a different object (any tile change creates new Map)
+      newState.map.tiles !== oldState.map.tiles ||
+      // Also check if improvement count changed (backup check)
+      countImprovements(newState) !== countImprovements(oldState) ||
       newState.settlements.size !== oldState.settlements.size ||
       newState.lootboxes.length !== oldState.lootboxes.length ||
       this.lootboxClaimedChanged(newState, oldState) ||
-      // Check if any tile ownership changed
-      this.tileOwnershipChanged(newState, oldState) ||
       // Check if any settlement level changed (for castle upgrade)
       this.settlementLevelChanged(newState, oldState)
     )
@@ -232,16 +240,6 @@ export class HexTileRenderer {
       const newLootbox = newState.lootboxes[i]
       const oldLootbox = oldState.lootboxes[i]
       if (newLootbox && oldLootbox && newLootbox.claimed !== oldLootbox.claimed) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private tileOwnershipChanged(newState: GameState, oldState: GameState): boolean {
-    for (const [key, newTile] of newState.map.tiles) {
-      const oldTile = oldState.map.tiles.get(key)
-      if (oldTile && newTile.owner !== oldTile.owner) {
         return true
       }
     }
@@ -415,57 +413,64 @@ export class HexTileRenderer {
 
   private createOasisSprite(): Container | null {
     const texture = RESOURCE_TEXTURES.get('oasis')
-    if (!texture) {
+    const container = new Container()
+    const size = this.hexSize * 0.8
+
+    if (texture) {
+      const sprite = new Sprite(texture)
+      sprite.anchor.set(0.5)
+      const scale = size / Math.max(texture.width, texture.height)
+      sprite.scale.set(scale)
+      container.addChild(sprite)
+    } else {
       // Fallback to simple circle if texture not loaded
       const graphics = new Graphics()
       graphics.circle(0, 0, this.hexSize * 0.25)
       graphics.fill({ color: FEATURE_COLORS.oasis })
-      return graphics
+      container.addChild(graphics)
     }
 
-    const container = new Container()
-    const sprite = new Sprite(texture)
-    sprite.anchor.set(0.5)
-    sprite.width = this.hexSize * 0.8
-    sprite.height = this.hexSize * 0.8
-    // No tint - SVG already has correct colors (green trees, blue pool)
-    container.addChild(sprite)
     return container
   }
 
   private createResourceIndicator(resourceType: string, improved: boolean): Container | null {
     const texture = RESOURCE_TEXTURES.get(resourceType)
-    const color = RESOURCE_COLORS[resourceType] ?? 0xffffff
 
     const container = new Container()
-    const size = this.hexSize * 0.4
+    const size = this.hexSize * 0.5  // Slightly larger for pixel art visibility
     const yOffset = this.hexSize * 0.3
 
     if (texture) {
-      // Create sprite with resource icon
-      const sprite = new Sprite(texture)
-      sprite.anchor.set(0.5)
-      sprite.width = size
-      sprite.height = size
-      sprite.y = yOffset
-      sprite.tint = color
-      container.addChild(sprite)
-
-      // Add gold border if improved
+      // Add gold border FIRST if improved (renders behind sprite)
       if (improved) {
         const border = new Graphics()
-        border.circle(0, yOffset, size * 0.6)
+        // Draw filled gold circle as background glow
+        border.circle(0, yOffset, size * 0.65)
+        border.fill({ color: 0xffd700, alpha: 0.4 })
+        border.stroke({ color: 0xffd700, width: 4 })
+        container.addChild(border)
+      }
+
+      // Create sprite with resource icon (no tint - pixel art has its own colors)
+      const sprite = new Sprite(texture)
+      sprite.anchor.set(0.5)
+      // Scale to fit while maintaining aspect ratio
+      const scale = size / Math.max(texture.width, texture.height)
+      sprite.scale.set(scale)
+      sprite.y = yOffset
+      container.addChild(sprite)
+    } else {
+      // Fallback to colored circle if texture not loaded
+      if (improved) {
+        const border = new Graphics()
+        border.circle(0, yOffset, size * 0.55)
+        border.fill({ color: 0xffd700, alpha: 0.4 })
         border.stroke({ color: 0xffd700, width: 3 })
         container.addChild(border)
       }
-    } else {
-      // Fallback to colored circle if texture not loaded
       const graphics = new Graphics()
       graphics.circle(0, yOffset, size * 0.4)
-      graphics.fill({ color })
-      if (improved) {
-        graphics.stroke({ color: 0xffd700, width: 2 })
-      }
+      graphics.fill({ color: 0x888888 })
       container.addChild(graphics)
     }
 
@@ -541,35 +546,49 @@ export class HexTileRenderer {
     return graphics
   }
 
-  private createLootboxMarker(lootbox: Lootbox): Graphics {
-    const graphics = new Graphics()
+  private createLootboxMarker(lootbox: Lootbox): Container {
+    const container = new Container()
     const { x, y } = hexToPixel(lootbox.position, this.layout)
+    container.x = x
+    container.y = y
 
-    // Draw glowing box icon
-    const size = this.hexSize * 0.3
+    const texture = RESOURCE_TEXTURES.get('lootbox')
+    const size = this.hexSize * 0.6
 
-    // Outer glow
-    graphics.circle(x, y, size * 1.5)
-    graphics.fill({ color: UI_COLORS.lootbox, alpha: 0.3 })
+    if (texture) {
+      // Use PNG sprite
+      const sprite = new Sprite(texture)
+      sprite.anchor.set(0.5)
+      const scale = size / Math.max(texture.width, texture.height)
+      sprite.scale.set(scale)
+      container.addChild(sprite)
+    } else {
+      // Fallback to drawn box
+      const graphics = new Graphics()
+      const boxSize = this.hexSize * 0.3
 
-    // Box shape
-    graphics.rect(x - size, y - size, size * 2, size * 2)
-    graphics.fill({ color: UI_COLORS.lootbox })
-    graphics.stroke({ color: 0xffffff, width: 2 })
+      // Outer glow
+      graphics.circle(0, 0, boxSize * 1.5)
+      graphics.fill({ color: UI_COLORS.lootbox, alpha: 0.3 })
 
-    // Question mark
-    const style = new TextStyle({
-      fontSize: size * 1.5,
-      fill: 0xffffff,
-      fontWeight: 'bold',
-    })
-    const text = new Text({ text: '?', style })
-    text.anchor.set(0.5)
-    text.x = x
-    text.y = y
-    graphics.addChild(text)
+      // Box shape
+      graphics.rect(-boxSize, -boxSize, boxSize * 2, boxSize * 2)
+      graphics.fill({ color: UI_COLORS.lootbox })
+      graphics.stroke({ color: 0xffffff, width: 2 })
 
-    return graphics
+      // Question mark
+      const style = new TextStyle({
+        fontSize: boxSize * 1.5,
+        fill: 0xffffff,
+        fontWeight: 'bold',
+      })
+      const text = new Text({ text: '?', style })
+      text.anchor.set(0.5)
+      graphics.addChild(text)
+      container.addChild(graphics)
+    }
+
+    return container
   }
 
   private updateOverlays(state: GameState): void {

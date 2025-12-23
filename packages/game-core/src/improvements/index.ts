@@ -38,22 +38,22 @@ const ZERO_YIELDS: Yields = {
 }
 
 export const IMPROVEMENT_DEFINITIONS: Record<ImprovementType, ImprovementDefinition> = {
-  farm: {
-    type: 'farm',
-    name: 'Farm',
-    yields: { ...ZERO_YIELDS, growth: 1 },
-    validTerrain: ['grassland', 'plains', 'desert'],
-    validResources: ['wheat'],
-    builderChargesCost: 1,
-    removesFeature: true, // Removes forest/jungle if present
-  },
-
   mine: {
     type: 'mine',
     name: 'Mine',
     yields: { ...ZERO_YIELDS, production: 1 },
     validTerrain: ['hills', 'mountain'],
     validResources: ['iron', 'gems'],
+    builderChargesCost: 1,
+    prerequisiteTech: 'mining',
+  },
+
+  quarry: {
+    type: 'quarry',
+    name: 'Quarry',
+    yields: { ...ZERO_YIELDS, production: 1 },
+    validTerrain: ['hills', 'plains'],
+    validResources: ['marble'],
     builderChargesCost: 1,
     prerequisiteTech: 'mining',
   },
@@ -68,46 +68,44 @@ export const IMPROVEMENT_DEFINITIONS: Record<ImprovementType, ImprovementDefinit
     prerequisiteTech: 'animal_husbandry',
   },
 
-  quarry: {
-    type: 'quarry',
-    name: 'Quarry',
-    yields: { ...ZERO_YIELDS, production: 1, vibes: 1 },
-    validTerrain: ['hills'],
-    validResources: ['marble'],
+  sty: {
+    type: 'sty',
+    name: 'Sty',
+    yields: { ...ZERO_YIELDS, growth: 1 },
+    validTerrain: ['grassland', 'plains', 'forest'],
+    validResources: ['pig'],
     builderChargesCost: 1,
-    prerequisiteTech: 'mining',
+    prerequisiteTech: 'animal_husbandry',
   },
 
-  // NFT-themed improvements
-  mint: {
-    type: 'mint',
-    name: 'NFT Mint',
-    yields: { ...ZERO_YIELDS, gold: 2, growth: 1 },
-    validTerrain: ['grassland', 'plains', 'desert'],
-    validResources: ['whitelists'],
+  brewery: {
+    type: 'brewery',
+    name: 'Brewery',
+    yields: { ...ZERO_YIELDS, vibes: 2 },
+    validTerrain: ['grassland', 'plains', 'forest'],
+    validResources: ['hops'],
     builderChargesCost: 1,
-    prerequisiteTech: 'currency',
+    prerequisiteTech: 'pfps',
+  },
+
+  airdrop_farm: {
+    type: 'airdrop_farm',
+    name: 'Airdrop Farm',
+    yields: { ...ZERO_YIELDS, gold: 2 },
+    validTerrain: ['grassland', 'plains', 'desert'],
+    validResources: ['airdrop'],
+    builderChargesCost: 1,
+    prerequisiteTech: 'coding', // Also requires farming (handled in canBuildImprovement)
   },
 
   server_farm: {
     type: 'server_farm',
-    name: 'RPC Server Farm',
-    yields: { ...ZERO_YIELDS, alpha: 2, gold: 1 },
-    validTerrain: ['plains', 'hills'],
-    validResources: ['rpcs'],
+    name: 'Server Farm',
+    yields: { ...ZERO_YIELDS, alpha: 2 },
+    validTerrain: ['plains', 'hills', 'desert'],
+    validResources: ['silicon'],
     builderChargesCost: 1,
-    prerequisiteTech: 'writing',
-  },
-
-  roads: {
-    type: 'roads',
-    name: 'Roads',
-    yields: ZERO_YIELDS,
-    validTerrain: ['grassland', 'plains', 'desert', 'hills', 'forest', 'jungle'],
-    validResources: [],
-    builderChargesCost: 1,
-    prerequisiteTech: 'horseback_riding',
-    // Note: Roads reduce movement cost to 0.5 when moving through the tile
+    prerequisiteTech: 'minting',
   },
 }
 
@@ -160,10 +158,14 @@ export function canBuildImprovement(
     }
   }
 
-  // Special case: resource-specific improvements
-  if (tile.resource?.revealed && improvement.validResources) {
+  // Resource-specific improvements require a matching resource
+  if (improvement.validResources) {
+    // This improvement requires a specific resource
+    if (!tile.resource?.revealed) {
+      return { canBuild: false, reason: `${improvement.name} requires a resource` }
+    }
     if (!improvement.validResources.includes(tile.resource.type)) {
-      return { canBuild: false, reason: `${improvement.name} not valid for this resource` }
+      return { canBuild: false, reason: `${improvement.name} not valid for ${tile.resource.type}` }
     }
   }
 

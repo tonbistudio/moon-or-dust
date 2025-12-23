@@ -70,9 +70,10 @@ export type ResourceType =
   | 'horses'
   | 'gems'
   | 'marble'
-  | 'whitelists'
-  | 'rpcs'
-  | 'wheat'
+  | 'hops'
+  | 'airdrop'
+  | 'silicon'
+  | 'pig'
   | 'cattle'
 
 export type ResourceCategory = 'strategic' | 'luxury' | 'bonus'
@@ -93,7 +94,7 @@ export interface Tile {
   readonly improvement?: ImprovementType
 }
 
-export type ImprovementType = 'farm' | 'mine' | 'pasture' | 'quarry' | 'mint' | 'server_farm' | 'roads'
+export type ImprovementType = 'mine' | 'quarry' | 'pasture' | 'sty' | 'brewery' | 'airdrop_farm' | 'server_farm'
 
 export interface HexMap {
   readonly width: number
@@ -166,6 +167,7 @@ export interface Unit {
   readonly rarity: UnitRarity
   readonly rarityBonuses: RarityBonuses
   readonly hasActed: boolean
+  readonly buildCharges: number // Remaining build charges (for builders)
 }
 
 // =============================================================================

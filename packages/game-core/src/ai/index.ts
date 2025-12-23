@@ -1069,9 +1069,9 @@ function categorizeTech(tech: Tech): string {
   }
   if (tech.unlocks.improvements) {
     const improvements = tech.unlocks.improvements
-    if (improvements.some(i => i === 'mine' || i === 'quarry' || i === 'farm')) return 'production'
-    if (improvements.some(i => i === 'pasture' || i === 'mint')) return 'economy'
-    if (improvements.some(i => i === 'roads')) return 'military'
+    if (improvements.some(i => i === 'mine' || i === 'quarry' || i === 'server_farm')) return 'production'
+    if (improvements.some(i => i === 'pasture' || i === 'sty' || i === 'airdrop_farm')) return 'economy'
+    if (improvements.some(i => i === 'brewery')) return 'culture'
   }
 
   return 'science'
@@ -1657,10 +1657,11 @@ const RESOURCE_PRIORITY: Record<string, number> = {
   // Luxury resources - high priority
   gems: 8,
   marble: 8,
-  whitelists: 7,
-  rpcs: 7,
+  hops: 7,
+  airdrop: 7,
+  silicon: 7,
   // Bonus resources - medium priority
-  wheat: 5,
+  pig: 5,
   cattle: 5,
 }
 
@@ -1708,12 +1709,9 @@ function findTilesNeedingImprovement(
       }
     }
 
-    // Non-resource tiles - prefer farms on grassland, mines on hills
+    // Non-resource tiles - prefer mines on hills
     let bestImprovement: ImprovementType | null = null
-    if (validImprovements.includes('farm') && (tile.terrain === 'grassland' || tile.terrain === 'plains')) {
-      bestImprovement = 'farm'
-      priority = 3
-    } else if (validImprovements.includes('mine') && tile.terrain === 'hills') {
+    if (validImprovements.includes('mine') && tile.terrain === 'hills') {
       bestImprovement = 'mine'
       priority = 3
     } else if (validImprovements.length > 0) {
@@ -1795,10 +1793,10 @@ function generateBuilderAction(
 
       // Fall back to default improvement choices
       if (!bestImprovement) {
-        if (validImprovements.includes('farm') && (currentTile.terrain === 'grassland' || currentTile.terrain === 'plains')) {
-          bestImprovement = 'farm'
-        } else if (validImprovements.includes('mine') && currentTile.terrain === 'hills') {
+        if (validImprovements.includes('mine') && currentTile.terrain === 'hills') {
           bestImprovement = 'mine'
+        } else if (validImprovements.includes('pasture') && (currentTile.terrain === 'grassland' || currentTile.terrain === 'plains')) {
+          bestImprovement = 'pasture'
         } else {
           bestImprovement = validImprovements[0]!
         }

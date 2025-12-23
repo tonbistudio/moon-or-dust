@@ -448,7 +448,7 @@ function revealNearestLuxury(
   state: GameState,
   fromPosition: HexCoord
 ): ReadonlyMap<string, import('../types').Tile> {
-  const luxuryTypes = ['gems', 'marble', 'whitelists', 'rpcs']
+  const luxuryTypes = ['gems', 'marble', 'hops', 'airdrop', 'silicon']
   let nearestKey: string | null = null
   let nearestDist = Infinity
 

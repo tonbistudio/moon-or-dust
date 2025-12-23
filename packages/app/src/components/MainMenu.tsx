@@ -245,11 +245,14 @@ export function MainMenu({ onStartGame }: MainMenuProps): JSX.Element {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'flex-start',
-        minHeight: '100%',
+        minHeight: '100vh',
+        maxHeight: '100vh',
         color: '#fff',
         padding: '20px',
         paddingTop: '20px',
+        paddingBottom: '40px',
         overflowY: 'auto',
+        boxSizing: 'border-box',
       }}
     >
       {/* Logo */}

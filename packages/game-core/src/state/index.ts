@@ -1550,14 +1550,26 @@ function applyBuildImprovement(
     map: { ...state.map, tiles: newTiles },
   }
 
-  // Use a build charge (builders have limited charges)
-  // For simplicity, we mark the builder as having acted
-  // In a full implementation, track build charges and remove builder when depleted
-  const newBuilder = {
-    ...builder,
-    hasActed: true,
+  // Check builder has charges remaining
+  if (builder.buildCharges <= 0) {
+    return { success: false, error: 'Builder has no charges remaining' }
   }
-  newState = updateUnit(newState, newBuilder)
+
+  // Decrement build charges
+  const newCharges = builder.buildCharges - 1
+
+  if (newCharges <= 0) {
+    // Builder is consumed - remove from game
+    newState = removeUnit(newState, builderId)
+  } else {
+    // Update builder with decremented charges
+    // Note: Builders can use multiple charges per turn (don't set hasActed)
+    const newBuilder = {
+      ...builder,
+      buildCharges: newCharges,
+    }
+    newState = updateUnit(newState, newBuilder)
+  }
 
   return { success: true, state: newState }
 }
