@@ -52,8 +52,8 @@ export const UNIVERSAL_TRIGGERS: GoldenAgeTriggerDefinition[] = [
   },
   {
     id: 'reach_20_population',
-    name: 'Population Boom',
-    description: 'Reach 20 total population',
+    name: 'Settlement Growth',
+    description: 'Reach 10 total settlement levels',
     duration: BASE_DURATION,
   },
   {
@@ -237,8 +237,8 @@ export function checkTrigger(
 
     case 'reach_20_population': {
       const settlements = getPlayerSettlements(state, tribeId)
-      const totalPop = settlements.reduce((sum, s) => sum + s.population, 0)
-      return totalPop >= 20
+      const totalLevels = settlements.reduce((sum, s) => sum + s.level, 0)
+      return totalLevels >= 10
     }
 
     case 'build_2_wonders':

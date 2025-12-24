@@ -153,7 +153,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     name: 'Matrica',
     era: 2,
     cost: 65,
-    prerequisites: { techs: ['discord' as TechId], cultures: ['early_empire' as CultureId] },
+    prerequisites: { techs: ['discord' as TechId], cultures: [] },
     // Alpha Hunter Hideout, Social Engineer, Eternal Bridge (DeGods unique)
     unlocks: { buildings: ['alpha_hunter_hideout' as BuildingId, 'eternal_bridge' as BuildingId], units: ['social_engineer'] },
   },
@@ -162,7 +162,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     name: 'Botting',
     era: 2,
     cost: 70,
-    prerequisites: { techs: ['iron_working' as TechId], cultures: [] },
+    prerequisites: { techs: ['iron_working' as TechId], cultures: ['defensive_tactics' as CultureId] },
     unlocks: { buildings: ['bot_farm' as BuildingId], units: ['sniper'] },
   },
   onchain_gaming: {
@@ -206,7 +206,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     name: 'Ponzinomics',
     era: 3,
     cost: 100,
-    prerequisites: { techs: ['staking' as TechId], cultures: [] },
+    prerequisites: { techs: ['staking' as TechId], cultures: ['virality' as CultureId] },
     // Unlocks Hype Machine and Mindfolk Lumberyard wonder
     unlocks: { buildings: ['hype_machine' as BuildingId] },
   },
@@ -274,7 +274,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     name: 'OHM',
     era: 3,
     cost: 150,
-    prerequisites: { techs: ['wolf_game' as TechId, 'liquidity_pools' as TechId], cultures: [] },
+    prerequisites: { techs: ['ponzinomics' as TechId], cultures: [] },
     unlocks: { buildings: ['cult_hq' as BuildingId] },
   },
 }

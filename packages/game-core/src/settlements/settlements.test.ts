@@ -2,9 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import {
   createSettlement,
   resetSettlementNames,
-  getPopulationThreshold,
-  getSettlementLevel,
-  hasReachedNewLevel,
+  getGrowthThreshold,
+  getLevelProgress,
   calculateTileYields,
   getSettlementTiles,
   calculateSettlementYields,
@@ -35,9 +34,9 @@ describe('Settlement Creation', () => {
 
     expect(settlement.owner).toBe('tribe_1')
     expect(settlement.position).toEqual({ q: 5, r: 5 })
-    expect(settlement.population).toBe(1)
     expect(settlement.level).toBe(1)
-    expect(settlement.populationProgress).toBe(0)
+    expect(settlement.growthProgress).toBe(0)
+    expect(settlement.growthThreshold).toBe(11) // 10 + 1²
     expect(settlement.buildings).toEqual([])
     expect(settlement.productionQueue).toEqual([])
     expect(settlement.currentProduction).toBe(0)
@@ -79,35 +78,40 @@ describe('Settlement Creation', () => {
   })
 })
 
-describe('Population & Levels', () => {
-  it('calculates population threshold', () => {
-    expect(getPopulationThreshold(1)).toBe(13) // 10 + 1*3
-    expect(getPopulationThreshold(5)).toBe(25) // 10 + 5*3
-    expect(getPopulationThreshold(10)).toBe(40) // 10 + 10*3
+describe('Growth & Levels', () => {
+  it('calculates growth threshold with quadratic curve', () => {
+    // Formula: 10 + level² (gets steeper as level increases)
+    expect(getGrowthThreshold(1)).toBe(11) // 10 + 1
+    expect(getGrowthThreshold(2)).toBe(14) // 10 + 4
+    expect(getGrowthThreshold(5)).toBe(35) // 10 + 25
+    expect(getGrowthThreshold(10)).toBe(110) // 10 + 100
   })
 
-  it('determines settlement level from population', () => {
-    // Thresholds: 0, 15, 30, 50, 75
-    expect(getSettlementLevel(1)).toBe(1)
-    expect(getSettlementLevel(14)).toBe(1)
-    expect(getSettlementLevel(15)).toBe(2)
-    expect(getSettlementLevel(30)).toBe(3)
-    expect(getSettlementLevel(50)).toBe(4)
-    expect(getSettlementLevel(75)).toBe(5)
+  it('calculates level progress', () => {
+    const settlement = createSettlement({
+      owner: 'tribe_1' as TribeId,
+      position: { q: 5, r: 5 },
+    })
+
+    const progress = getLevelProgress(settlement)
+    expect(progress.progress).toBe(0)
+    expect(progress.current).toBe(0)
+    expect(progress.threshold).toBe(11) // Level 1 threshold: 10 + 1²
   })
 
-  it('detects when new level is reached', () => {
-    // Settlement with pop 14 (level 1), will reach level 2 at pop 15
+  it('calculates level progress with partial growth', () => {
     const settlement: Settlement = {
       ...createSettlement({
         owner: 'tribe_1' as TribeId,
         position: { q: 5, r: 5 },
       }),
-      population: 14,
+      growthProgress: 5, // ~45% of 11
     }
 
-    expect(hasReachedNewLevel(settlement, 14)).toBe(false)
-    expect(hasReachedNewLevel(settlement, 15)).toBe(true) // Level 1 -> Level 2
+    const progress = getLevelProgress(settlement)
+    expect(progress.progress).toBe(45) // Math.floor(5/11 * 100)
+    expect(progress.current).toBe(5)
+    expect(progress.threshold).toBe(11)
   })
 })
 
@@ -206,16 +210,19 @@ describe('Settlement Yield Calculation', () => {
     }
   })
 
-  it('gets settlement tiles in range', () => {
+  it('gets settlement tiles in range (owned tiles only)', () => {
     const settlement = createSettlement({
       owner: state.players[0]!.tribeId,
       position: { q: 7, r: 7 },
     })
+    // Add settlement to claim surrounding tiles
+    state = addSettlement(state, settlement)
 
     const tiles = getSettlementTiles(state, settlement)
 
-    // Range 2 from center = 19 tiles (center + 6 at distance 1 + 12 at distance 2)
-    expect(tiles.length).toBe(19)
+    // Level 1 settlement has radius 1 = 7 tiles (center + 6 adjacent)
+    // Only owned tiles are returned
+    expect(tiles.length).toBe(7)
   })
 
   it('calculates settlement yields with base production and gold', () => {
@@ -417,11 +424,11 @@ describe('Settlement State Management', () => {
 
     const updatedSettlement: Settlement = {
       ...settlement,
-      population: 5,
+      level: 3,
     }
     const newState = updateSettlement(state, updatedSettlement)
 
-    expect(newState.settlements.get(settlement.id)?.population).toBe(5)
+    expect(newState.settlements.get(settlement.id)?.level).toBe(3)
   })
 
   it('gets player settlements', () => {
@@ -447,7 +454,7 @@ describe('Settlement State Management', () => {
   })
 })
 
-describe('Population Growth', () => {
+describe('Settlement Growth', () => {
   beforeEach(() => {
     resetSettlementNames()
   })
@@ -460,43 +467,37 @@ describe('Population Growth', () => {
 
     const { settlement: updated, reachedMilestone } = processSettlementGrowth(settlement, 5)
 
-    expect(updated.populationProgress).toBe(5)
-    expect(updated.population).toBe(1)
+    expect(updated.growthProgress).toBe(5)
+    expect(updated.level).toBe(1)
     expect(reachedMilestone).toBe(false)
   })
 
-  it('increases population when threshold reached', () => {
+  it('increases level when threshold reached', () => {
     const settlement = createSettlement({
       owner: 'tribe_1' as TribeId,
       position: { q: 5, r: 5 },
     })
 
-    // Threshold for pop 1 is 13 (10 + 1*3)
+    // Threshold for level 1 is 11 (10 + 1²)
     const { settlement: updated, reachedMilestone } = processSettlementGrowth(settlement, 15)
 
-    expect(updated.population).toBe(2)
-    expect(updated.populationProgress).toBe(2) // 15 - 13 = 2
-    expect(updated.populationThreshold).toBe(16) // 10 + 2*3
-    expect(reachedMilestone).toBe(false) // Didn't reach new level
+    expect(updated.level).toBe(2)
+    expect(updated.growthProgress).toBe(4) // 15 - 11 = 4
+    expect(updated.growthThreshold).toBe(14) // 10 + 2²
+    expect(reachedMilestone).toBe(true) // Reached new level
   })
 
-  it('triggers milestone when reaching new level', () => {
-    // Create settlement with population 14 (about to reach level 2 at pop 15)
-    const settlement: Settlement = {
-      ...createSettlement({
-        owner: 'tribe_1' as TribeId,
-        position: { q: 5, r: 5 },
-      }),
-      population: 14,
-      level: 1,
-      populationThreshold: getPopulationThreshold(14),
-    }
+  it('increases max health on level up', () => {
+    const settlement = createSettlement({
+      owner: 'tribe_1' as TribeId,
+      position: { q: 5, r: 5 },
+    })
 
-    // Need enough growth to reach next population (threshold for pop 14 is 52)
-    const { settlement: updated, reachedMilestone } = processSettlementGrowth(settlement, 60)
+    // Level up from 1 to 2 (needs 11 growth)
+    const { settlement: updated, reachedMilestone } = processSettlementGrowth(settlement, 11)
 
-    expect(updated.population).toBe(15)
     expect(updated.level).toBe(2)
     expect(reachedMilestone).toBe(true)
+    expect(updated.maxHealth).toBe(35) // 30 + 5 for level 2
   })
 })

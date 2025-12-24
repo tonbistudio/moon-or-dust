@@ -184,10 +184,9 @@ export interface Settlement {
   readonly name: string
   readonly owner: TribeId
   readonly position: HexCoord
-  readonly population: number
   readonly level: number
-  readonly populationProgress: number
-  readonly populationThreshold: number
+  readonly growthProgress: number
+  readonly growthThreshold: number
   readonly buildings: readonly BuildingId[]
   readonly productionQueue: readonly ProductionItem[]
   readonly currentProduction: number
@@ -611,7 +610,7 @@ export type GameAction =
   | { type: 'START_CULTURE'; cultureId: CultureId }
   | { type: 'SELECT_POLICY'; cultureId: CultureId; choice: 0 | 1 }
   | { type: 'SELECT_PROMOTION'; unitId: UnitId; promotionId: PromotionId }
-  | { type: 'SELECT_MILESTONE'; settlementId: SettlementId; choice: 'a' | 'b' }
+  | { type: 'SELECT_MILESTONE'; settlementId: SettlementId; level: number; choice: 'a' | 'b' }
   | { type: 'CREATE_TRADE_ROUTE'; origin: SettlementId; destination: SettlementId }
   | { type: 'CANCEL_TRADE_ROUTE'; routeId: TradeRouteId }
   | { type: 'USE_GREAT_PERSON'; unitId: UnitId }

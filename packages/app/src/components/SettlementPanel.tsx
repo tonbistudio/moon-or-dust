@@ -19,7 +19,7 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
   const yields = state ? calculateSettlementYields(state, settlement) : null
 
   // Calculate level progress
-  const levelProgress = getLevelProgress(settlement.population)
+  const levelProgress = getLevelProgress(settlement)
 
   const currentItem = settlement.productionQueue[0]
   const progressPercent = currentItem
@@ -78,16 +78,16 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
             <span style={{ color: '#4caf50', fontWeight: 'bold', fontSize: '13px' }}>
-              Pop. Level {settlement.level}
+              Level {settlement.level}
             </span>
-            {levelProgress.nextLevelPop !== null && (
+            {levelProgress.progress < 100 && (
               <span style={{ color: '#888', fontSize: '11px' }}>
-                {settlement.population}/{levelProgress.nextLevelPop}
+                {levelProgress.current}/{levelProgress.threshold}
               </span>
             )}
           </div>
           {/* Level progress bar */}
-          {levelProgress.nextLevelPop !== null ? (
+          {levelProgress.progress < 100 ? (
             <div
               style={{
                 height: '6px',
@@ -106,7 +106,7 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
               />
             </div>
           ) : (
-            <div style={{ color: '#4caf50', fontSize: '11px' }}>Max level reached</div>
+            <div style={{ color: '#4caf50', fontSize: '11px' }}>New level reached!</div>
           )}
           {yields && yields.growth > 0 && (
             <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>

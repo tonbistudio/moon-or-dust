@@ -47,6 +47,7 @@ import {
   canFoundSettlement,
   calculateSettlementYields,
   processSettlementGrowth,
+  expandSettlementBorders,
 } from '../settlements'
 import {
   resolveCombat,
@@ -68,7 +69,7 @@ import {
 } from '../diplomacy'
 import { processBarbarianSpawning } from '../barbarians'
 import { applyPromotion, getAvailablePromotions } from '../promotions'
-import { selectMilestone, hasPendingMilestone } from '../milestones'
+import { selectMilestone } from '../milestones'
 import {
   getInitialGreatPeopleState,
   checkAndSpawnGreatPeople,
@@ -90,8 +91,8 @@ import { claimLootbox, hasLootboxAt } from '../lootbox'
 
 export const GAME_VERSION = '0.1.0'
 export const MAX_TURNS = 20
-export const MAP_WIDTH = 15
-export const MAP_HEIGHT = 15
+export const MAP_WIDTH = 20
+export const MAP_HEIGHT = 20
 export const BASE_UNIT_VISION = 2
 
 // =============================================================================
@@ -426,7 +427,7 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
       return applySelectPromotion(state, action.unitId, action.promotionId)
 
     case 'SELECT_MILESTONE':
-      return applySelectMilestone(state, action.settlementId, action.choice)
+      return applySelectMilestone(state, action.settlementId, action.level, action.choice)
 
     case 'CREATE_TRADE_ROUTE':
       return applyCreateTradeRoute(state, action.origin, action.destination)
@@ -539,6 +540,7 @@ function applyEndTurn(state: GameState): ActionResult {
  */
 function processSettlementGrowthForPlayer(state: GameState, tribeId: TribeId): GameState {
   const newSettlements = new Map(state.settlements)
+  const settlementsToExpand: Settlement[] = []
 
   for (const [settlementId, settlement] of state.settlements) {
     if (settlement.owner !== tribeId) continue
@@ -546,15 +548,30 @@ function processSettlementGrowthForPlayer(state: GameState, tribeId: TribeId): G
     // Calculate growth yield for this settlement
     const yields = calculateSettlementYields(state, settlement)
 
+    // Track old level to detect level ups
+    const oldLevel = settlement.level
+
     // Apply growth
     const result = processSettlementGrowth(settlement, yields.growth)
     newSettlements.set(settlementId, result.settlement)
+
+    // If leveled up past level 5, schedule border expansion
+    if (result.settlement.level > oldLevel && result.settlement.level > 5) {
+      settlementsToExpand.push(result.settlement)
+    }
   }
 
-  return {
+  let newState: GameState = {
     ...state,
     settlements: newSettlements,
   }
+
+  // Expand borders for settlements that leveled up past level 5
+  for (const settlement of settlementsToExpand) {
+    newState = expandSettlementBorders(newState, settlement)
+  }
+
+  return newState
 }
 
 /**
@@ -1030,12 +1047,11 @@ function applyCancelProduction(
 export function calculateFloorPrice(state: GameState, tribeId: TribeId): number {
   let score = 0
 
-  // Settlements: 10 pts each
+  // Settlements: 10 pts each + 5 pts per level
   for (const settlement of state.settlements.values()) {
     if (settlement.owner === tribeId) {
       score += 10
-      // Population: 1 pt each
-      score += settlement.population
+      score += settlement.level * 5
     }
   }
 
@@ -1831,6 +1847,7 @@ function applySelectPromotion(
 function applySelectMilestone(
   state: GameState,
   settlementId: SettlementId,
+  level: number,
   choice: 'a' | 'b'
 ): ActionResult {
   const settlement = state.settlements.get(settlementId)
@@ -1843,13 +1860,8 @@ function applySelectMilestone(
     return { success: false, error: 'Settlement not owned by current player' }
   }
 
-  // Check if settlement has pending milestones
-  if (!hasPendingMilestone(settlement)) {
-    return { success: false, error: 'Settlement has no pending milestone choices' }
-  }
-
-  // Apply the milestone selection
-  const newState = selectMilestone(state, settlementId, settlement.level, choice)
+  // Apply the milestone selection (selectMilestone validates the level is valid)
+  const newState = selectMilestone(state, settlementId, level, choice)
   if (!newState) {
     return { success: false, error: 'Failed to apply milestone selection' }
   }

@@ -3,7 +3,7 @@
 export interface GameEvent {
   id: string
   message: string
-  type: 'combat' | 'lootbox' | 'settlement' | 'info' | 'diplomacy'
+  type: 'combat' | 'lootbox' | 'settlement' | 'info' | 'diplomacy' | 'milestone' | 'research' | 'golden'
   turn: number
 }
 
@@ -59,6 +59,12 @@ function getEventColor(type: GameEvent['type']): string {
       return '#22c55e' // green
     case 'diplomacy':
       return '#f97316' // orange
+    case 'milestone':
+      return '#4ade80' // bright green
+    case 'research':
+      return '#60a5fa' // blue
+    case 'golden':
+      return '#fbbf24' // golden/amber
     case 'info':
     default:
       return '#ffffff' // white

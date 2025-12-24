@@ -541,7 +541,8 @@ Some technologies require culture knowledge, and some cultures require technolog
 | Tech | Required Culture | Rationale |
 |------|------------------|-----------|
 | Currency | OTC Trading | Need trade networks first |
-| Matrica | Early Empire | Large-scale projects need organization |
+| Botting | Defensive Tactics | Need strategic foundations |
+| Ponzinomics | Virality | Need network effects understanding |
 | Liquidity Pools | Alpha DAOs | Must have governance structures |
 
 **Cultures requiring Techs:**
@@ -972,7 +973,8 @@ interface MilestoneChoice {
 
 **Phase 12: UI & Polish**
 - Main menu and tribe selection
-- Tooltips and info panels
+- ✅ Tech Tree UI (Civ 4 style horizontal layout, path highlighting, custom tooltips)
+- Tooltips and info panels (other panels)
 - End game screen with Floor Price breakdown
 - Turn notifications (golden age, great person, wonder)
 - Promotion/policy/milestone selection UIs
@@ -1016,6 +1018,26 @@ interface MilestoneChoice {
 - Batch sprite updates in Pixi.js
 - Memoize expensive pathfinding results
 - Use `Map` and `Set` for O(1) lookups on units/settlements
+
+## Input Controls
+
+- **Left click:** Select units/settlements, move selected unit, attack enemies
+- **Right click:** Deselect current unit/settlement
+
+## Completed Systems
+
+### Builder System
+Builders have 2 build charges and can use multiple charges per turn. When all charges are used, the builder is consumed.
+
+**Key files:**
+- `game-core/src/improvements/index.ts` - Improvement definitions and validation
+- `game-core/src/state/index.ts` - BUILD_IMPROVEMENT action handler
+- `app/src/components/UnitActionsPanel.tsx` - Builder UI with charge display
+
+**Validation:** Uses robust string comparison (`String().trim()`) for terrain/resource matching to avoid edge cases.
+
+### Resource Improvements Visual
+Improved resources show a green checkmark (✓) overlay on the resource icon. This is rendered in `HexTileRenderer.createResourceIndicator()`.
 
 ## TODO / Future Improvements
 

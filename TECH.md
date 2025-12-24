@@ -44,7 +44,7 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 | **Currency** | 55 | Minting, **Culture: OTC Trading** | +1 trade route, Magic Eden Wonder |
 | **Staking** | 55 | PFPs, Smart Contracts | Art Upgrader (+Vibes), Taiyo Robotics Factory, The Garage |
 | **Lending** | 60 | Smart Contracts | +1 Trade route, Degen Mints Cabana |
-| **Matrica** | 65 | Discord, **Culture: Early Empire** | Alpha Hunter Hideout (+Alpha) Social engineer unit, Eternal Bridge |
+| **Matrica** | 65 | Discord | Alpha Hunter Hideout (+Alpha) Social engineer unit, Eternal Bridge |
 | **Botting** | 70 | Iron Working | Bot Farm (+Production), Sniper unit |
 | **On-chain Gaming** | 70 | Coding, Minting | Arena building (+Combat Unit production) |
 | **Priority Fees** | 75 | On-chain Gaming | Knight unit |
@@ -69,7 +69,7 @@ This document defines the technology tree for Tribes. Technologies unlock units,
 | **Wolf Game** | 130 | Defi | Rockeeter unit |
 | **Liquidity Pools** | 140 | Tokenomics, **Culture: Alpha DAOs** | +2 trade route capacity, +5% all yields |
 | **Firedancer** | 140 | Priority Fees | +2 mobility for all units |
-| **OHM** | 150 | Wolf Game, Liquidity Pools | Cult HQ building (+Vibes) |
+| **OHM** | 150 | Ponzinomics | Cult HQ building (+Vibes) |
 
 ---
 

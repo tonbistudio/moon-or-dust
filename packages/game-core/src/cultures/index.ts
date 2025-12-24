@@ -41,11 +41,13 @@ function createPolicy(
 }
 
 // =============================================================================
-// Culture Definitions (placeholder - needs update to match CULTURES.md)
+// Culture Definitions (matches CULTURES.md)
 // =============================================================================
 
 export const CULTURE_DEFINITIONS: Record<string, Culture> = {
-  // Era 1: Tribal Age (15-35 Vibes)
+  // =========================================================================
+  // Era 1: Tribal Age (15-35 Vibes) - 9 cultures
+  // =========================================================================
   community: {
     id: 'community' as CultureId,
     name: 'Community',
@@ -134,7 +136,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 30,
     prerequisites: { cultures: ['otc_trading' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('first_mover', 'First Mover', '+10 Gold on discovery', 'early_adopters', 'a', 'economy', 'discovery_gold', { amount: 10 }),
+      createPolicy('first_mover', 'First Mover', '+1 trade route capacity', 'early_adopters', 'a', 'economy', 'trade_capacity', { amount: 1 }),
       createPolicy('scout_bonus', 'Scout Bonus', '+1 Scout vision', 'early_adopters', 'b', 'military', 'scout_vision', { amount: 1 }),
     ],
   },
@@ -150,32 +152,20 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     ],
   },
 
-  // Era 2: Classical Age (45-70 Vibes)
-  alpha_daos: {
-    id: 'alpha_daos' as CultureId,
-    name: 'Alpha DAOs',
+  // =========================================================================
+  // Era 2: Classical Age (45-70 Vibes) - 10 cultures
+  // =========================================================================
+  gm: {
+    id: 'gm' as CultureId,
+    name: 'GM',
     era: 2,
-    cost: 50,
-    prerequisites: { cultures: ['otc_trading' as CultureId], techs: [] },
+    cost: 45,
+    prerequisites: { cultures: ['community' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('big_addition', 'Big Addition', '80% chance of earning great people at thresholds', 'alpha_daos', 'a', 'wildcard', 'great_people_chance', { percent: 80 }),
-      createPolicy('treasury', 'Treasury', '+2 Trade Route capacity', 'alpha_daos', 'b', 'economy', 'trade_capacity', { amount: 2 }),
+      createPolicy('positive_vibes', 'Positive Vibes', '+2 Vibes in all settlements', 'gm', 'a', 'progress', 'settlement_vibes', { amount: 2 }),
+      createPolicy('good_morning', 'Good Morning', 'Hostile tribes become Neutral after 3 turns', 'gm', 'b', 'wildcard', 'diplomacy_thaw', { turns: 3 }),
     ],
   },
-
-  // Era 3: Renaissance Age (80-120 Vibes)
-  one_of_ones: {
-    id: 'one_of_ones' as CultureId,
-    name: '1 of 1s',
-    era: 3,
-    cost: 85,
-    prerequisites: { cultures: ['whitelisting' as CultureId], techs: [] },
-    policyChoices: [
-      createPolicy('unique_art', 'Unique Art', '+3 Vibes per wonder', 'one_of_ones', 'a', 'progress', 'wonder_vibes', { amount: 3 }),
-      createPolicy('collector', 'Collector', '100% chance of earning great people at thresholds', 'one_of_ones', 'b', 'wildcard', 'great_people_chance', { percent: 100 }),
-    ],
-  },
-
   whitelisting: {
     id: 'whitelisting' as CultureId,
     name: 'Whitelisting',
@@ -187,6 +177,204 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
       createPolicy('vip_list', 'VIP List', 'Alliance cost -25%', 'whitelisting', 'b', 'wildcard', 'alliance_discount', { percent: 25 }),
     ],
     slotUnlocks: { progress: 1 },
+  },
+  alpha_daos: {
+    id: 'alpha_daos' as CultureId,
+    name: 'Alpha DAOs',
+    era: 2,
+    cost: 50,
+    prerequisites: { cultures: ['otc_trading' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('big_addition', 'Big Addition', '80% chance of earning great people at thresholds', 'alpha_daos', 'a', 'wildcard', 'great_people_chance', { percent: 80 }),
+      createPolicy('treasury', 'Treasury', '+2 Trade Route capacity', 'alpha_daos', 'b', 'economy', 'trade_capacity', { amount: 2 }),
+    ],
+  },
+  follow_for_follow: {
+    id: 'follow_for_follow' as CultureId,
+    name: 'Follow for Follow',
+    era: 2,
+    cost: 50,
+    prerequisites: { cultures: ['gm' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('mutual_support', 'Mutual Support', 'Allies heal +5 HP/turn', 'follow_for_follow', 'a', 'military', 'ally_healing', { amount: 5 }),
+      createPolicy('community_building', 'Community Building', '+1 Population when settling', 'follow_for_follow', 'b', 'wildcard', 'settle_population', { amount: 1 }),
+    ],
+  },
+  fudding: {
+    id: 'fudding' as CultureId,
+    name: 'Fudding',
+    era: 2,
+    cost: 55,
+    prerequisites: { cultures: ['influence' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('fud_campaign', 'FUD Campaign', 'Enemy units -1 combat strength when attacking you', 'fudding', 'a', 'military', 'defender_debuff', { amount: -1 }),
+      createPolicy('spread_doubt', 'Spread Doubt', 'Enemies cannot form alliances with each other', 'fudding', 'b', 'wildcard', 'prevent_enemy_alliance', {}),
+    ],
+  },
+  virality: {
+    id: 'virality' as CultureId,
+    name: 'Virality',
+    era: 2,
+    cost: 55,
+    prerequisites: { cultures: ['social_media' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('going_viral', 'Going Viral', '+20% Vibes when completing wonders', 'virality', 'a', 'progress', 'wonder_vibes_percent', { percent: 20 }),
+      createPolicy('influencer', 'Influencer', 'Great Person points +25%', 'virality', 'b', 'wildcard', 'great_person_points', { percent: 25 }),
+    ],
+    slotUnlocks: { wildcard: 1 },
+  },
+  defensive_tactics: {
+    id: 'defensive_tactics' as CultureId,
+    name: 'Defensive Tactics',
+    era: 2,
+    cost: 60,
+    prerequisites: { cultures: ['fudding' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('diamond_formation', 'Diamond Formation', '+100% production for walls', 'defensive_tactics', 'a', 'wildcard', 'wall_production', { percent: 100 }),
+      createPolicy('fortify', 'Fortify', '+25% defense in owned territory', 'defensive_tactics', 'b', 'military', 'territory_defense', { percent: 25 }),
+    ],
+    slotUnlocks: { military: 1 },
+  },
+  degen_minting: {
+    id: 'degen_minting' as CultureId,
+    name: 'Degen Minting',
+    era: 2,
+    cost: 60,
+    prerequisites: { cultures: ['alpha_daos' as CultureId, 'degen_culture' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('fomo', 'FOMO', '+25% Production when behind in score', 'degen_minting', 'a', 'wildcard', 'catchup_production', { percent: 25 }),
+      createPolicy('yolo', 'Yolo', 'Units +15% attack, -10% defense', 'degen_minting', 'b', 'military', 'aggressive_combat', { attack: 15, defense: -10 }),
+    ],
+    slotUnlocks: { economy: 1 },
+  },
+  memecoin_mania: {
+    id: 'memecoin_mania' as CultureId,
+    name: 'Memecoin Mania',
+    era: 2,
+    cost: 65,
+    prerequisites: { cultures: ['memeing' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('pump_it', 'Pump It', '+20% Gold when completing cultures', 'memecoin_mania', 'a', 'economy', 'culture_gold', { percent: 20 }),
+      createPolicy('viral_spread', 'Viral Spread', '+2 Vibes per enemy unit killed', 'memecoin_mania', 'b', 'progress', 'kill_vibes', { amount: 2 }),
+    ],
+  },
+
+  // =========================================================================
+  // Era 3: Renaissance Age (80-120 Vibes) - 10 cultures
+  // =========================================================================
+  raiding: {
+    id: 'raiding' as CultureId,
+    name: 'Raiding',
+    era: 3,
+    cost: 80,
+    prerequisites: { cultures: ['gm' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('pillage_bonus', 'Pillage Bonus', '+50% Gold from pillaging', 'raiding', 'a', 'military', 'pillage_gold', { percent: 50 }),
+      createPolicy('war_party', 'War Party', '+1 Movement when attacking', 'raiding', 'b', 'military', 'attack_movement', { amount: 1 }),
+    ],
+    slotUnlocks: { military: 1 },
+  },
+  innovation: {
+    id: 'innovation' as CultureId,
+    name: 'Innovation',
+    era: 3,
+    cost: 80,
+    prerequisites: { cultures: ['builder_culture' as CultureId, 'whitelisting' as CultureId], techs: ['priority_fees' as TechId] },
+    policyChoices: [
+      createPolicy('r_and_d', 'R&D', '+20% Alpha generation', 'innovation', 'a', 'progress', 'alpha_percent', { percent: 20 }),
+      createPolicy('breakthrough', 'Breakthrough', 'Buildings +2 Alpha', 'innovation', 'b', 'progress', 'building_alpha', { amount: 2 }),
+    ],
+    slotUnlocks: { progress: 1 },
+  },
+  hard_shilling: {
+    id: 'hard_shilling' as CultureId,
+    name: 'Hard Shilling',
+    era: 3,
+    cost: 85,
+    prerequisites: { cultures: ['virality' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('hype_train', 'Hype Train', '+25% combat XP gain', 'hard_shilling', 'a', 'military', 'xp_gain', { percent: 25 }),
+      createPolicy('momentum', 'Momentum', '+2 Vibes per unit promoted', 'hard_shilling', 'b', 'progress', 'promotion_vibes', { amount: 2 }),
+    ],
+  },
+  one_of_ones: {
+    id: 'one_of_ones' as CultureId,
+    name: '1 of 1s',
+    era: 3,
+    cost: 85,
+    prerequisites: { cultures: ['whitelisting' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('unique_art', 'Unique Art', '+3 Vibes per wonder', 'one_of_ones', 'a', 'progress', 'wonder_vibes', { amount: 3 }),
+      createPolicy('collector', 'Collector', '100% chance of earning great people at thresholds', 'one_of_ones', 'b', 'wildcard', 'great_people_chance', { percent: 100 }),
+    ],
+  },
+  auctions: {
+    id: 'auctions' as CultureId,
+    name: 'Auctions',
+    era: 3,
+    cost: 90,
+    prerequisites: { cultures: ['alpha_daos' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('bidding_war', 'Bidding War', '+25% Gold income', 'auctions', 'a', 'economy', 'gold_percent', { percent: 25 }),
+      createPolicy('reserve_price', 'Reserve Price', '+20 Gold income per settlement', 'auctions', 'b', 'economy', 'settlement_gold', { amount: 20 }),
+    ],
+  },
+  presales: {
+    id: 'presales' as CultureId,
+    name: 'Presales',
+    era: 3,
+    cost: 90,
+    prerequisites: { cultures: ['alpha_daos' as CultureId], techs: ['matrica' as TechId] },
+    policyChoices: [
+      createPolicy('early_access', 'Early Access', '-25% building cost', 'presales', 'a', 'economy', 'building_discount', { percent: 25 }),
+      createPolicy('allocation', 'Allocation', '+3 trade route capacity', 'presales', 'b', 'wildcard', 'trade_capacity', { amount: 3 }),
+    ],
+    slotUnlocks: { economy: 1 },
+  },
+  trenching: {
+    id: 'trenching' as CultureId,
+    name: 'Trenching',
+    era: 3,
+    cost: 95,
+    prerequisites: { cultures: ['memecoin_mania' as CultureId], techs: ['discord' as TechId] },
+    policyChoices: [
+      createPolicy('in_the_trenches', 'In the Trenches', '+15% combat strength when outnumbered', 'trenching', 'a', 'military', 'outnumbered_combat', { percent: 15 }),
+      createPolicy('never_selling', 'Never Selling', '+1 Floor Price per 5 population', 'trenching', 'b', 'wildcard', 'pop_floor_price', { per: 5, amount: 1 }),
+    ],
+  },
+  delisting: {
+    id: 'delisting' as CultureId,
+    name: 'Delisting',
+    era: 3,
+    cost: 100,
+    prerequisites: { cultures: ['diamond_hands' as CultureId, 'follow_for_follow' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('floor_defense', 'Floor Defense', 'Settlements +50% defense', 'delisting', 'a', 'military', 'settlement_defense', { percent: 50 }),
+      createPolicy('exit_liquidity', 'Exit Liquidity', '+25 Gold when losing units', 'delisting', 'b', 'economy', 'unit_loss_gold', { amount: 25 }),
+    ],
+  },
+  sweeping: {
+    id: 'sweeping' as CultureId,
+    name: 'Sweeping',
+    era: 3,
+    cost: 110,
+    prerequisites: { cultures: ['degen_minting' as CultureId, 'delisting' as CultureId], techs: [] },
+    policyChoices: [
+      createPolicy('buy_the_dip', 'Buy the Dip', '+30% Gold from trade routes', 'sweeping', 'a', 'economy', 'trade_gold_percent', { percent: 30 }),
+      createPolicy('collection_complete', 'Collection Complete', '+5 Floor Price per 10 tiles', 'sweeping', 'b', 'wildcard', 'tile_floor_price', { per: 10, amount: 5 }),
+    ],
+  },
+  rugging: {
+    id: 'rugging' as CultureId,
+    name: 'Rugging',
+    era: 3,
+    cost: 120,
+    prerequisites: { cultures: ['fudding' as CultureId], techs: ['hacking' as TechId] },
+    policyChoices: [
+      createPolicy('exit_scam', 'Exit Scam', '+100% pillage damage', 'rugging', 'a', 'military', 'pillage_damage', { percent: 100 }),
+      createPolicy('insider_trading', 'Insider Trading', 'See enemy production queues', 'rugging', 'b', 'wildcard', 'enemy_vision', { scope: 'production' }),
+    ],
+    slotUnlocks: { wildcard: 1 },
   },
 }
 

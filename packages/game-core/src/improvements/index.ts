@@ -135,13 +135,23 @@ export function canBuildImprovement(
 
   const improvement = IMPROVEMENT_DEFINITIONS[improvementType]
 
+  // Check improvement definition exists
+  if (!improvement) {
+    console.error('[canBuildImprovement] No improvement definition for:', improvementType)
+    return { canBuild: false, reason: `Unknown improvement: ${improvementType}` }
+  }
+
   // Check if tile already has an improvement
   if (tile.improvement) {
     return { canBuild: false, reason: 'Tile already improved' }
   }
 
-  // Check terrain validity
-  if (!improvement.validTerrain.includes(tile.terrain)) {
+  // Check terrain validity using string comparison for robustness
+  const tileTerrain = String(tile.terrain).trim()
+  const validTerrains = improvement.validTerrain.map(t => String(t).trim())
+  const terrainValid = validTerrains.includes(tileTerrain)
+
+  if (!terrainValid) {
     return { canBuild: false, reason: `Cannot build ${improvement.name} on ${tile.terrain}` }
   }
 
@@ -153,8 +163,12 @@ export function canBuildImprovement(
   // Check prerequisite tech
   if (improvement.prerequisiteTech) {
     const player = state.players.find((p) => p.tribeId === builderId)
-    if (player && !player.researchedTechs.includes(improvement.prerequisiteTech as never)) {
-      return { canBuild: false, reason: `Requires ${improvement.prerequisiteTech}` }
+    if (player) {
+      const requiredTech = String(improvement.prerequisiteTech).trim()
+      const researchedTechs = player.researchedTechs.map(t => String(t).trim())
+      if (!researchedTechs.includes(requiredTech)) {
+        return { canBuild: false, reason: `Requires ${improvement.prerequisiteTech}` }
+      }
     }
   }
 
@@ -164,7 +178,9 @@ export function canBuildImprovement(
     if (!tile.resource?.revealed) {
       return { canBuild: false, reason: `${improvement.name} requires a resource` }
     }
-    if (!improvement.validResources.includes(tile.resource.type)) {
+    const tileResource = String(tile.resource.type).trim()
+    const validResources = improvement.validResources.map(r => String(r).trim())
+    if (!validResources.includes(tileResource)) {
       return { canBuild: false, reason: `${improvement.name} not valid for ${tile.resource.type}` }
     }
   }

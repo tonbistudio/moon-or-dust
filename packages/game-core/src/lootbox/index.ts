@@ -87,7 +87,7 @@ export type RewardDetails =
   | { type: 'airdrop'; gold: number }
   | { type: 'alpha_leak'; techId: string }
   | { type: 'og_holder'; unitId: string; unitType: string }
-  | { type: 'community_growth'; settlementId: string; populationAdded: number }
+  | { type: 'community_growth'; settlementId: string; growthAdded: number }
   | { type: 'scout'; hexesRevealed: number }
 
 /**
@@ -278,9 +278,11 @@ function applyOgHolderReward(
 }
 
 /**
- * Community Growth: +3 population to capital
+ * Community Growth: +20 growth progress to capital (enough for ~1 level)
  */
 function applyCommunityGrowthReward(state: GameState, tribeId: TribeId): ApplyRewardResult {
+  const GROWTH_BONUS = 20
+
   // Find capital
   const settlements = getPlayerSettlements(state, tribeId)
   const capital = settlements.find((s) => s.isCapital)
@@ -291,13 +293,13 @@ function applyCommunityGrowthReward(state: GameState, tribeId: TribeId): ApplyRe
     if (!firstSettlement) {
       return {
         state,
-        details: { type: 'community_growth', settlementId: 'none', populationAdded: 0 },
+        details: { type: 'community_growth', settlementId: 'none', growthAdded: 0 },
       }
     }
 
     const updatedSettlement: Settlement = {
       ...firstSettlement,
-      population: firstSettlement.population + 3,
+      growthProgress: firstSettlement.growthProgress + GROWTH_BONUS,
     }
 
     const newState = updateSettlement(state, updatedSettlement)
@@ -307,14 +309,14 @@ function applyCommunityGrowthReward(state: GameState, tribeId: TribeId): ApplyRe
       details: {
         type: 'community_growth',
         settlementId: firstSettlement.id,
-        populationAdded: 3,
+        growthAdded: GROWTH_BONUS,
       },
     }
   }
 
   const updatedCapital: Settlement = {
     ...capital,
-    population: capital.population + 3,
+    growthProgress: capital.growthProgress + GROWTH_BONUS,
   }
 
   const newState = updateSettlement(state, updatedCapital)
@@ -324,7 +326,7 @@ function applyCommunityGrowthReward(state: GameState, tribeId: TribeId): ApplyRe
     details: {
       type: 'community_growth',
       settlementId: capital.id,
-      populationAdded: 3,
+      growthAdded: GROWTH_BONUS,
     },
   }
 }

@@ -1,6 +1,6 @@
 // Hook for easy access to game state and actions
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
 import type {
   HexCoord,
   SettlementId,
@@ -233,99 +233,18 @@ export function useTileClick() {
 }
 
 /**
- * Hook for handling right-click (movement/attack)
- * Uses refs to avoid stale closure issues with selectedUnit
+ * Hook for handling right-click (deselect unit/settlement)
  */
 export function useTileRightClick() {
-  const { state, selectedUnit, dispatch, addEvent } = useGameContext()
-
-  // Use refs to always get the latest values in the callback
-  const stateRef = useRef(state)
-  const selectedUnitRef = useRef(selectedUnit)
-  const addEventRef = useRef(addEvent)
-  stateRef.current = state
-  selectedUnitRef.current = selectedUnit
-  addEventRef.current = addEvent
+  const { selectUnit, selectSettlement } = useGameContext()
 
   return useCallback(
-    (coord: HexCoord) => {
-      const currentState = stateRef.current
-      const currentSelectedUnit = selectedUnitRef.current
-      const currentAddEvent = addEventRef.current
-
-      if (!currentState || !currentSelectedUnit) return
-
-      const unit = currentState.units.get(currentSelectedUnit)
-      if (!unit || unit.owner !== currentState.currentPlayer) return
-
-      const key = hexKey(coord)
-
-      // Check for enemy units at target
-      const enemyUnitsAtTile: Unit[] = []
-      for (const u of currentState.units.values()) {
-        if (hexKey(u.position) === key && u.owner !== currentState.currentPlayer) {
-          enemyUnitsAtTile.push(u)
-        }
-      }
-
-      // If there are enemy units, try to attack
-      if (enemyUnitsAtTile.length > 0 && !unit.hasActed) {
-        const target = enemyUnitsAtTile[0]!
-        const attackerHealthBefore = unit.health
-        const targetHealthBefore = target.health
-        const result = dispatch({
-          type: 'ATTACK',
-          attackerId: currentSelectedUnit,
-          targetId: target.id,
-        })
-        if (result.success && result.state) {
-          // Calculate damage from new state
-          const newAttacker = result.state.units.get(currentSelectedUnit)
-          const newTarget = result.state.units.get(target.id)
-          const attackerDamage = newAttacker ? attackerHealthBefore - newAttacker.health : attackerHealthBefore
-          const targetDamage = newTarget ? targetHealthBefore - newTarget.health : targetHealthBefore
-
-          // Find tribe names for the message
-          const attackerPlayer = currentState.players.find(p => p.tribeId === unit.owner)
-          const targetPlayer = currentState.players.find(p => p.tribeId === target.owner)
-          const attackerTribe = attackerPlayer?.tribeName ?? 'Unknown'
-          const targetTribe = targetPlayer?.tribeName ?? 'Unknown'
-
-          // Format unit type names
-          const formatType = (type: string) => type.replace(/_/g, ' ')
-
-          // Build message
-          let message = `${attackerTribe} ${formatType(unit.type)}`
-          if (attackerDamage > 0) message += ` (-${attackerDamage} HP)`
-          message += ` attacks ${targetTribe} ${formatType(target.type)}`
-          message += ` (-${targetDamage} HP)`
-          if (!newTarget) message += ' - KILLED!'
-          if (!newAttacker) message += ' - Attacker died!'
-
-          currentAddEvent(message, 'combat')
-
-          // Keep unit selected after attack
-          return
-        }
-      }
-
-      // Otherwise, try to move
-      if (unit.movementRemaining > 0) {
-        // Don't move if clicking the same tile
-        if (hexKey(unit.position) !== key) {
-          const result = dispatch({
-            type: 'MOVE_UNIT',
-            unitId: currentSelectedUnit,
-            to: coord,
-          })
-          if (result.success) {
-            // Keep unit selected after move
-            return
-          }
-        }
-      }
+    (_coord: HexCoord) => {
+      // Right click clears all selections
+      selectUnit(null)
+      selectSettlement(null)
     },
-    [dispatch]
+    [selectUnit, selectSettlement]
   )
 }
 

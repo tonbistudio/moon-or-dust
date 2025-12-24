@@ -1,19 +1,21 @@
 // HUD overlay container for game UI elements
 
 import { useState, useMemo } from 'react'
-import type { TechId, HexCoord, Unit } from '@tribes/game-core'
-import { getTech, getResearchProgress, getTurnsToComplete, hexKey, getValidTargets } from '@tribes/game-core'
+import type { TechId, CultureId, HexCoord, Unit, SettlementId } from '@tribes/game-core'
+import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone } from '@tribes/game-core'
 import { useGame, useCurrentPlayer, useSelectedSettlement, useSelectedUnit } from '../hooks/useGame'
 import { useGameContext } from '../context/GameContext'
 import { SettlementPanel } from './SettlementPanel'
 import { UnitActionsPanel } from './UnitActionsPanel'
 import { TechTreePanel } from './tech'
+import { CulturePanel } from './culture'
 import { LootboxRewardPopup } from './LootboxRewardPopup'
 import { YieldIcon } from './YieldIcon'
 import { CombatPreviewPanel } from './CombatPreviewPanel'
 import { EventLog } from './EventLog'
 import { DiplomacyPanel } from './DiplomacyPanel'
 import { WarConfirmationPopup } from './WarConfirmationPopup'
+import { MilestonePanel } from './MilestonePanel'
 
 interface GameUIProps {
   hoveredTile?: HexCoord | null
@@ -33,6 +35,7 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
   const selectedSettlement = useSelectedSettlement()
   const selectedUnit = useSelectedUnit()
   const [showTechTree, setShowTechTree] = useState(false)
+  const [showCulturePanel, setShowCulturePanel] = useState(false)
 
   // Find enemy unit on hovered tile for combat preview
   const hoveredEnemy: Unit | null = useMemo(() => {
@@ -45,6 +48,17 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
     return targets.find(t => hexKey(t.position) === hoveredKey) ?? null
   }, [state, hoveredTile, selectedUnit])
 
+  // Find first settlement owned by current player with pending milestones
+  const settlementWithPendingMilestone = useMemo(() => {
+    if (!state) return null
+    for (const settlement of state.settlements.values()) {
+      if (settlement.owner === state.currentPlayer && hasPendingMilestone(settlement)) {
+        return settlement
+      }
+    }
+    return null
+  }, [state])
+
   if (!state || !currentPlayer) return null
 
   const handleEndTurn = () => {
@@ -56,10 +70,30 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
     setShowTechTree(false)
   }
 
+  const handleSelectCulture = (cultureId: CultureId) => {
+    dispatch({ type: 'START_CULTURE', cultureId })
+    setShowCulturePanel(false)
+  }
+
+  const handleSelectMilestone = (level: number, choice: 'a' | 'b') => {
+    if (!settlementWithPendingMilestone) return
+    dispatch({
+      type: 'SELECT_MILESTONE',
+      settlementId: settlementWithPendingMilestone.id as SettlementId,
+      level,
+      choice,
+    })
+  }
+
   // Current research info
   const currentResearch = currentPlayer.currentResearch ? getTech(currentPlayer.currentResearch) : null
   const progress = getResearchProgress(currentPlayer)
   const turnsRemaining = getTurnsToComplete(currentPlayer)
+
+  // Current culture info
+  const currentCulture = currentPlayer.currentCulture ? getCulture(currentPlayer.currentCulture) : null
+  const cultureProgress = getCultureProgress(currentPlayer)
+  const cultureTurnsRemaining = getTurnsToCompleteCulture(currentPlayer)
 
   // Check if selected settlement belongs to current player
   const canInteractWithSettlement =
@@ -127,6 +161,34 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
             )}
           </button>
 
+          {/* Culture Button with Progress */}
+          <button
+            onClick={() => setShowCulturePanel(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '4px 12px',
+              background: currentCulture ? '#2a1a3a' : '#2a2a3a',
+              border: '1px solid #ba68c8',
+              borderRadius: '4px',
+              color: '#ba68c8',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            {currentCulture ? (
+              <>
+                <span>{currentCulture.name}</span>
+                <span style={{ color: '#888', fontSize: '11px' }}>
+                  ({cultureProgress?.percent ?? 0}% - {cultureTurnsRemaining === null ? '∞' : cultureTurnsRemaining}t)
+                </span>
+              </>
+            ) : (
+              <span>Culture</span>
+            )}
+          </button>
+
           {/* Diplomacy Panel */}
           <DiplomacyPanel currentPlayer={currentPlayer} />
         </div>
@@ -182,6 +244,17 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
         </div>
       )}
 
+      {/* Culture Panel Modal */}
+      {showCulturePanel && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <CulturePanel
+            player={currentPlayer}
+            onSelectCulture={handleSelectCulture}
+            onClose={() => setShowCulturePanel(false)}
+          />
+        </div>
+      )}
+
       {/* Lootbox Reward Popup */}
       {pendingLootboxReward && (
         <div style={{ pointerEvents: 'auto' }}>
@@ -200,6 +273,17 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
             defenderTribe={pendingWarAttack.defenderTribe}
             onConfirm={confirmWarAttack}
             onCancel={cancelWarAttack}
+          />
+        </div>
+      )}
+
+      {/* Milestone Selection Panel */}
+      {settlementWithPendingMilestone && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <MilestonePanel
+            settlement={settlementWithPendingMilestone}
+            onSelect={handleSelectMilestone}
+            onDismiss={() => {}}
           />
         </div>
       )}

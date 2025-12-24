@@ -94,8 +94,8 @@ describe('createInitialState', () => {
 
   it('initializes empty map', () => {
     const state = createInitialState(config)
-    expect(state.map.width).toBe(15)
-    expect(state.map.height).toBe(15)
+    expect(state.map.width).toBe(20)
+    expect(state.map.height).toBe(20)
     expect(state.map.tiles.size).toBe(0)
   })
 
@@ -258,23 +258,24 @@ describe('calculateFloorPrice', () => {
             name: 'Test City',
             owner: state.currentPlayer,
             position: { q: 0, r: 0 },
-            population: 5,
-            level: 1,
-            populationProgress: 0,
-            populationThreshold: 10,
+            level: 2,
+            growthProgress: 0,
+            growthThreshold: 20,
             buildings: [],
             productionQueue: [],
             currentProduction: 0,
             milestonesChosen: [],
             isCapital: true,
+            health: 35,
+            maxHealth: 35,
           },
         ],
       ]),
     }
 
     const score = calculateFloorPrice(settlementState, state.currentPlayer)
-    // 10 for settlement + 5 for population = 15
-    expect(score).toBe(15)
+    // 10 for settlement + 10 for level 2 (2 * 5) = 20
+    expect(score).toBe(20)
   })
 
   it('adds points for gold in treasury', () => {

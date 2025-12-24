@@ -5,10 +5,11 @@ import type {
   Settlement,
   MilestoneChoice,
   TribeId,
+  Tile,
 } from '../types'
-import { hexRange, hexKey } from '../hex'
+import { hexNeighbors, hexKey } from '../hex'
 import { createUnit } from '../units'
-import { updateSettlement } from '../settlements'
+import { updateSettlement, calculateTileYields } from '../settlements'
 
 // =============================================================================
 // Milestone Definitions
@@ -30,79 +31,81 @@ export type MilestoneEffect =
   | { type: 'gold_per_turn'; amount: number }
   | { type: 'instant_gold'; amount: number }
   | { type: 'free_unit'; unitType: string }
-  | { type: 'border_expansion'; radius: number }
-  | { type: 'population_boom'; amount: number }
+  | { type: 'border_expansion'; tiles: number }
+  | { type: 'growth_boost'; amount: number }
   | { type: 'culture_boost'; amount: number }
   | { type: 'unique_unit' }
   | { type: 'floor_price_bonus'; amount: number }
   | { type: 'production_bonus'; percent: number }
   | { type: 'growth_bonus'; percent: number }
 
+/** Milestones trigger every N levels */
+const MILESTONE_INTERVAL = 5
+
 export const MILESTONE_REWARDS: MilestoneReward[] = [
   {
-    level: 2,
+    level: 5,
     optionA: {
-      name: 'Workshop',
-      description: '+1 Gold per turn from this settlement',
-      effect: { type: 'gold_per_turn', amount: 1 },
-    },
-    optionB: {
       name: 'Free Scout',
       description: 'Receive a free Scout unit',
       effect: { type: 'free_unit', unitType: 'scout' },
     },
-  },
-  {
-    level: 3,
-    optionA: {
-      name: 'Bonus Gold',
-      description: 'Receive 10 Gold immediately',
-      effect: { type: 'instant_gold', amount: 10 },
-    },
     optionB: {
       name: 'Border Expansion',
-      description: 'Expand settlement borders by 1 tile radius',
-      effect: { type: 'border_expansion', radius: 1 },
+      description: 'Expand settlement borders by 2 tiles',
+      effect: { type: 'border_expansion', tiles: 2 },
     },
   },
   {
-    level: 4,
-    optionA: {
-      name: 'Population Boom',
-      description: '+3 Population to this settlement',
-      effect: { type: 'population_boom', amount: 3 },
-    },
-    optionB: {
-      name: 'Culture Push',
-      description: 'Gain 5 Culture immediately',
-      effect: { type: 'culture_boost', amount: 5 },
-    },
-  },
-  {
-    level: 5,
+    level: 10,
     optionA: {
       name: 'Tribal Champion',
-      description: 'Receive your tribe\'s unique unit',
+      description: "Receive your tribe's unique unit",
       effect: { type: 'unique_unit' },
     },
     optionB: {
       name: 'Grand Monument',
-      description: '+20 Floor Price permanently',
-      effect: { type: 'floor_price_bonus', amount: 20 },
+      description: '+25 Floor Price permanently',
+      effect: { type: 'floor_price_bonus', amount: 25 },
     },
   },
-  // Repeating level 5+ milestone for further growth
   {
-    level: 6,
+    level: 15,
     optionA: {
-      name: 'Production Focus',
-      description: '+15% Production in this settlement',
-      effect: { type: 'production_bonus', percent: 15 },
+      name: 'Free Warrior',
+      description: 'Receive a free Warrior unit',
+      effect: { type: 'free_unit', unitType: 'warrior' },
     },
     optionB: {
-      name: 'Growth Focus',
-      description: '+15% Growth in this settlement',
-      effect: { type: 'growth_bonus', percent: 15 },
+      name: 'Gold Rush',
+      description: 'Receive 50 Gold immediately',
+      effect: { type: 'instant_gold', amount: 50 },
+    },
+  },
+  {
+    level: 20,
+    optionA: {
+      name: 'Elite Champion',
+      description: "Receive your tribe's unique unit",
+      effect: { type: 'unique_unit' },
+    },
+    optionB: {
+      name: 'Legendary Monument',
+      description: '+50 Floor Price permanently',
+      effect: { type: 'floor_price_bonus', amount: 50 },
+    },
+  },
+  {
+    level: 25,
+    optionA: {
+      name: 'Production Mastery',
+      description: '+25% Production in this settlement',
+      effect: { type: 'production_bonus', percent: 25 },
+    },
+    optionB: {
+      name: 'Growth Mastery',
+      description: '+25% Growth in this settlement',
+      effect: { type: 'growth_bonus', percent: 25 },
     },
   },
 ]
@@ -112,38 +115,46 @@ export const MILESTONE_REWARDS: MilestoneReward[] = [
 // =============================================================================
 
 /**
+ * Checks if a level is a milestone level (multiple of MILESTONE_INTERVAL)
+ */
+export function isMilestoneLevel(level: number): boolean {
+  return level > 0 && level % MILESTONE_INTERVAL === 0
+}
+
+/**
  * Gets the milestone reward options for a level
+ * Returns null if level is not a milestone level
  */
 export function getMilestoneForLevel(level: number): MilestoneReward | null {
+  if (!isMilestoneLevel(level)) return null
+
   const milestone = MILESTONE_REWARDS.find((m) => m.level === level)
   if (milestone) return milestone
 
-  // For levels beyond defined, cycle through level 5-6 options
-  if (level > 6) {
-    const index = (level - 5) % 2
-    return MILESTONE_REWARDS[4 + index] || null
+  // For levels beyond defined milestones, cycle through the last two
+  if (level > 25) {
+    const cycleIndex = ((level / MILESTONE_INTERVAL - 5) % 2)
+    return MILESTONE_REWARDS[3 + cycleIndex] || MILESTONE_REWARDS[MILESTONE_REWARDS.length - 1] || null
   }
 
   return null
 }
 
 /**
- * Checks if a settlement has pending milestone choice
+ * Checks if a settlement has any pending milestone choices
  */
 export function hasPendingMilestone(settlement: Settlement): boolean {
-  // Check if current level has no choice recorded
-  const currentLevel = settlement.level
-  const hasChoice = settlement.milestonesChosen.some((m) => m.level === currentLevel)
-  return currentLevel >= 2 && !hasChoice
+  return getPendingMilestones(settlement).length > 0
 }
 
 /**
- * Gets list of pending milestones for a settlement
+ * Gets list of pending milestone levels for a settlement
  */
 export function getPendingMilestones(settlement: Settlement): number[] {
   const pending: number[] = []
 
-  for (let level = 2; level <= settlement.level; level++) {
+  // Check all milestone levels up to current level
+  for (let level = MILESTONE_INTERVAL; level <= settlement.level; level += MILESTONE_INTERVAL) {
     const hasChoice = settlement.milestonesChosen.some((m) => m.level === level)
     if (!hasChoice) {
       pending.push(level)
@@ -170,8 +181,8 @@ export function selectMilestone(
   const settlement = state.settlements.get(settlementId as never)
   if (!settlement) return null
 
-  // Verify level is valid
-  if (level > settlement.level || level < 2) return null
+  // Verify level is valid (must be a milestone level and not exceed current level)
+  if (!isMilestoneLevel(level) || level > settlement.level) return null
 
   // Verify not already chosen
   const alreadyChosen = settlement.milestonesChosen.some((m) => m.level === level)
@@ -218,10 +229,10 @@ function applyMilestoneEffect(
       return spawnFreeUnit(state, settlement, effect.unitType)
 
     case 'border_expansion':
-      return expandBorders(state, settlement, effect.radius)
+      return expandBorders(state, settlement, effect.tiles)
 
-    case 'population_boom':
-      return addPopulation(state, settlement.id as never, effect.amount)
+    case 'growth_boost':
+      return addGrowth(state, settlement.id as never, effect.amount)
 
     case 'culture_boost':
       return addCultureToPlayer(state, settlement.owner, effect.amount)
@@ -314,40 +325,76 @@ function spawnUniqueUnit(state: GameState, settlement: Settlement): GameState {
   return { ...state, units: newUnits }
 }
 
+/**
+ * Expands borders by claiming N best-yield tiles adjacent to owned territory
+ */
 function expandBorders(
   state: GameState,
   settlement: Settlement,
-  additionalRadius: number
+  tilesToAdd: number
 ): GameState {
-  const currentRadius = 1 // Settlements start with radius 1
-  const newRadius = currentRadius + additionalRadius
+  let currentState = state
 
-  const newTiles = new Map(state.map.tiles)
-  const range = hexRange(settlement.position, newRadius)
+  for (let i = 0; i < tilesToAdd; i++) {
+    // Get all currently owned tiles
+    const ownedTileKeys = new Set<string>()
+    for (const [key, tile] of currentState.map.tiles) {
+      if (tile.owner === settlement.owner) {
+        ownedTileKeys.add(key)
+      }
+    }
 
-  for (const coord of range) {
-    const key = hexKey(coord)
-    const tile = newTiles.get(key)
+    // Find candidate tiles: unowned tiles adjacent to owned territory
+    const candidateTiles: Array<{ key: string; tile: Tile; totalYield: number }> = []
 
-    // Claim unclaimed tiles
-    if (tile && !tile.owner) {
-      newTiles.set(key, {
-        ...tile,
-        owner: settlement.owner,
-      })
+    for (const ownedKey of ownedTileKeys) {
+      const [qStr, rStr] = ownedKey.split(',')
+      const coord = { q: parseInt(qStr!, 10), r: parseInt(rStr!, 10) }
+
+      for (const neighborCoord of hexNeighbors(coord)) {
+        const neighborKey = hexKey(neighborCoord)
+
+        // Skip if already owned or already in candidates
+        if (ownedTileKeys.has(neighborKey)) continue
+        if (candidateTiles.some((c) => c.key === neighborKey)) continue
+
+        const tile = currentState.map.tiles.get(neighborKey)
+        if (!tile || tile.owner) continue // Skip if no tile or already owned by someone
+
+        // Skip unworkable terrain (water, mountain)
+        if (tile.terrain === 'water' || tile.terrain === 'mountain') continue
+
+        // Calculate total yield
+        const yields = calculateTileYields(tile)
+        const totalYield = yields.gold + yields.alpha + yields.vibes + yields.production + yields.growth
+
+        candidateTiles.push({ key: neighborKey, tile, totalYield })
+      }
+    }
+
+    if (candidateTiles.length === 0) break
+
+    // Sort by yield (highest first) and pick the best
+    candidateTiles.sort((a, b) => b.totalYield - a.totalYield)
+    const bestTile = candidateTiles[0]!
+
+    // Claim the tile
+    const newTiles = new Map(currentState.map.tiles)
+    newTiles.set(bestTile.key, { ...bestTile.tile, owner: settlement.owner })
+
+    currentState = {
+      ...currentState,
+      map: {
+        ...currentState.map,
+        tiles: newTiles,
+      },
     }
   }
 
-  return {
-    ...state,
-    map: {
-      ...state.map,
-      tiles: newTiles,
-    },
-  }
+  return currentState
 }
 
-function addPopulation(
+function addGrowth(
   state: GameState,
   settlementId: string,
   amount: number
@@ -357,7 +404,7 @@ function addPopulation(
 
   const updatedSettlement: Settlement = {
     ...settlement,
-    population: settlement.population + amount,
+    growthProgress: settlement.growthProgress + amount,
   }
 
   return updateSettlement(state, updatedSettlement)

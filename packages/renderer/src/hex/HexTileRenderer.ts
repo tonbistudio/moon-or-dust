@@ -1,6 +1,6 @@
 import { Container, Graphics, Text, TextStyle, Sprite, Texture, Assets } from 'pixi.js'
 import type { GameState, HexCoord, Tile, TerrainType, Lootbox, TribeId, Settlement } from '@tribes/game-core'
-import { hexToPixel, getTribe, hexRange, hexKey, calculateTileYields, type HexLayout } from '@tribes/game-core'
+import { hexToPixel, getTribe, hexRange, hexKey, hexNeighbors, calculateTileYields, type HexLayout } from '@tribes/game-core'
 
 // Terrain sprite system loaded
 
@@ -209,14 +209,11 @@ export class HexTileRenderer {
     return (
       newState.map.width !== oldState.map.width ||
       newState.map.height !== oldState.map.height ||
-      // Rebuild if tiles Map is a different object (any tile change creates new Map)
       newState.map.tiles !== oldState.map.tiles ||
-      // Also check if improvement count changed (backup check)
       countImprovements(newState) !== countImprovements(oldState) ||
       newState.settlements.size !== oldState.settlements.size ||
       newState.lootboxes.length !== oldState.lootboxes.length ||
       this.lootboxClaimedChanged(newState, oldState) ||
-      // Check if any settlement level changed (for castle upgrade)
       this.settlementLevelChanged(newState, oldState)
     )
   }
@@ -310,7 +307,7 @@ export class HexTileRenderer {
     if (texture) {
       const sprite = new Sprite(texture)
       // Anchor adjusted - higher y shifts sprite up
-      sprite.anchor.set(0.5, 0.65)
+      sprite.anchor.set(0.5, 0.66)
       // Scale sprite to fit hex - stretch taller to match grid
       const baseScale = (this.hexSize * 2.6) / texture.height
       sprite.scale.set(baseScale, baseScale * 1.15)
@@ -348,11 +345,11 @@ export class HexTileRenderer {
       }
     }
 
-    // Draw territory border if owned
+    // Draw territory border if owned (only on outer edges)
     if (tile.owner) {
       const borderGraphics = new Graphics()
       const tribeColor = this.getTribeColor(state, tile.owner)
-      this.drawTerritoryBorder(borderGraphics, 0, 0, tribeColor)
+      this.drawTerritoryBorder(borderGraphics, 0, 0, tribeColor, tile.coord, tile.owner, state)
       container.addChild(borderGraphics)
     }
 
@@ -441,17 +438,7 @@ export class HexTileRenderer {
     const yOffset = this.hexSize * 0.3
 
     if (texture) {
-      // Add gold border FIRST if improved (renders behind sprite)
-      if (improved) {
-        const border = new Graphics()
-        // Draw filled gold circle as background glow
-        border.circle(0, yOffset, size * 0.65)
-        border.fill({ color: 0xffd700, alpha: 0.4 })
-        border.stroke({ color: 0xffd700, width: 4 })
-        container.addChild(border)
-      }
-
-      // Create sprite with resource icon (no tint - pixel art has its own colors)
+      // Create sprite with resource icon
       const sprite = new Sprite(texture)
       sprite.anchor.set(0.5)
       // Scale to fit while maintaining aspect ratio
@@ -459,42 +446,83 @@ export class HexTileRenderer {
       sprite.scale.set(scale)
       sprite.y = yOffset
       container.addChild(sprite)
+
+      // Add green checkmark overlay when improved
+      if (improved) {
+        const checkmark = new Text({
+          text: '✓',
+          style: {
+            fontSize: this.hexSize * 0.35,
+            fill: 0x22ff22,
+            fontWeight: 'bold',
+            stroke: { color: 0x000000, width: 3 },
+          }
+        })
+        checkmark.anchor.set(0.5)
+        checkmark.x = size * 0.4
+        checkmark.y = yOffset + size * 0.3
+        container.addChild(checkmark)
+      }
     } else {
       // Fallback to colored circle if texture not loaded
-      if (improved) {
-        const border = new Graphics()
-        border.circle(0, yOffset, size * 0.55)
-        border.fill({ color: 0xffd700, alpha: 0.4 })
-        border.stroke({ color: 0xffd700, width: 3 })
-        container.addChild(border)
-      }
       const graphics = new Graphics()
       graphics.circle(0, yOffset, size * 0.4)
-      graphics.fill({ color: 0x888888 })
+      graphics.fill({ color: improved ? 0x22ff22 : 0x888888 })
       container.addChild(graphics)
     }
 
     return container
   }
 
+  /**
+   * Draw territory border - only on edges where neighbor is not owned by same player
+   */
   private drawTerritoryBorder(
     graphics: Graphics,
     x: number,
     y: number,
-    color: number
+    color: number,
+    coord: HexCoord,
+    owner: TribeId,
+    state: GameState
   ): void {
-    const points: number[] = []
     const borderSize = this.hexSize * 0.95
 
-    for (let i = 0; i < 6; i++) {
+    // Get hex vertices (pointy-top orientation)
+    const getVertex = (i: number) => {
       const angleDeg = 60 * i - 30
       const angleRad = (Math.PI / 180) * angleDeg
-      points.push(x + borderSize * Math.cos(angleRad))
-      points.push(y + borderSize * Math.sin(angleRad))
+      return {
+        x: x + borderSize * Math.cos(angleRad),
+        y: y + borderSize * Math.sin(angleRad),
+      }
     }
 
-    graphics.poly(points)
-    graphics.stroke({ color, width: 2, alpha: 0.5 })
+    // Map edge index to neighbor direction index
+    // Edge 0 (right) → East (0), Edge 1 (bottom-right) → Southeast (5)
+    // Edge 2 (bottom-left) → Southwest (4), Edge 3 (left) → West (3)
+    // Edge 4 (top-left) → Northwest (2), Edge 5 (top-right) → Northeast (1)
+    const edgeToNeighborIndex = [0, 5, 4, 3, 2, 1]
+
+    const neighbors = hexNeighbors(coord)
+
+    // Draw only edges where neighbor is not owned by same player
+    for (let i = 0; i < 6; i++) {
+      const neighborIndex = edgeToNeighborIndex[i]!
+      const neighborCoord = neighbors[neighborIndex]!
+      const neighborKey = hexKey(neighborCoord)
+      const neighborTile = state.map.tiles.get(neighborKey)
+
+      // Draw edge if neighbor doesn't exist or is owned by different player
+      const neighborOwner = neighborTile?.owner
+      if (neighborOwner !== owner) {
+        const v1 = getVertex(i)
+        const v2 = getVertex((i + 1) % 6)
+        graphics.moveTo(v1.x, v1.y)
+        graphics.lineTo(v2.x, v2.y)
+        graphics.stroke({ color, width: 3, alpha: 0.8 })
+      }
+    }
   }
 
   /**

@@ -297,7 +297,7 @@ describe('Reward Effects', () => {
     }
   })
 
-  it('community_growth adds population to capital', () => {
+  it('community_growth adds growth to capital', () => {
     // Find seed that produces community_growth
     let rng = createRng(1)
     let result = null
@@ -313,17 +313,17 @@ describe('Reward Effects', () => {
       const details = result.details as {
         type: 'community_growth'
         settlementId: string
-        populationAdded: number
+        growthAdded: number
       }
       expect(details.type).toBe('community_growth')
-      expect(details.populationAdded).toBe(3)
+      expect(details.growthAdded).toBe(20)
 
-      // Check settlement population increased
-      const originalPop = Array.from(state.settlements.values())[0]!.population
+      // Check settlement growth progress increased
+      const originalGrowth = Array.from(state.settlements.values())[0]!.growthProgress
       const newSettlement = Array.from(result.state.settlements.values()).find(
         (s) => s.isCapital
       )
-      expect(newSettlement!.population).toBe(originalPop + 3)
+      expect(newSettlement!.growthProgress).toBe(originalGrowth + 20)
     }
   })
 

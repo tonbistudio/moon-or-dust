@@ -61,7 +61,7 @@ export function ProductionPanel({ settlement, onClose }: ProductionPanelProps): 
             Production - {settlement.name}
           </h2>
           <div style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-            Level {settlement.level} | Pop {settlement.population}
+            Level {settlement.level}
           </div>
         </div>
         <button

@@ -10,7 +10,7 @@ import type {
   TribeName,
 } from '../types'
 import { generateSettlementId } from '../state'
-import { hexKey, hexRange } from '../hex'
+import { hexKey, hexRange, hexNeighbors } from '../hex'
 import { calculateBuildingYields } from '../buildings'
 import { getPlayerTribeBonuses } from '../tribes'
 
@@ -126,10 +126,9 @@ export function createSettlement(options: CreateSettlementOptions): Settlement {
     name: settlementName,
     owner,
     position,
-    population: 1,
     level: 1,
-    populationProgress: 0,
-    populationThreshold: getPopulationThreshold(1),
+    growthProgress: 0,
+    growthThreshold: getGrowthThreshold(1),
     buildings: [],
     productionQueue: [],
     currentProduction: 0,
@@ -141,80 +140,47 @@ export function createSettlement(options: CreateSettlementOptions): Settlement {
 }
 
 // =============================================================================
-// Population & Levels
+// Growth & Levels
 // =============================================================================
 
-/**
- * Population thresholds for settlement levels
- */
-const POPULATION_THRESHOLDS = [
-  0, // Level 1: 0-2 pop
-  15, // Level 2: 3-5 pop
-  30, // Level 3: 6-9 pop
-  50, // Level 4: 10-14 pop
-  75, // Level 5: 15+ pop
-]
+/** Maximum settlement level */
+const MAX_LEVEL = 25
 
 /**
- * Gets the food needed for next population
+ * Gets the growth needed to reach the next level
+ * Formula: 10 + level² (quadratic curve - gets steeper as level increases)
+ * Level 1→2: 11, Level 5→6: 35, Level 10→11: 110, Level 20→21: 410
  */
-export function getPopulationThreshold(population: number): number {
-  // Base formula: 10 + (pop * 3)
-  return 10 + population * 3
+export function getGrowthThreshold(level: number): number {
+  return 10 + level * level
 }
 
 /**
- * Gets the settlement level based on population
+ * Gets the number of bonus tiles a settlement has from leveling past 5
+ * Levels 1-5: 0 bonus tiles (just the initial 7)
+ * Level 6+: +1 tile per level past 5 (level 6 = 1 bonus, level 7 = 2 bonus, etc.)
  */
-export function getSettlementLevel(population: number): number {
-  for (let i = POPULATION_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (population >= POPULATION_THRESHOLDS[i]!) {
-      return i + 1
-    }
+export function getSettlementBonusTiles(level: number): number {
+  if (level <= 5) {
+    return 0
   }
-  return 1
-}
-
-/**
- * Checks if a settlement reached a new level (triggers milestone choice)
- */
-export function hasReachedNewLevel(settlement: Settlement, newPopulation: number): boolean {
-  const oldLevel = getSettlementLevel(settlement.population)
-  const newLevel = getSettlementLevel(newPopulation)
-  return newLevel > oldLevel
-}
-
-/**
- * Gets the population needed for a specific level
- */
-export function getPopulationForLevel(level: number): number {
-  if (level <= 1) return 0
-  if (level > POPULATION_THRESHOLDS.length) return POPULATION_THRESHOLDS[POPULATION_THRESHOLDS.length - 1]!
-  return POPULATION_THRESHOLDS[level - 1]!
+  return level - 5
 }
 
 /**
  * Gets the progress toward the next level as a percentage (0-100)
- * Also returns the population needed for next level
  */
-export function getLevelProgress(population: number): {
+export function getLevelProgress(settlement: Settlement): {
   progress: number
-  currentLevelPop: number
-  nextLevelPop: number | null
+  current: number
+  threshold: number
 } {
-  const level = getSettlementLevel(population)
-  const currentLevelPop = getPopulationForLevel(level)
-  const nextLevelPop = level < POPULATION_THRESHOLDS.length ? getPopulationForLevel(level + 1) : null
-
-  if (nextLevelPop === null) {
-    return { progress: 100, currentLevelPop, nextLevelPop }
+  if (settlement.level >= MAX_LEVEL) {
+    return { progress: 100, current: settlement.growthProgress, threshold: settlement.growthThreshold }
   }
 
-  const populationIntoLevel = population - currentLevelPop
-  const populationNeeded = nextLevelPop - currentLevelPop
-  const progress = Math.min(100, Math.floor((populationIntoLevel / populationNeeded) * 100))
-
-  return { progress, currentLevelPop, nextLevelPop }
+  const progress = Math.min(100, Math.floor((settlement.growthProgress / settlement.growthThreshold) * 100))
+  return { progress, current: settlement.growthProgress, threshold: settlement.growthThreshold }
 }
 
 // =============================================================================
@@ -294,15 +260,20 @@ export function calculateTileYields(tile: Tile): Yields {
 // =============================================================================
 
 /**
- * Gets all tiles in a settlement's working range (radius 2)
+ * Gets all tiles owned by the settlement's owner within working range
+ * Only returns tiles that are owned by the same tribe as the settlement
+ * Uses a max radius of 5 to cover all possible expansions
  */
 export function getSettlementTiles(state: GameState, settlement: Settlement): Tile[] {
   const tiles: Tile[] = []
-  const range = hexRange(settlement.position, 2)
+  // Max radius of 5 covers initial 7 tiles + up to 20 bonus tiles from level 25
+  const maxRadius = 5
+  const range = hexRange(settlement.position, maxRadius)
 
   for (const coord of range) {
     const tile = state.map.tiles.get(hexKey(coord))
-    if (tile) {
+    // Only include tiles owned by the settlement's owner
+    if (tile && tile.owner === settlement.owner) {
       tiles.push(tile)
     }
   }
@@ -478,6 +449,74 @@ export function updateSettlement(state: GameState, settlement: Settlement): Game
 }
 
 /**
+ * Expands a settlement's borders by claiming ONE adjacent tile
+ * Called when a settlement levels up past level 5
+ * Chooses the unowned tile with the highest total yields
+ */
+export function expandSettlementBorders(state: GameState, settlement: Settlement): GameState {
+  // Find all tiles currently owned by this player
+  const ownedTileKeys = new Set<string>()
+  for (const [key, tile] of state.map.tiles) {
+    if (tile.owner === settlement.owner) {
+      ownedTileKeys.add(key)
+    }
+  }
+
+  // Find all unowned tiles adjacent to owned territory
+  const candidateTiles: Array<{ key: string; tile: Tile; totalYield: number }> = []
+
+  for (const ownedKey of ownedTileKeys) {
+    // Parse the key back to coordinates
+    const [qStr, rStr] = ownedKey.split(',')
+    const coord = { q: parseInt(qStr!, 10), r: parseInt(rStr!, 10) }
+
+    // Check all neighbors
+    for (const neighborCoord of hexNeighbors(coord)) {
+      const neighborKey = hexKey(neighborCoord)
+
+      // Skip if already owned or already a candidate
+      if (ownedTileKeys.has(neighborKey)) continue
+      if (candidateTiles.some(c => c.key === neighborKey)) continue
+
+      const tile = state.map.tiles.get(neighborKey)
+      if (!tile || tile.owner) continue // Skip owned or non-existent tiles
+
+      // Skip unworkable terrain (water, mountain)
+      if (tile.terrain === 'water' || tile.terrain === 'mountain') continue
+
+      // Calculate total yields for this tile
+      const yields = calculateTileYields(tile)
+      const totalYield = yields.gold + yields.alpha + yields.vibes + yields.production + yields.growth
+
+      candidateTiles.push({ key: neighborKey, tile, totalYield })
+    }
+  }
+
+  if (candidateTiles.length === 0) {
+    return state // No tiles to claim
+  }
+
+  // Sort by yield (descending) and pick the best one
+  candidateTiles.sort((a, b) => b.totalYield - a.totalYield)
+  const bestTile = candidateTiles[0]!
+
+  // Claim the tile
+  const newTiles = new Map(state.map.tiles)
+  newTiles.set(bestTile.key, {
+    ...bestTile.tile,
+    owner: settlement.owner,
+  })
+
+  return {
+    ...state,
+    map: {
+      ...state.map,
+      tiles: newTiles,
+    },
+  }
+}
+
+/**
  * Gets settlements belonging to a specific tribe
  */
 export function getPlayerSettlements(state: GameState, tribeId: TribeId): Settlement[] {
@@ -493,51 +532,47 @@ export function getPlayerSettlements(state: GameState, tribeId: TribeId): Settle
 }
 
 // =============================================================================
-// Population Growth Processing
+// Growth Processing
 // =============================================================================
 
 /**
  * Processes growth for a settlement (called at end of turn)
- * Returns updated settlement and whether a milestone was reached
+ * Returns updated settlement and whether a new level was reached (triggers milestone choice)
  */
 export function processSettlementGrowth(
   settlement: Settlement,
   growth: number
 ): { settlement: Settlement; reachedMilestone: boolean } {
-  const newProgress = settlement.populationProgress + growth
+  // Already at max level - no more growth
+  if (settlement.level >= MAX_LEVEL) {
+    return { settlement, reachedMilestone: false }
+  }
 
-  if (newProgress >= settlement.populationThreshold) {
-    // Population increased
-    const newPopulation = settlement.population + 1
-    const newLevel = getSettlementLevel(newPopulation)
-    const reachedMilestone = newLevel > settlement.level
+  const newProgress = settlement.growthProgress + growth
 
-    // Update max HP if level increased
-    const newMaxHealth = reachedMilestone
-      ? getSettlementMaxHealth(newLevel)
-      : settlement.maxHealth
+  if (newProgress >= settlement.growthThreshold) {
+    // Level up!
+    const newLevel = settlement.level + 1
+    const newMaxHealth = getSettlementMaxHealth(newLevel)
 
     return {
       settlement: {
         ...settlement,
-        population: newPopulation,
         level: newLevel,
-        populationProgress: newProgress - settlement.populationThreshold,
-        populationThreshold: getPopulationThreshold(newPopulation),
+        growthProgress: newProgress - settlement.growthThreshold,
+        growthThreshold: getGrowthThreshold(newLevel),
         maxHealth: newMaxHealth,
-        // Also heal by the HP increase amount
-        health: reachedMilestone
-          ? Math.min(settlement.health + HP_PER_LEVEL, newMaxHealth)
-          : settlement.health,
+        // Heal by the HP increase amount on level up
+        health: Math.min(settlement.health + HP_PER_LEVEL, newMaxHealth),
       },
-      reachedMilestone,
+      reachedMilestone: true,
     }
   }
 
   return {
     settlement: {
       ...settlement,
-      populationProgress: newProgress,
+      growthProgress: newProgress,
     },
     reachedMilestone: false,
   }

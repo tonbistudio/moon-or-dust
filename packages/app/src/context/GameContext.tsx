@@ -25,6 +25,9 @@ import {
   createRng,
   generateAIActions,
   areAtWar,
+  getTech,
+  getCulture,
+  getMilestoneForLevel,
   type GameConfig,
   type ActionResult,
 } from '@tribes/game-core'
@@ -398,7 +401,7 @@ function getRewardDetails(reward: LootboxReward, _state: GameState): string {
     case 'og_holder':
       return 'Free warrior unit spawned!'
     case 'community_growth':
-      return '+3 population to your capital!'
+      return 'Growth boost to your capital!'
     case 'scout':
       return 'Large area revealed on the map!'
     default:
@@ -422,6 +425,67 @@ function formatRewardName(reward: LootboxReward): string {
     default:
       return 'Mystery'
   }
+}
+
+// Detect research completion by comparing old and new player state
+function detectResearchCompletion(
+  oldState: GameState,
+  newState: GameState,
+  tribeId: TribeId
+): string | null {
+  const oldPlayer = oldState.players.find(p => p.tribeId === tribeId)
+  const newPlayer = newState.players.find(p => p.tribeId === tribeId)
+  if (!oldPlayer || !newPlayer) return null
+
+  // Check if a tech was completed (was researching, now not, and it's in completed list)
+  if (oldPlayer.currentResearch && !newPlayer.currentResearch) {
+    // Find the newly completed tech
+    const newlyCompleted = newPlayer.researchedTechs.find(
+      (techId) => !oldPlayer.researchedTechs.includes(techId)
+    )
+    if (newlyCompleted) {
+      const tech = getTech(newlyCompleted)
+      return tech?.name ?? newlyCompleted
+    }
+  }
+  return null
+}
+
+// Detect culture completion by comparing old and new player state
+function detectCultureCompletion(
+  oldState: GameState,
+  newState: GameState,
+  tribeId: TribeId
+): string | null {
+  const oldPlayer = oldState.players.find(p => p.tribeId === tribeId)
+  const newPlayer = newState.players.find(p => p.tribeId === tribeId)
+  if (!oldPlayer || !newPlayer) return null
+
+  // Check if a culture was completed
+  if (oldPlayer.currentCulture && !newPlayer.currentCulture) {
+    const newlyCompleted = newPlayer.unlockedCultures.find(
+      (cultureId) => !oldPlayer.unlockedCultures.includes(cultureId)
+    )
+    if (newlyCompleted) {
+      const culture = getCulture(newlyCompleted)
+      return culture?.name ?? newlyCompleted
+    }
+  }
+  return null
+}
+
+// Detect golden age starting
+function detectGoldenAgeStart(
+  oldState: GameState,
+  newState: GameState,
+  tribeId: TribeId
+): boolean {
+  const oldPlayer = oldState.players.find(p => p.tribeId === tribeId)
+  const newPlayer = newState.players.find(p => p.tribeId === tribeId)
+  if (!oldPlayer || !newPlayer) return false
+
+  // Golden age just started if it wasn't active before but is now
+  return !oldPlayer.goldenAge.active && newPlayer.goldenAge.active
 }
 
 export function GameProvider({ children }: { children: ReactNode }): JSX.Element {
@@ -492,6 +556,55 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
             turn: currentState.turn,
           })
         }
+      }
+
+      // Detect milestone selection
+      if (action.type === 'SELECT_MILESTONE') {
+        const settlement = currentState.settlements.get(action.settlementId)
+        const milestone = getMilestoneForLevel(action.level)
+        if (settlement && milestone) {
+          const option = action.choice === 'a' ? milestone.optionA : milestone.optionB
+          internalDispatch({
+            type: 'ADD_EVENT',
+            message: `${settlement.name} chose ${option.name} at Level ${action.level}!`,
+            eventType: 'milestone',
+            turn: currentState.turn,
+          })
+        }
+      }
+
+      // Detect research completion
+      const completedTech = detectResearchCompletion(oldState, currentState, currentState.currentPlayer)
+      if (completedTech) {
+        internalDispatch({
+          type: 'ADD_EVENT',
+          message: `Research complete: ${completedTech}!`,
+          eventType: 'research',
+          turn: currentState.turn,
+        })
+      }
+
+      // Detect culture completion
+      const completedCulture = detectCultureCompletion(oldState, currentState, currentState.currentPlayer)
+      if (completedCulture) {
+        internalDispatch({
+          type: 'ADD_EVENT',
+          message: `Culture unlocked: ${completedCulture}!`,
+          eventType: 'research',
+          turn: currentState.turn,
+        })
+      }
+
+      // Detect golden age start
+      if (detectGoldenAgeStart(oldState, currentState, currentState.currentPlayer)) {
+        const newPlayer = currentState.players.find(p => p.tribeId === currentState.currentPlayer)
+        const turns = newPlayer?.goldenAge.turnsRemaining ?? 0
+        internalDispatch({
+          type: 'ADD_EVENT',
+          message: `Golden Era begins! (+25% yields for ${turns} turns)`,
+          eventType: 'golden',
+          turn: currentState.turn,
+        })
       }
 
       // Clear events and run AI after END_TURN
