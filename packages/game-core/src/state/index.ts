@@ -46,6 +46,7 @@ import {
   addSettlement,
   canFoundSettlement,
   calculateSettlementYields,
+  calculatePlayerYields,
   processSettlementGrowth,
   expandSettlementBorders,
 } from '../settlements'
@@ -53,10 +54,29 @@ import {
   resolveCombat,
   resolveSettlementCombat,
   applySettlementCombatResult,
+  calculateHealing,
+  calculateAdjacentHealingReceived,
+  healUnit,
 } from '../combat'
 import { getSettlementMaxHealth } from '../settlements'
 import { canResearchTech, TECH_DEFINITIONS, addResearchProgress } from '../tech'
-import { canUnlockCulture, CULTURE_DEFINITIONS, completeCulture, isCultureReadyForCompletion, addCultureProgress, swapPolicies } from '../cultures'
+import {
+  canUnlockCulture,
+  CULTURE_DEFINITIONS,
+  completeCulture,
+  isCultureReadyForCompletion,
+  addCultureProgress,
+  swapPolicies,
+  calculatePolicyVisionBonus,
+  calculatePolicyKillVibes,
+  calculatePolicyPromotionVibes,
+  calculatePolicyTerritoryKillGold,
+  calculatePolicySettlePopulation,
+  calculatePolicyFloorPriceBonus,
+  calculatePolicyProductionModifiers,
+  calculatePolicyCavalryMovementBonus,
+  getPolicyFreePromotions,
+} from '../cultures'
 import { canBuildImprovement } from '../improvements'
 import {
   declareWar,
@@ -421,7 +441,7 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
       return applyStartCulture(state, action.cultureId)
 
     case 'SELECT_POLICY':
-      return applySelectPolicy(state, action.cultureId, action.choice)
+      return applySelectPolicy(state, action.choice)
 
     case 'SELECT_PROMOTION':
       return applySelectPromotion(state, action.unitId, action.promotionId)
@@ -503,8 +523,14 @@ function applyEndTurn(state: GameState): ActionResult {
   const gpRng = createRng(state.seed + state.turn * 100 + currentPlayer.charCodeAt(0))
   newState = checkAndSpawnGreatPeople(newState, currentPlayer, gpRng)
 
+  // Process unit healing (before resetting movement, so hasActed is still accurate)
+  newState = processUnitHealing(newState, currentPlayer)
+
   // Reset unit movement for current player
   newState = resetPlayerUnits(newState, currentPlayer)
+
+  // Update player yields for UI display (so turns remaining calculations work)
+  newState = updatePlayerYields(newState, currentPlayer)
 
   // Move to next player
   const nextPlayer = getNextPlayer(newState)
@@ -617,11 +643,50 @@ function handleCompletedProduction(
     case 'unit': {
       // Spawn unit at settlement
       const unitType = item.id as UnitType
-      const unit = createUnit({
+      let unit = createUnit({
         type: unitType,
         owner: settlement.owner,
         position: settlement.position,
       })
+
+      // Get player for policy bonuses
+      const player = state.players.find((p) => p.tribeId === settlement.owner)
+      if (player) {
+        // Apply cavalry_movement policy bonus (+movement for cavalry units)
+        const cavalryTypes: UnitType[] = ['horseman', 'knight', 'tank']
+        if (cavalryTypes.includes(unitType)) {
+          const cavalryBonus = calculatePolicyCavalryMovementBonus(player)
+          if (cavalryBonus > 0) {
+            unit = {
+              ...unit,
+              maxMovement: unit.maxMovement + cavalryBonus,
+              movementRemaining: unit.movementRemaining + cavalryBonus,
+            }
+          }
+        }
+
+        // Apply free_promotion policy bonus (military units start with a free promotion)
+        const freePromotions = getPolicyFreePromotions(player)
+        const def = UNIT_DEFINITIONS[unitType]
+        if (freePromotions > 0 && !def.isCivilian && def.canAttack) {
+          // Grant free promotions
+          for (let i = 0; i < freePromotions; i++) {
+            const available = getAvailablePromotions(unit)
+            if (available.length > 0) {
+              // Pick a random tier 1 promotion
+              const tier1Promotions = available.filter((p) => p.tier === 1)
+              if (tier1Promotions.length > 0) {
+                const randomPromotion = tier1Promotions[Math.floor(Math.random() * tier1Promotions.length)]!
+                const promoted = applyPromotion(unit, randomPromotion.id)
+                if (promoted) {
+                  unit = promoted
+                }
+              }
+            }
+          }
+        }
+      }
+
       return addUnit(state, unit)
     }
 
@@ -709,6 +774,34 @@ function incrementWondersBuilt(state: GameState, tribeId: TribeId): GameState {
 }
 
 /**
+ * Processes healing for all units belonging to a player
+ */
+function processUnitHealing(state: GameState, tribeId: TribeId): GameState {
+  const newUnits = new Map(state.units)
+
+  for (const [unitId, unit] of state.units) {
+    if (unit.owner !== tribeId) continue
+
+    // Skip units at full health
+    if (unit.health >= unit.maxHealth) continue
+
+    // Calculate total healing
+    const baseHealing = calculateHealing(state, unit)
+    const adjacentHealing = calculateAdjacentHealingReceived(state, unit)
+    const totalHealing = baseHealing + adjacentHealing
+
+    if (totalHealing > 0) {
+      newUnits.set(unitId, healUnit(unit, totalHealing))
+    }
+  }
+
+  return {
+    ...state,
+    units: newUnits,
+  }
+}
+
+/**
  * Resets unit movement and actions for a player's units
  */
 function resetPlayerUnits(state: GameState, tribeId: TribeId): GameState {
@@ -729,6 +822,54 @@ function resetPlayerUnits(state: GameState, tribeId: TribeId): GameState {
     ...state,
     units: newUnits,
   }
+}
+
+/**
+ * Updates a player's yields for UI display (so turns remaining calculations work)
+ */
+function updatePlayerYields(state: GameState, tribeId: TribeId): GameState {
+  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+  const baseYields = calculatePlayerYields(state, tribeId)
+
+  // Start with base yields and apply bonuses
+  let alpha = baseYields.alpha
+  let vibes = baseYields.vibes
+
+  // Apply tribe bonuses
+  const tribeBonuses = getPlayerTribeBonuses(state, tribeId)
+  if (tribeBonuses.alphaYieldPercent) {
+    alpha = Math.floor(alpha * (1 + tribeBonuses.alphaYieldPercent))
+  }
+  if (tribeBonuses.vibesYieldPercent) {
+    vibes = Math.floor(vibes * (1 + tribeBonuses.vibesYieldPercent))
+  }
+
+  // Apply golden age bonus if active
+  const alphaBonus = getGoldenAgeYieldBonus(player, 'alpha')
+  if (alphaBonus > 0) {
+    alpha = Math.floor(alpha * (1 + alphaBonus))
+  }
+  const vibesBonus = getGoldenAgeYieldBonus(player, 'vibes')
+  if (vibesBonus > 0) {
+    vibes = Math.floor(vibes * (1 + vibesBonus))
+  }
+
+  const updatedPlayer: Player = {
+    ...player,
+    yields: {
+      ...baseYields,
+      alpha,
+      vibes,
+    },
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+
+  return { ...state, players: newPlayers }
 }
 
 // =============================================================================
@@ -950,12 +1091,22 @@ function applyStartProduction(
         return { success: false, error: result.reason || 'Cannot build building' }
       }
 
+      // Calculate cost with policy discounts
+      let cost = buildingDef.productionCost
+      const player = state.players.find(p => p.tribeId === settlement.owner)
+      if (player) {
+        const policyMods = calculatePolicyProductionModifiers(player)
+        if (policyMods.buildingDiscountPercent > 0) {
+          cost = Math.floor(cost * (1 - policyMods.buildingDiscountPercent / 100))
+        }
+      }
+
       // Add to production queue
       const productionItem: ProductionItem = {
         type: 'building',
         id: buildingId,
         progress: 0,
-        cost: buildingDef.productionCost,
+        cost,
       }
 
       const updatedSettlement: Settlement = {
@@ -1047,11 +1198,16 @@ function applyCancelProduction(
 export function calculateFloorPrice(state: GameState, tribeId: TribeId): number {
   let score = 0
 
+  // Track totals for policy bonuses
+  let totalPopulation = 0
+  let tilesControlled = 0
+
   // Settlements: 10 pts each + 5 pts per level
   for (const settlement of state.settlements.values()) {
     if (settlement.owner === tribeId) {
       score += 10
       score += settlement.level * 5
+      totalPopulation += settlement.level
     }
   }
 
@@ -1059,6 +1215,7 @@ export function calculateFloorPrice(state: GameState, tribeId: TribeId): number 
   for (const tile of state.map.tiles.values()) {
     if (tile.owner === tribeId) {
       score += 1
+      tilesControlled += 1
     }
   }
 
@@ -1076,6 +1233,9 @@ export function calculateFloorPrice(state: GameState, tribeId: TribeId): number 
 
     // Kill count: 3 pts each
     score += player.killCount * 3
+
+    // Policy bonuses for population and tiles (pop_floor_price, tile_floor_price)
+    score += calculatePolicyFloorPriceBonus(player, totalPopulation, tilesControlled)
   }
 
   // Units: 2 pts each + rarity bonus
@@ -1164,8 +1324,10 @@ function applyMoveUnit(
   const movedUnit = applyUnitMove(unit, path, cost)
   let newState = updateUnit(state, movedUnit)
 
-  // Reveal fog around new position
-  const vision = BASE_UNIT_VISION + unit.rarityBonuses.vision
+  // Reveal fog around new position - includes policy vision bonus
+  const player = state.players.find(p => p.tribeId === unit.owner)
+  const policyVisionBonus = player ? calculatePolicyVisionBonus(player) : 0
+  const vision = BASE_UNIT_VISION + unit.rarityBonuses.vision + policyVisionBonus
   newState = revealFogAroundPosition(newState, unit.owner, movedUnit.position, vision)
 
   // Check for lootbox at destination
@@ -1226,12 +1388,24 @@ function applyFoundSettlement(
   const player = state.players.find((p) => p.tribeId === settler.owner)
 
   // Create settlement
-  const settlement = createSettlement({
+  let settlement = createSettlement({
     owner: settler.owner,
     position: settler.position,
     ...(player?.tribeName && { tribeName: player.tribeName }),
     isCapital,
   })
+
+  // Apply extra population from policies (settle_population)
+  if (player) {
+    const extraPop = calculatePolicySettlePopulation(player)
+    if (extraPop > 0) {
+      // Extra population = extra levels
+      settlement = {
+        ...settlement,
+        level: settlement.level + extraPop,
+      }
+    }
+  }
 
   // Add settlement and remove settler
   let newState = addSettlement(state, settlement)
@@ -1261,6 +1435,48 @@ function applyFoundSettlement(
 // =============================================================================
 // Combat
 // =============================================================================
+
+/**
+ * Applies bonuses when a player gets a kill (kill count, vibes, territory gold)
+ */
+function applyKillBonuses(state: GameState, killerTribeId: TribeId, killPosition: HexCoord): GameState {
+  const playerIndex = state.players.findIndex((p) => p.tribeId === killerTribeId)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+
+  // Base kill count increment
+  const killCount = player.killCount + 1
+
+  // Calculate policy bonuses
+  const killVibes = calculatePolicyKillVibes(player)
+  const territoryKillGold = calculatePolicyTerritoryKillGold(player)
+
+  // Check if kill happened in killer's territory
+  const tile = state.map.tiles.get(hexKey(killPosition))
+  const isInOwnTerritory = tile?.owner === killerTribeId
+  const goldBonus = isInOwnTerritory ? territoryKillGold : 0
+
+  // Apply bonuses
+  const updatedPlayer = {
+    ...player,
+    killCount,
+    treasury: player.treasury + goldBonus,
+    cultureProgress: player.cultureProgress + killVibes, // Vibes add to culture progress
+    greatPeople: {
+      ...player.greatPeople,
+      accumulator: {
+        ...player.greatPeople.accumulator,
+        kills: player.greatPeople.accumulator.kills + 1,
+      },
+    },
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+
+  return { ...state, players: newPlayers }
+}
 
 /**
  * Executes an attack from one unit to another
@@ -1318,11 +1534,8 @@ function applyAttack(
   // Apply combat results
   if (combatResult.attackerKilled) {
     newState = removeUnit(newState, attackerId)
-    // Add kill to defender's owner
-    const newPlayers = newState.players.map((p) =>
-      p.tribeId === target.owner ? { ...p, killCount: p.killCount + 1 } : p
-    )
-    newState = { ...newState, players: newPlayers }
+    // Add kill to defender's owner + apply policy bonuses
+    newState = applyKillBonuses(newState, target.owner, attacker.position)
   } else {
     // Update attacker with combat result (health, experience, acted flag)
     const updatedAttacker = {
@@ -1335,11 +1548,8 @@ function applyAttack(
 
   if (combatResult.defenderKilled) {
     newState = removeUnit(newState, targetId)
-    // Add kill to attacker's owner
-    const newPlayers = newState.players.map((p) =>
-      p.tribeId === attacker.owner ? { ...p, killCount: p.killCount + 1 } : p
-    )
-    newState = { ...newState, players: newPlayers }
+    // Add kill to attacker's owner + apply policy bonuses
+    newState = applyKillBonuses(newState, attacker.owner, target.position)
   } else {
     // Update defender with combat result (health, experience)
     newState = updateUnit(newState, combatResult.defender)
@@ -1748,8 +1958,7 @@ function applyProposeAlliance(state: GameState, target: TribeId): ActionResult {
  */
 function applySelectPolicy(
   state: GameState,
-  cultureId: CultureId,
-  choice: 0 | 1
+  choice: 'a' | 'b'
 ): ActionResult {
   const currentTribe = state.currentPlayer
   const player = state.players.find((p) => p.tribeId === currentTribe)
@@ -1758,9 +1967,9 @@ function applySelectPolicy(
     return { success: false, error: 'Player not found' }
   }
 
-  // Verify this is the culture they're working on and it's ready
-  if (player.currentCulture !== cultureId) {
-    return { success: false, error: 'Not currently researching this culture' }
+  // Verify player has a culture in progress
+  if (!player.currentCulture) {
+    return { success: false, error: 'No culture in progress' }
   }
 
   if (!isCultureReadyForCompletion(player)) {
@@ -1768,12 +1977,14 @@ function applySelectPolicy(
   }
 
   // Complete the culture with the chosen policy
-  const policyChoice = choice === 0 ? 'a' : 'b'
-  const newState = completeCulture(state, currentTribe, policyChoice)
+  let newState = completeCulture(state, currentTribe, choice)
 
   if (!newState) {
     return { success: false, error: 'Failed to complete culture' }
   }
+
+  // Recalculate yields immediately so policy effects are visible
+  newState = updatePlayerYields(newState, currentTribe)
 
   return { success: true, state: newState }
 }
@@ -1789,11 +2000,14 @@ function applySwapPolicies(
 ): ActionResult {
   const currentTribe = state.currentPlayer
 
-  const newState = swapPolicies(state, currentTribe, toSlot, toUnslot)
+  let newState = swapPolicies(state, currentTribe, toSlot, toUnslot)
 
   if (!newState) {
     return { success: false, error: 'Failed to swap policies - check slot availability' }
   }
+
+  // Recalculate yields immediately so policy effects are visible
+  newState = updatePlayerYields(newState, currentTribe)
 
   return { success: true, state: newState }
 }
@@ -1838,7 +2052,25 @@ function applySelectPromotion(
   const newUnits = new Map(state.units)
   newUnits.set(unitId, updatedUnit)
 
-  return { success: true, state: { ...state, units: newUnits } }
+  let newState: GameState = { ...state, units: newUnits }
+
+  // Apply promotion vibes from policies
+  const player = state.players.find(p => p.tribeId === unit.owner)
+  if (player) {
+    const promotionVibes = calculatePolicyPromotionVibes(player)
+    if (promotionVibes > 0) {
+      const playerIndex = state.players.findIndex(p => p.tribeId === unit.owner)
+      const updatedPlayer = {
+        ...player,
+        cultureProgress: player.cultureProgress + promotionVibes,
+      }
+      const newPlayers = [...newState.players]
+      newPlayers[playerIndex] = updatedPlayer
+      newState = { ...newState, players: newPlayers }
+    }
+  }
+
+  return { success: true, state: newState }
 }
 
 /**

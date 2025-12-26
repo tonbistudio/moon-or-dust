@@ -55,8 +55,8 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 15,
     prerequisites: { cultures: [], techs: [] },
     policyChoices: [
-      createPolicy('governance', 'Governance', '+2 Vibes in capital', 'community', 'a', 'progress', 'capital_vibes', { amount: 2 }),
-      createPolicy('discipline', 'Discipline', '+5 unit healing per turn', 'community', 'b', 'military', 'unit_healing', { amount: 5 }),
+      createPolicy('welcome_party', 'Welcome Party', '+2 Vibes in capital', 'community', 'a', 'progress', 'capital_vibes', { amount: 2 }),
+      createPolicy('strong_together', 'Strong Together', '+5 unit healing per turn', 'community', 'b', 'military', 'unit_healing', { amount: 5 }),
     ],
     slotUnlocks: { wildcard: 1 },
   },
@@ -67,7 +67,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 20,
     prerequisites: { cultures: [], techs: [] },
     policyChoices: [
-      createPolicy('escrow', 'Escrow', '+2 Gold from trade routes', 'otc_trading', 'a', 'economy', 'trade_gold', { amount: 2 }),
+      createPolicy('foxy_swap', 'Foxy Swap', '+2 Gold from trade routes', 'otc_trading', 'a', 'economy', 'trade_gold', { amount: 2 }),
       createPolicy('broker', 'Broker', '+10% Gold from all sources', 'otc_trading', 'b', 'economy', 'gold_percent', { percent: 10 }),
     ],
     slotUnlocks: { economy: 1 },
@@ -80,7 +80,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     prerequisites: { cultures: [], techs: [] },
     policyChoices: [
       createPolicy('clout', 'Clout', '65% chance of earning great people at thresholds', 'influence', 'a', 'wildcard', 'great_people_chance', { percent: 65 }),
-      createPolicy('networking', 'Networking', '+1 Gold per ally', 'influence', 'b', 'economy', 'ally_gold', { amount: 1 }),
+      createPolicy('kol_status', 'KOL Status', '+5 Gold base, +3 Gold per ally', 'influence', 'b', 'economy', 'ally_gold', { base: 5, perAlly: 3 }),
     ],
     slotUnlocks: { military: 1 },
   },
@@ -104,7 +104,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     prerequisites: { cultures: ['community' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('full_send', 'Full Send', '+10% combat strength, -5% defense', 'degen_culture', 'a', 'military', 'aggressive_combat', { attack: 10, defense: -5 }),
-      createPolicy('ape_in', 'Ape In', '+20% Production when behind in score', 'degen_culture', 'b', 'wildcard', 'catchup_production', { percent: 20 }),
+      createPolicy('ape_in', 'Ape In', '+10% Production (+20% when behind in score)', 'degen_culture', 'b', 'wildcard', 'scaling_production', { base: 10, behind: 20 }),
     ],
   },
   social_media: {
@@ -114,7 +114,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 25,
     prerequisites: { cultures: ['influence' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('followers', 'Followers', '+1 Vibes per population', 'social_media', 'a', 'progress', 'pop_vibes', { amount: 1 }),
+      createPolicy('banger_post', 'Banger Post', '+2 Vibes per population level in capital', 'social_media', 'a', 'progress', 'pop_vibes', { amount: 2 }),
       createPolicy('engagement', 'Engagement', '+15% Vibes generation', 'social_media', 'b', 'progress', 'vibes_percent', { percent: 15 }),
     ],
   },
@@ -126,7 +126,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     prerequisites: { cultures: ['influence' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('shitposting', 'Shitposting', 'Enemy units in your territory -1 combat strength', 'memeing', 'a', 'military', 'territory_debuff', { amount: -1 }),
-      createPolicy('good_vibes', 'Good Vibes', '+1 Vibes per settlement', 'memeing', 'b', 'progress', 'settlement_vibes', { amount: 1 }),
+      createPolicy('four_chan', '4-chan', '+1 Vibes per settlement', 'memeing', 'b', 'progress', 'settlement_vibes', { amount: 1 }),
     ],
   },
   early_adopters: {
@@ -137,7 +137,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     prerequisites: { cultures: ['otc_trading' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('first_mover', 'First Mover', '+1 trade route capacity', 'early_adopters', 'a', 'economy', 'trade_capacity', { amount: 1 }),
-      createPolicy('scout_bonus', 'Scout Bonus', '+1 Scout vision', 'early_adopters', 'b', 'military', 'scout_vision', { amount: 1 }),
+      createPolicy('recon', 'Recon', '+1 vision for all units', 'early_adopters', 'b', 'military', 'unit_vision', { amount: 1 }),
     ],
   },
   diamond_hands: {
@@ -148,7 +148,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     prerequisites: { cultures: ['early_adopters' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('hodl', 'HODL', 'Units +25% defense below 50% HP', 'diamond_hands', 'a', 'military', 'low_health_defense', { percent: 25, threshold: 50 }),
-      createPolicy('paper_hands', 'Paper Hands', '-50% war weariness', 'diamond_hands', 'b', 'wildcard', 'war_weariness', { percent: -50 }),
+      createPolicy('exit_strategy', 'Exit Strategy', 'Units heal +10 HP when in friendly territory', 'diamond_hands', 'b', 'wildcard', 'friendly_healing', { amount: 10 }),
     ],
   },
 
@@ -160,10 +160,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'GM',
     era: 2,
     cost: 45,
-    prerequisites: { cultures: ['community' as CultureId], techs: [] },
+    prerequisites: { cultures: ['community' as CultureId, 'influence' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('positive_vibes', 'Positive Vibes', '+2 Vibes in all settlements', 'gm', 'a', 'progress', 'settlement_vibes', { amount: 2 }),
-      createPolicy('good_morning', 'Good Morning', 'Hostile tribes become Neutral after 3 turns', 'gm', 'b', 'wildcard', 'diplomacy_thaw', { turns: 3 }),
+      createPolicy('wagmi', 'WAGMI', '+2 Vibes in all settlements', 'gm', 'a', 'progress', 'settlement_vibes', { amount: 2 }),
+      createPolicy('gn', 'GN', '+3 Vibes per Friendly or Allied tribe', 'gm', 'b', 'wildcard', 'friendly_vibes', { amount: 3 }),
     ],
   },
   whitelisting: {
@@ -173,8 +173,8 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 45,
     prerequisites: { cultures: ['early_adopters' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('exclusive_access', 'Exclusive Access', '+10% Gold from improvements', 'whitelisting', 'a', 'economy', 'improvement_gold', { percent: 10 }),
-      createPolicy('vip_list', 'VIP List', 'Alliance cost -25%', 'whitelisting', 'b', 'wildcard', 'alliance_discount', { percent: 25 }),
+      createPolicy('double_og', 'Double OG', '+10% Gold from improvements', 'whitelisting', 'a', 'economy', 'improvement_gold', { percent: 10 }),
+      createPolicy('inner_circle', 'Inner Circle', '+2 Trade routes with Friendly or Allied tribes', 'whitelisting', 'b', 'wildcard', 'friendly_trade', { amount: 2 }),
     ],
     slotUnlocks: { progress: 1 },
   },
@@ -183,10 +183,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Alpha DAOs',
     era: 2,
     cost: 50,
-    prerequisites: { cultures: ['otc_trading' as CultureId], techs: [] },
+    prerequisites: { cultures: ['otc_trading' as CultureId, 'community' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('big_addition', 'Big Addition', '80% chance of earning great people at thresholds', 'alpha_daos', 'a', 'wildcard', 'great_people_chance', { percent: 80 }),
-      createPolicy('treasury', 'Treasury', '+2 Trade Route capacity', 'alpha_daos', 'b', 'economy', 'trade_capacity', { amount: 2 }),
+      createPolicy('networking', 'Networking', '+2 Trade Route capacity', 'alpha_daos', 'b', 'economy', 'trade_capacity', { amount: 2 }),
     ],
   },
   follow_for_follow: {
@@ -196,7 +196,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 50,
     prerequisites: { cultures: ['gm' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('mutual_support', 'Mutual Support', 'Allies heal +5 HP/turn', 'follow_for_follow', 'a', 'military', 'ally_healing', { amount: 5 }),
+      createPolicy('mutual_support', 'Mutual Support', 'Adjacent friendly units heal +3 HP/turn', 'follow_for_follow', 'a', 'military', 'adjacent_healing', { amount: 3 }),
       createPolicy('community_building', 'Community Building', '+1 Population when settling', 'follow_for_follow', 'b', 'wildcard', 'settle_population', { amount: 1 }),
     ],
   },
@@ -205,10 +205,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Fudding',
     era: 2,
     cost: 55,
-    prerequisites: { cultures: ['influence' as CultureId], techs: [] },
+    prerequisites: { cultures: ['influence' as CultureId, 'memeing' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('fud_campaign', 'FUD Campaign', 'Enemy units -1 combat strength when attacking you', 'fudding', 'a', 'military', 'defender_debuff', { amount: -1 }),
-      createPolicy('spread_doubt', 'Spread Doubt', 'Enemies cannot form alliances with each other', 'fudding', 'b', 'wildcard', 'prevent_enemy_alliance', {}),
+      createPolicy('dev_asleep', 'Dev Asleep?', 'Enemies at war with you have -33% defense', 'fudding', 'b', 'wildcard', 'war_defense_debuff', { percent: 33 }),
     ],
   },
   virality: {
@@ -218,8 +218,8 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 55,
     prerequisites: { cultures: ['social_media' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('going_viral', 'Going Viral', '+20% Vibes when completing wonders', 'virality', 'a', 'progress', 'wonder_vibes_percent', { percent: 20 }),
-      createPolicy('influencer', 'Influencer', 'Great Person points +25%', 'virality', 'b', 'wildcard', 'great_person_points', { percent: 25 }),
+      createPolicy('100k_likes', '100k Likes', '+30% wonder production speed', 'virality', 'a', 'progress', 'wonder_production', { percent: 30 }),
+      createPolicy('retweet_bonanza', 'Retweet Bonanza', 'Great Person points +25%', 'virality', 'b', 'wildcard', 'great_person_points', { percent: 25 }),
     ],
     slotUnlocks: { wildcard: 1 },
   },
@@ -242,8 +242,8 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 60,
     prerequisites: { cultures: ['alpha_daos' as CultureId, 'degen_culture' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('fomo', 'FOMO', '+25% Production when behind in score', 'degen_minting', 'a', 'wildcard', 'catchup_production', { percent: 25 }),
-      createPolicy('yolo', 'Yolo', 'Units +15% attack, -10% defense', 'degen_minting', 'b', 'military', 'aggressive_combat', { attack: 15, defense: -10 }),
+      createPolicy('fomo', 'FOMO', '+15% Production (+25% when behind in score)', 'degen_minting', 'a', 'wildcard', 'scaling_production', { base: 15, behind: 25 }),
+      createPolicy('yolo', 'YOLO', 'Units +15% attack, -10% defense', 'degen_minting', 'b', 'military', 'aggressive_combat', { attack: 15, defense: -10 }),
     ],
     slotUnlocks: { economy: 1 },
   },
@@ -254,32 +254,32 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 65,
     prerequisites: { cultures: ['memeing' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('pump_it', 'Pump It', '+20% Gold when completing cultures', 'memecoin_mania', 'a', 'economy', 'culture_gold', { percent: 20 }),
-      createPolicy('viral_spread', 'Viral Spread', '+2 Vibes per enemy unit killed', 'memecoin_mania', 'b', 'progress', 'kill_vibes', { amount: 2 }),
+      createPolicy('sendu', 'SENDU', '+5 Gold per culture unlocked', 'memecoin_mania', 'a', 'economy', 'culture_gold_flat', { amount: 5 }),
+      createPolicy('the_ticker_is', 'The Ticker Is', '+2 Vibes per enemy unit killed', 'memecoin_mania', 'b', 'progress', 'kill_vibes', { amount: 2 }),
     ],
   },
-
-  // =========================================================================
-  // Era 3: Renaissance Age (80-120 Vibes) - 10 cultures
-  // =========================================================================
   raiding: {
     id: 'raiding' as CultureId,
     name: 'Raiding',
-    era: 3,
-    cost: 80,
+    era: 2,
+    cost: 70,
     prerequisites: { cultures: ['gm' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('pillage_bonus', 'Pillage Bonus', '+50% Gold from pillaging', 'raiding', 'a', 'military', 'pillage_gold', { percent: 50 }),
-      createPolicy('war_party', 'War Party', '+1 Movement when attacking', 'raiding', 'b', 'military', 'attack_movement', { amount: 1 }),
+      createPolicy('reply_army', 'Reply Army', '+100% pillage damage', 'raiding', 'a', 'military', 'pillage_damage', { percent: 100 }),
+      createPolicy('to_the_streets', 'To the Streets', '+2 Movement for Cavalry units', 'raiding', 'b', 'military', 'cavalry_movement', { amount: 2 }),
     ],
     slotUnlocks: { military: 1 },
   },
+
+  // =========================================================================
+  // Era 3: Renaissance Age (80-120 Vibes) - 9 cultures
+  // =========================================================================
   innovation: {
     id: 'innovation' as CultureId,
     name: 'Innovation',
     era: 3,
     cost: 80,
-    prerequisites: { cultures: ['builder_culture' as CultureId, 'whitelisting' as CultureId], techs: ['priority_fees' as TechId] },
+    prerequisites: { cultures: ['whitelisting' as CultureId, 'gm' as CultureId], techs: ['priority_fees' as TechId] },
     policyChoices: [
       createPolicy('r_and_d', 'R&D', '+20% Alpha generation', 'innovation', 'a', 'progress', 'alpha_percent', { percent: 20 }),
       createPolicy('breakthrough', 'Breakthrough', 'Buildings +2 Alpha', 'innovation', 'b', 'progress', 'building_alpha', { amount: 2 }),
@@ -291,10 +291,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Hard Shilling',
     era: 3,
     cost: 85,
-    prerequisites: { cultures: ['virality' as CultureId], techs: [] },
+    prerequisites: { cultures: ['virality' as CultureId, 'memecoin_mania' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('hype_train', 'Hype Train', '+25% combat XP gain', 'hard_shilling', 'a', 'military', 'xp_gain', { percent: 25 }),
-      createPolicy('momentum', 'Momentum', '+2 Vibes per unit promoted', 'hard_shilling', 'b', 'progress', 'promotion_vibes', { amount: 2 }),
+      createPolicy('hype_train', 'Hype Train', 'Units start with 1 free promotion', 'hard_shilling', 'a', 'military', 'free_promotion', { amount: 1 }),
+      createPolicy('pump_it_up', 'Pump It Up', '+5 Vibes per unit promoted', 'hard_shilling', 'b', 'progress', 'promotion_vibes', { amount: 5 }),
     ],
   },
   one_of_ones: {
@@ -302,10 +302,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: '1 of 1s',
     era: 3,
     cost: 85,
-    prerequisites: { cultures: ['whitelisting' as CultureId], techs: [] },
+    prerequisites: { cultures: ['whitelisting' as CultureId, 'gm' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('unique_art', 'Unique Art', '+3 Vibes per wonder', 'one_of_ones', 'a', 'progress', 'wonder_vibes', { amount: 3 }),
-      createPolicy('collector', 'Collector', '100% chance of earning great people at thresholds', 'one_of_ones', 'b', 'wildcard', 'great_people_chance', { percent: 100 }),
+      createPolicy('customs', 'Customs', '+3 Vibes per wonder', 'one_of_ones', 'a', 'progress', 'wonder_vibes', { amount: 3 }),
+      createPolicy('collector', 'Collector', '90% chance of earning great people at thresholds', 'one_of_ones', 'b', 'wildcard', 'great_people_chance', { percent: 90 }),
     ],
   },
   auctions: {
@@ -313,10 +313,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Auctions',
     era: 3,
     cost: 90,
-    prerequisites: { cultures: ['alpha_daos' as CultureId], techs: [] },
+    prerequisites: { cultures: ['alpha_daos' as CultureId, 'whitelisting' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('bidding_war', 'Bidding War', '+25% Gold income', 'auctions', 'a', 'economy', 'gold_percent', { percent: 25 }),
-      createPolicy('reserve_price', 'Reserve Price', '+20 Gold income per settlement', 'auctions', 'b', 'economy', 'settlement_gold', { amount: 20 }),
+      createPolicy('reserve_price', 'Reserve Price', '+15 Gold income per settlement', 'auctions', 'b', 'economy', 'settlement_gold', { amount: 15 }),
     ],
   },
   presales: {
@@ -324,7 +324,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Presales',
     era: 3,
     cost: 90,
-    prerequisites: { cultures: ['alpha_daos' as CultureId], techs: ['matrica' as TechId] },
+    prerequisites: { cultures: ['alpha_daos' as CultureId, 'degen_minting' as CultureId], techs: ['matrica' as TechId] },
     policyChoices: [
       createPolicy('early_access', 'Early Access', '-25% building cost', 'presales', 'a', 'economy', 'building_discount', { percent: 25 }),
       createPolicy('allocation', 'Allocation', '+3 trade route capacity', 'presales', 'b', 'wildcard', 'trade_capacity', { amount: 3 }),
@@ -336,10 +336,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Trenching',
     era: 3,
     cost: 95,
-    prerequisites: { cultures: ['memecoin_mania' as CultureId], techs: ['discord' as TechId] },
+    prerequisites: { cultures: ['memecoin_mania' as CultureId, 'virality' as CultureId], techs: ['discord' as TechId] },
     policyChoices: [
-      createPolicy('in_the_trenches', 'In the Trenches', '+15% combat strength when outnumbered', 'trenching', 'a', 'military', 'outnumbered_combat', { percent: 15 }),
-      createPolicy('never_selling', 'Never Selling', '+1 Floor Price per 5 population', 'trenching', 'b', 'wildcard', 'pop_floor_price', { per: 5, amount: 1 }),
+      createPolicy('in_the_trenches', 'In the Trenches', '+25% combat strength when defending', 'trenching', 'a', 'military', 'defense_bonus', { percent: 25 }),
+      createPolicy('just_scanning', 'Just Scanning', '+1 Floor Price per 3 population', 'trenching', 'b', 'wildcard', 'pop_floor_price', { per: 3, amount: 1 }),
     ],
   },
   delisting: {
@@ -347,10 +347,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Delisting',
     era: 3,
     cost: 100,
-    prerequisites: { cultures: ['diamond_hands' as CultureId, 'follow_for_follow' as CultureId], techs: [] },
+    prerequisites: { cultures: ['follow_for_follow' as CultureId, 'degen_minting' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('floor_defense', 'Floor Defense', 'Settlements +50% defense', 'delisting', 'a', 'military', 'settlement_defense', { percent: 50 }),
-      createPolicy('exit_liquidity', 'Exit Liquidity', '+25 Gold when losing units', 'delisting', 'b', 'economy', 'unit_loss_gold', { amount: 25 }),
+      createPolicy('floor_defense', 'Floor Defense', 'Settlements +75% defense', 'delisting', 'a', 'military', 'settlement_defense', { percent: 75 }),
+      createPolicy('delist_train', 'Delist Train', '+50 Gold income per wonder built', 'delisting', 'b', 'economy', 'wonder_gold', { amount: 50 }),
     ],
   },
   sweeping: {
@@ -358,10 +358,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Sweeping',
     era: 3,
     cost: 110,
-    prerequisites: { cultures: ['degen_minting' as CultureId, 'delisting' as CultureId], techs: [] },
+    prerequisites: { cultures: ['degen_minting' as CultureId, 'hard_shilling' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('buy_the_dip', 'Buy the Dip', '+30% Gold from trade routes', 'sweeping', 'a', 'economy', 'trade_gold_percent', { percent: 30 }),
-      createPolicy('collection_complete', 'Collection Complete', '+5 Floor Price per 10 tiles', 'sweeping', 'b', 'wildcard', 'tile_floor_price', { per: 10, amount: 5 }),
+      createPolicy('take_out_the_brooms', 'Take Out the Brooms', '+5 Floor Price per 10 tiles', 'sweeping', 'b', 'wildcard', 'tile_floor_price', { per: 10, amount: 5 }),
     ],
   },
   rugging: {
@@ -369,10 +369,10 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     name: 'Rugging',
     era: 3,
     cost: 120,
-    prerequisites: { cultures: ['fudding' as CultureId], techs: ['hacking' as TechId] },
+    prerequisites: { cultures: ['fudding' as CultureId, 'defensive_tactics' as CultureId], techs: ['hacking' as TechId] },
     policyChoices: [
-      createPolicy('exit_scam', 'Exit Scam', '+100% pillage damage', 'rugging', 'a', 'military', 'pillage_damage', { percent: 100 }),
-      createPolicy('insider_trading', 'Insider Trading', 'See enemy production queues', 'rugging', 'b', 'wildcard', 'enemy_vision', { scope: 'production' }),
+      createPolicy('ate_on_that_twin', 'Ate on That, Twin', '+50% Gold from pillaging, units heal 5 HP on kill', 'rugging', 'a', 'military', 'pillage_gold_heal', { gold_percent: 50, heal: 5 }),
+      createPolicy('sends_his_regards', 'Sends His Regards', '+50 Gold per enemy unit killed in your territory', 'rugging', 'b', 'wildcard', 'territory_kill_gold', { amount: 50 }),
     ],
     slotUnlocks: { wildcard: 1 },
   },
@@ -500,6 +500,8 @@ export function startCulture(state: GameState, tribeId: TribeId, cultureId: Cult
 
 /**
  * Adds culture progress from Vibes yield
+ * Note: When progress >= cost, the culture is ready for completion but NOT auto-completed.
+ * The UI should detect this via isCultureReadyForCompletion() and show a policy selection popup.
  */
 export function addCultureProgress(state: GameState, tribeId: TribeId, amount: number): GameState {
   const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
@@ -513,20 +515,7 @@ export function addCultureProgress(state: GameState, tribeId: TribeId, amount: n
 
   const newProgress = player.cultureProgress + amount
 
-  // Check if culture complete (but don't auto-complete, need policy choice)
-  if (newProgress >= culture.cost) {
-    // Mark as ready for completion (player must choose policy)
-    const updatedPlayer: Player = {
-      ...player,
-      cultureProgress: culture.cost, // Cap at cost
-    }
-
-    const newPlayers = [...state.players]
-    newPlayers[playerIndex] = updatedPlayer
-
-    return { ...state, players: newPlayers }
-  }
-
+  // Update the progress in state (culture completion is handled by UI via policy selection)
   const updatedPlayer: Player = {
     ...player,
     cultureProgress: newProgress,
@@ -582,10 +571,42 @@ export function completeCulture(
       }
     : player.policies.slots
 
+  // Check if we can auto-slot the new policy
+  // First check if there's a slot of the matching type available
+  let canAutoSlot = false
+  const policySlotType = chosenPolicy.slotType
+
+  // Count active policies by type
+  const activeByType: Record<PolicySlotType, number> = {
+    military: 0,
+    economy: 0,
+    progress: 0,
+    wildcard: 0,
+  }
+  for (const activePolicyId of player.policies.active) {
+    const activePolicy = getPolicy(activePolicyId)
+    if (activePolicy) {
+      activeByType[activePolicy.slotType]++
+    }
+  }
+
+  // Check if matching slot is available
+  if (activeByType[policySlotType] < newSlots[policySlotType]) {
+    canAutoSlot = true
+  }
+  // Check if wildcard slot is available
+  else if (activeByType.wildcard < newSlots.wildcard) {
+    canAutoSlot = true
+  }
+
+  const newActive = canAutoSlot
+    ? [...player.policies.active, chosenPolicy.id]
+    : player.policies.active
+
   const newPolicies: PlayerPolicies = {
     slots: newSlots,
     pool: [...player.policies.pool, chosenPolicy.id],
-    active: player.policies.active,
+    active: newActive,
   }
 
   // Build updated player without setting undefined explicitly
@@ -773,6 +794,212 @@ export function swapPolicies(
 }
 
 // =============================================================================
+// Policy Yield Effects
+// =============================================================================
+
+export interface PolicyYieldBonuses {
+  // Flat bonuses
+  capitalVibes: number
+  settlementVibes: number
+  settlementProduction: number
+  settlementGold: number
+  tradeGold: number
+  allyGoldBase: number
+  allyGoldPerAlly: number
+  cultureGoldFlat: number
+  buildingAlpha: number
+  friendlyVibesPerTribe: number
+  popVibesPerLevel: number
+  wonderGoldPerWonder: number // wonder_gold: +X gold per wonder built
+  // Percentage bonuses
+  goldPercent: number
+  vibesPercent: number
+  alphaPercent: number
+  productionPercent: number // from scaling_production, ape_in, fomo
+  wonderProductionPercent: number
+}
+
+/**
+ * Calculates yield bonuses from active policies
+ */
+export function calculatePolicyYieldBonuses(_state: GameState, player: Player): PolicyYieldBonuses {
+  const bonuses: PolicyYieldBonuses = {
+    capitalVibes: 0,
+    settlementVibes: 0,
+    settlementProduction: 0,
+    settlementGold: 0,
+    tradeGold: 0,
+    allyGoldBase: 0,
+    allyGoldPerAlly: 0,
+    cultureGoldFlat: 0,
+    buildingAlpha: 0,
+    friendlyVibesPerTribe: 0,
+    popVibesPerLevel: 0,
+    wonderGoldPerWonder: 0,
+    goldPercent: 0,
+    vibesPercent: 0,
+    alphaPercent: 0,
+    productionPercent: 0,
+    wonderProductionPercent: 0,
+  }
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (!policy) continue
+
+    const effect = policy.effect
+    switch (effect.type) {
+      case 'capital_vibes':
+        bonuses.capitalVibes += (effect.amount as number) ?? 0
+        break
+      case 'settlement_vibes':
+        bonuses.settlementVibes += (effect.amount as number) ?? 0
+        break
+      case 'settlement_production':
+        bonuses.settlementProduction += (effect.amount as number) ?? 0
+        break
+      case 'settlement_gold':
+        bonuses.settlementGold += (effect.amount as number) ?? 0
+        break
+      case 'trade_gold':
+        bonuses.tradeGold += (effect.amount as number) ?? 0
+        break
+      case 'ally_gold':
+        bonuses.allyGoldBase += (effect.base as number) ?? 0
+        bonuses.allyGoldPerAlly += (effect.perAlly as number) ?? 0
+        break
+      case 'culture_gold_flat':
+        bonuses.cultureGoldFlat += (effect.amount as number) ?? 0
+        break
+      case 'building_alpha':
+        bonuses.buildingAlpha += (effect.amount as number) ?? 0
+        break
+      case 'friendly_vibes':
+        bonuses.friendlyVibesPerTribe += (effect.amount as number) ?? 0
+        break
+      case 'pop_vibes':
+        bonuses.popVibesPerLevel += (effect.amount as number) ?? 0
+        break
+      case 'gold_percent':
+        bonuses.goldPercent += (effect.percent as number) ?? 0
+        break
+      case 'vibes_percent':
+        bonuses.vibesPercent += (effect.percent as number) ?? 0
+        break
+      case 'alpha_percent':
+        bonuses.alphaPercent += (effect.percent as number) ?? 0
+        break
+      case 'scaling_production':
+        // Use base production bonus (behind bonus would require score comparison)
+        bonuses.productionPercent += (effect.base as number) ?? 0
+        break
+      case 'wonder_production':
+        bonuses.wonderProductionPercent += (effect.percent as number) ?? 0
+        break
+      case 'wonder_gold':
+        bonuses.wonderGoldPerWonder += (effect.amount as number) ?? 0
+        break
+    }
+  }
+
+  return bonuses
+}
+
+/**
+ * Applies policy yield bonuses to base yields
+ */
+export function applyPolicyBonusesToYields(
+  state: GameState,
+  player: Player,
+  baseYields: { gold: number; alpha: number; vibes: number; production: number; growth: number },
+  bonuses: PolicyYieldBonuses
+): { gold: number; alpha: number; vibes: number; production: number; growth: number } {
+  // Count settlements for per-settlement bonuses
+  let settlementCount = 0
+  let capitalLevel = 1
+  for (const settlement of state.settlements.values()) {
+    if (settlement.owner === player.tribeId) {
+      settlementCount++
+      if (settlement.isCapital) {
+        capitalLevel = settlement.level
+      }
+    }
+  }
+
+  // Count friendly/allied tribes by parsing relation keys
+  let friendlyCount = 0
+  let allyCount = 0
+  for (const [key, relation] of state.diplomacy.relations) {
+    // Parse key format: `${tribe1}-${tribe2}` (sorted alphabetically)
+    const [tribe1, tribe2] = key.split('-') as [TribeId, TribeId]
+    const involvesTribe = tribe1 === player.tribeId || tribe2 === player.tribeId
+    if (involvesTribe) {
+      if (relation.stance === 'friendly') friendlyCount++
+      if (relation.stance === 'allied') {
+        allyCount++
+        friendlyCount++ // Allied also counts as friendly for vibes
+      }
+    }
+  }
+
+  // Count buildings for building_alpha bonus
+  let buildingCount = 0
+  for (const settlement of state.settlements.values()) {
+    if (settlement.owner === player.tribeId) {
+      buildingCount += settlement.buildings.length
+    }
+  }
+
+  // Count wonders built for wonder_gold bonus
+  const wonderCount = player.greatPeople.accumulator.wondersBuilt
+
+  // Calculate flat bonuses
+  let gold = baseYields.gold
+  let alpha = baseYields.alpha
+  let vibes = baseYields.vibes
+  let production = baseYields.production
+  const growth = baseYields.growth
+
+  // Capital vibes
+  vibes += bonuses.capitalVibes
+
+  // Settlement-based bonuses
+  vibes += bonuses.settlementVibes * settlementCount
+  production += bonuses.settlementProduction * settlementCount
+  gold += bonuses.settlementGold * settlementCount
+
+  // Population vibes (capital level)
+  vibes += bonuses.popVibesPerLevel * capitalLevel
+
+  // Friendly/ally vibes
+  vibes += bonuses.friendlyVibesPerTribe * friendlyCount
+
+  // Ally gold
+  gold += bonuses.allyGoldBase
+  gold += bonuses.allyGoldPerAlly * allyCount
+
+  // Culture gold (per culture unlocked)
+  gold += bonuses.cultureGoldFlat * player.unlockedCultures.length
+
+  // Building alpha
+  alpha += bonuses.buildingAlpha * buildingCount
+
+  // Wonder gold
+  gold += bonuses.wonderGoldPerWonder * wonderCount
+
+  // Trade route gold bonus is applied in trade route calculation, not here
+  // But we track it in bonuses for that system to use
+
+  // Apply percentage bonuses
+  gold = Math.floor(gold * (1 + bonuses.goldPercent / 100))
+  alpha = Math.floor(alpha * (1 + bonuses.alphaPercent / 100))
+  vibes = Math.floor(vibes * (1 + bonuses.vibesPercent / 100))
+  production = Math.floor(production * (1 + bonuses.productionPercent / 100))
+
+  return { gold, alpha, vibes, production, growth }
+}
+
+// =============================================================================
 // Culture Queries
 // =============================================================================
 
@@ -823,4 +1050,308 @@ export function getCurrentCultureEra(player: Player): Era {
   }
 
   return maxEra
+}
+
+// =============================================================================
+// Policy Effect Calculations (Non-Combat, Non-Yield)
+// =============================================================================
+
+/**
+ * Calculates vision bonus from policies (unit_vision)
+ */
+export function calculatePolicyVisionBonus(player: Player): number {
+  let bonus = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'unit_vision') {
+      bonus += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return bonus
+}
+
+/**
+ * Calculates cavalry movement bonus from policies (cavalry_movement)
+ */
+export function calculatePolicyCavalryMovementBonus(player: Player): number {
+  let bonus = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'cavalry_movement') {
+      bonus += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return bonus
+}
+
+/**
+ * Gets the number of free promotions from policies (free_promotion)
+ */
+export function getPolicyFreePromotions(player: Player): number {
+  let count = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'free_promotion') {
+      count += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return count
+}
+
+/**
+ * Calculates vibes gained per kill from policies (kill_vibes)
+ */
+export function calculatePolicyKillVibes(player: Player): number {
+  let vibes = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'kill_vibes') {
+      vibes += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return vibes
+}
+
+/**
+ * Calculates vibes gained per promotion from policies (promotion_vibes)
+ */
+export function calculatePolicyPromotionVibes(player: Player): number {
+  let vibes = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'promotion_vibes') {
+      vibes += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return vibes
+}
+
+/**
+ * Calculates gold gained per kill in territory from policies (territory_kill_gold)
+ */
+export function calculatePolicyTerritoryKillGold(player: Player): number {
+  let gold = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'territory_kill_gold') {
+      gold += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return gold
+}
+
+/**
+ * Calculates extra population when settling from policies (settle_population)
+ */
+export function calculatePolicySettlePopulation(player: Player): number {
+  let pop = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'settle_population') {
+      pop += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return pop
+}
+
+/**
+ * Calculates floor price bonuses from policies (pop_floor_price, tile_floor_price)
+ */
+export function calculatePolicyFloorPriceBonus(
+  player: Player,
+  totalPopulation: number,
+  tilesControlled: number
+): number {
+  let bonus = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (!policy) continue
+
+    if (policy.effect.type === 'pop_floor_price') {
+      const per = (policy.effect.per as number) ?? 1
+      const amount = (policy.effect.amount as number) ?? 0
+      bonus += Math.floor(totalPopulation / per) * amount
+    } else if (policy.effect.type === 'tile_floor_price') {
+      const per = (policy.effect.per as number) ?? 1
+      const amount = (policy.effect.amount as number) ?? 0
+      bonus += Math.floor(tilesControlled / per) * amount
+    }
+  }
+
+  return bonus
+}
+
+/**
+ * Calculates vibes from wonders from policies (wonder_vibes)
+ */
+export function calculatePolicyWonderVibes(player: Player, wondersBuilt: number): number {
+  let vibes = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'wonder_vibes') {
+      vibes += ((policy.effect.amount as number) ?? 0) * wondersBuilt
+    }
+  }
+
+  return vibes
+}
+
+/**
+ * Production modifiers from policies
+ */
+export interface PolicyProductionModifiers {
+  wallProductionPercent: number       // wall_production: +100% wall production
+  buildingDiscountPercent: number     // building_discount: -25% building cost
+  buildingProductionPercent: number   // production_buildings: +15% building production
+}
+
+/**
+ * Calculates production modifiers from policies
+ */
+export function calculatePolicyProductionModifiers(player: Player): PolicyProductionModifiers {
+  const modifiers: PolicyProductionModifiers = {
+    wallProductionPercent: 0,
+    buildingDiscountPercent: 0,
+    buildingProductionPercent: 0,
+  }
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (!policy) continue
+
+    switch (policy.effect.type) {
+      case 'wall_production':
+        modifiers.wallProductionPercent += (policy.effect.percent as number) ?? 0
+        break
+      case 'building_discount':
+        modifiers.buildingDiscountPercent += (policy.effect.percent as number) ?? 0
+        break
+      case 'production_buildings':
+        modifiers.buildingProductionPercent += (policy.effect.percent as number) ?? 0
+        break
+    }
+  }
+
+  return modifiers
+}
+
+/**
+ * Calculates gold bonus from improvements from policies (improvement_gold)
+ */
+export function calculatePolicyImprovementGoldPercent(player: Player): number {
+  let percent = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'improvement_gold') {
+      percent += (policy.effect.percent as number) ?? 0
+    }
+  }
+
+  return percent
+}
+
+// =============================================================================
+// Trade-Related Policy Effects
+// =============================================================================
+
+/**
+ * Calculates extra trade route capacity from policies (trade_capacity)
+ * Policies: first_mover (+1), networking (+2), allocation (+3)
+ */
+export function calculatePolicyTradeCapacity(player: Player): number {
+  let capacity = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'trade_capacity') {
+      capacity += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return capacity
+}
+
+/**
+ * Calculates extra trade routes with friendly/allied tribes from policies (friendly_trade)
+ * Policy: inner_circle (+2 trade routes with friendly/allied tribes)
+ */
+export function calculatePolicyFriendlyTradeBonus(player: Player): number {
+  let bonus = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'friendly_trade') {
+      bonus += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return bonus
+}
+
+/**
+ * Calculates flat gold bonus per trade route from policies (trade_gold)
+ * Policy: foxy_swap (+2 Gold per trade route)
+ */
+export function calculatePolicyTradeGoldFlat(player: Player): number {
+  let gold = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'trade_gold') {
+      gold += (policy.effect.amount as number) ?? 0
+    }
+  }
+
+  return gold
+}
+
+/**
+ * Calculates percentage gold bonus from trade routes from policies (trade_gold_percent)
+ * Policy: buy_the_dip (+30% Gold from trade routes)
+ */
+export function calculatePolicyTradeGoldPercent(player: Player): number {
+  let percent = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'trade_gold_percent') {
+      percent += (policy.effect.percent as number) ?? 0
+    }
+  }
+
+  return percent
+}
+
+/**
+ * Calculates great person points bonus percentage from policies (great_person_points)
+ * Policy: retweet_bonanza (+25% GP points)
+ */
+export function calculatePolicyGPPointsPercent(player: Player): number {
+  let percent = 0
+
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'great_person_points') {
+      percent += (policy.effect.percent as number) ?? 0
+    }
+  }
+
+  return percent
 }

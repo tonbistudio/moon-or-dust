@@ -50,6 +50,15 @@ export function GameCanvas({
     return new Set(targets.map((t) => hexKey(t.position)))
   }, [state, selectedUnit])
 
+  // Store latest state in ref so we can apply it after init
+  const pendingStateRef = useRef<{
+    state: typeof state
+    selectedUnit: typeof selectedUnit
+    selectedSettlement: typeof selectedSettlement
+    reachableHexes: typeof reachableHexes
+    attackTargetHexes: typeof attackTargetHexes
+  } | null>(null)
+
   // Initialize renderer
   useEffect(() => {
     const canvas = canvasRef.current
@@ -69,8 +78,23 @@ export function GameCanvas({
     const renderer = new GameRenderer(config)
 
     renderer.init().then(() => {
+      if (renderer.isDestroyed()) return
       rendererRef.current = renderer
       setIsInitialized(true)
+
+      // Apply any pending state that arrived during init
+      const pending = pendingStateRef.current
+      if (pending?.state) {
+        const ownedSettlement = pending.selectedSettlement?.owner === pending.state.currentPlayer
+          ? pending.selectedSettlement
+          : null
+        renderer.update(pending.state, {
+          selectedUnitId: pending.selectedUnit,
+          selectedSettlement: ownedSettlement,
+          reachableHexes: pending.reachableHexes,
+          attackTargetHexes: pending.attackTargetHexes,
+        })
+      }
     }).catch((err) => {
       console.error('Renderer initialization failed:', err)
     })
@@ -84,6 +108,9 @@ export function GameCanvas({
 
   // Update renderer when game state changes
   useEffect(() => {
+    // Always store the latest state in case renderer is still initializing
+    pendingStateRef.current = { state, selectedUnit, selectedSettlement, reachableHexes, attackTargetHexes }
+
     if (!isInitialized || !rendererRef.current || !state) return
     // Only pass settlement if owned by current player
     const ownedSettlement = selectedSettlement?.owner === state.currentPlayer ? selectedSettlement : null

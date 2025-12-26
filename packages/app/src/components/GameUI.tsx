@@ -1,19 +1,21 @@
 // HUD overlay container for game UI elements
 
 import { useState, useMemo } from 'react'
-import type { TechId, CultureId, HexCoord, Unit, SettlementId } from '@tribes/game-core'
-import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone } from '@tribes/game-core'
+import type { TechId, CultureId, HexCoord, Unit, SettlementId, PolicyId } from '@tribes/game-core'
+import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion } from '@tribes/game-core'
 import { useGame, useCurrentPlayer, useSelectedSettlement, useSelectedUnit } from '../hooks/useGame'
 import { useGameContext } from '../context/GameContext'
 import { SettlementPanel } from './SettlementPanel'
 import { UnitActionsPanel } from './UnitActionsPanel'
 import { TechTreePanel } from './tech'
-import { CulturePanel } from './culture'
+import { CultureTreePanel } from './cultures'
+import { PolicyPanel, PolicySelectionPopup } from './policies'
 import { LootboxRewardPopup } from './LootboxRewardPopup'
 import { YieldIcon } from './YieldIcon'
 import { CombatPreviewPanel } from './CombatPreviewPanel'
 import { EventLog } from './EventLog'
 import { DiplomacyPanel } from './DiplomacyPanel'
+import { TradePanel } from './TradePanel'
 import { WarConfirmationPopup } from './WarConfirmationPopup'
 import { MilestonePanel } from './MilestonePanel'
 
@@ -29,6 +31,7 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
     pendingWarAttack,
     confirmWarAttack,
     cancelWarAttack,
+    canSwapPolicies,
     events,
   } = useGameContext()
   const currentPlayer = useCurrentPlayer()
@@ -36,6 +39,7 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
   const selectedUnit = useSelectedUnit()
   const [showTechTree, setShowTechTree] = useState(false)
   const [showCulturePanel, setShowCulturePanel] = useState(false)
+  const [showPolicyPanel, setShowPolicyPanel] = useState(false)
 
   // Find enemy unit on hovered tile for combat preview
   const hoveredEnemy: Unit | null = useMemo(() => {
@@ -84,6 +88,26 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
       choice,
     })
   }
+
+  const handleSwapPolicies = (toSlot: PolicyId[], toUnslot: PolicyId[]) => {
+    dispatch({
+      type: 'SWAP_POLICIES',
+      toSlot,
+      toUnslot,
+    })
+  }
+
+  const handleSelectPolicy = (choice: 'a' | 'b') => {
+    dispatch({
+      type: 'SELECT_POLICY',
+      choice,
+    })
+  }
+
+  // Check if culture is ready for policy selection
+  const cultureReadyForSelection = useMemo(() => {
+    return currentPlayer ? isCultureReadyForCompletion(currentPlayer) : false
+  }, [currentPlayer])
 
   // Current research info
   const currentResearch = currentPlayer.currentResearch ? getTech(currentPlayer.currentResearch) : null
@@ -189,8 +213,34 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
             )}
           </button>
 
+          {/* Policy Cards Button */}
+          <button
+            onClick={() => setShowPolicyPanel(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 12px',
+              background: '#2a2a3a',
+              border: '1px solid #a855f7',
+              borderRadius: '4px',
+              color: '#a855f7',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            <span>📜</span>
+            <span>Policies</span>
+            <span style={{ color: '#888', fontSize: '11px' }}>
+              ({currentPlayer.policies.active.length}/{Object.values(currentPlayer.policies.slots).reduce((a, b) => a + b, 0)})
+            </span>
+          </button>
+
           {/* Diplomacy Panel */}
           <DiplomacyPanel currentPlayer={currentPlayer} />
+
+          {/* Trade Panel */}
+          <TradePanel currentPlayer={currentPlayer} />
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
           <span style={{ color: '#4caf50', fontWeight: 'bold' }}>
@@ -244,13 +294,25 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
         </div>
       )}
 
-      {/* Culture Panel Modal */}
+      {/* Culture Tree Modal */}
       {showCulturePanel && (
         <div style={{ pointerEvents: 'auto' }}>
-          <CulturePanel
+          <CultureTreePanel
             player={currentPlayer}
             onSelectCulture={handleSelectCulture}
             onClose={() => setShowCulturePanel(false)}
+          />
+        </div>
+      )}
+
+      {/* Policy Panel Modal */}
+      {showPolicyPanel && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <PolicyPanel
+            player={currentPlayer}
+            canSwap={canSwapPolicies}
+            onSwapPolicies={handleSwapPolicies}
+            onClose={() => setShowPolicyPanel(false)}
           />
         </div>
       )}
@@ -284,6 +346,16 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
             settlement={settlementWithPendingMilestone}
             onSelect={handleSelectMilestone}
             onDismiss={() => {}}
+          />
+        </div>
+      )}
+
+      {/* Policy Selection Popup - shows when culture completes */}
+      {cultureReadyForSelection && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <PolicySelectionPopup
+            player={currentPlayer}
+            onSelect={handleSelectPolicy}
           />
         </div>
       )}

@@ -3,7 +3,7 @@
 export interface GameEvent {
   id: string
   message: string
-  type: 'combat' | 'lootbox' | 'settlement' | 'info' | 'diplomacy' | 'milestone' | 'research' | 'golden'
+  type: 'combat' | 'lootbox' | 'settlement' | 'info' | 'diplomacy' | 'milestone' | 'research' | 'golden' | 'culture' | 'policy'
   turn: number
 }
 
@@ -65,6 +65,10 @@ function getEventColor(type: GameEvent['type']): string {
       return '#60a5fa' // blue
     case 'golden':
       return '#fbbf24' // golden/amber
+    case 'culture':
+      return '#c084fc' // purple (for culture unlocks)
+    case 'policy':
+      return '#a855f7' // violet (for policy selections)
     case 'info':
     default:
       return '#ffffff' // white

@@ -32,6 +32,14 @@ import {
 import { TECH_DEFINITIONS } from '../tech'
 import { getGoldenAgeYieldBonus } from '../goldenage'
 import { getPlayerTribeBonuses, getUnitProductionBonus } from '../tribes'
+import {
+  getPolicy,
+  calculatePolicyProductionModifiers,
+  calculatePolicyTradeCapacity,
+  calculatePolicyTradeGoldFlat,
+  calculatePolicyTradeGoldPercent,
+  calculatePolicyFriendlyTradeBonus,
+} from '../cultures'
 
 // =============================================================================
 // Unit Maintenance Costs
@@ -173,6 +181,7 @@ export function resetTradeRouteIds(): void {
  * Gets the trade route capacity for a tribe (global, not per settlement)
  * Based on techs: Smart Contracts (+1), Currency (+1), Lending (+1)
  * Plus tribe bonus (Monkes +1)
+ * Plus policy bonuses (first_mover +1, networking +2, allocation +3)
  */
 export function getTradeRouteCapacity(state: GameState, tribeId: TribeId): number {
   const player = state.players.find((p) => p.tribeId === tribeId)
@@ -201,6 +210,9 @@ export function getTradeRouteCapacity(state: GameState, tribeId: TribeId): numbe
     capacity += tribeBonuses.extraTradeRouteCapacity
   }
 
+  // Apply policy bonuses (first_mover +1, networking +2, allocation +3)
+  capacity += calculatePolicyTradeCapacity(player)
+
   return capacity
 }
 
@@ -211,6 +223,36 @@ export function hasTradeUnlocked(state: GameState, tribeId: TribeId): boolean {
   const player = state.players.find((p) => p.tribeId === tribeId)
   if (!player) return false
   return player.researchedTechs.includes('smart_contracts' as never)
+}
+
+/**
+ * Gets effective trade route capacity considering friendly_trade policy bonus
+ * friendly_trade gives extra capacity only for routes to friendly/allied tribes
+ */
+export function getEffectiveTradeCapacity(
+  state: GameState,
+  tribeId: TribeId,
+  destinationTribeId: TribeId
+): number {
+  const baseCapacity = getTradeRouteCapacity(state, tribeId)
+
+  // If internal trade or to non-friendly tribes, use base capacity
+  if (tribeId === destinationTribeId) {
+    return baseCapacity
+  }
+
+  // Check if destination is friendly or allied
+  const stance = getStance(state, tribeId, destinationTribeId)
+  if (stance === 'friendly' || stance === 'allied') {
+    const player = state.players.find((p) => p.tribeId === tribeId)
+    if (player) {
+      // Add friendly trade bonus capacity
+      const friendlyBonus = calculatePolicyFriendlyTradeBonus(player)
+      return baseCapacity + friendlyBonus
+    }
+  }
+
+  return baseCapacity
 }
 
 /**
@@ -253,10 +295,10 @@ export function createTradeRoute(
     return null
   }
 
-  // Check if tribe has route capacity
+  // Check if tribe has route capacity (considering friendly_trade bonus)
   const currentRoutes = getPlayerTradeRoutes(state, origin.owner)
-  const capacity = getTradeRouteCapacity(state, origin.owner)
-  if (currentRoutes.length >= capacity) {
+  const effectiveCapacity = getEffectiveTradeCapacity(state, origin.owner, destination.owner)
+  if (currentRoutes.length >= effectiveCapacity) {
     return null
   }
 
@@ -433,10 +475,28 @@ export function getActiveTradeRoutes(state: GameState, tribeId: TribeId): TradeR
 
 /**
  * Calculates total trade route income for a player (only from active routes)
+ * Includes policy bonuses: trade_gold (+X flat per route), trade_gold_percent (+X%)
  */
 export function calculateTradeRouteIncome(state: GameState, tribeId: TribeId): number {
+  const player = state.players.find((p) => p.tribeId === tribeId)
   const routes = getActiveTradeRoutes(state, tribeId)
-  return routes.reduce((sum, r) => sum + r.goldPerTurn, 0)
+
+  // Base income from routes
+  let baseIncome = routes.reduce((sum, r) => sum + r.goldPerTurn, 0)
+
+  if (player && routes.length > 0) {
+    // Add flat gold bonus per route (trade_gold: foxy_swap +2)
+    const flatBonusPerRoute = calculatePolicyTradeGoldFlat(player)
+    baseIncome += flatBonusPerRoute * routes.length
+
+    // Apply percentage bonus (trade_gold_percent: buy_the_dip +30%)
+    const percentBonus = calculatePolicyTradeGoldPercent(player)
+    if (percentBonus > 0) {
+      baseIncome = Math.floor(baseIncome * (1 + percentBonus / 100))
+    }
+  }
+
+  return baseIncome
 }
 
 /**
@@ -616,6 +676,28 @@ export function pillageSettlementTradeRoutes(
     return { state, goldGained: 0, routesBroken: 0 }
   }
 
+  // Apply pillage policy bonuses
+  const player = state.players.find(p => p.tribeId === pillagerTribeId)
+  if (player) {
+    for (const policyId of player.policies.active) {
+      const policy = getPolicy(policyId)
+      if (!policy) continue
+
+      const effect = policy.effect
+
+      if (effect.type === 'pillage_damage') {
+        // +X% pillage gold
+        goldGained = Math.floor(goldGained * (1 + ((effect.percent as number) ?? 0) / 100))
+      } else if (effect.type === 'pillage_gold_heal') {
+        // +X% gold from pillaging
+        goldGained = Math.floor(goldGained * (1 + ((effect.gold_percent as number) ?? 0) / 100))
+      } else if (effect.type === 'trade_gold_percent') {
+        // Buy the Dip: +30% Gold from trade routes (applies to pillaged gold too)
+        goldGained = Math.floor(goldGained * (1 + ((effect.percent as number) ?? 0) / 100))
+      }
+    }
+  }
+
   // Grant gold to pillager
   const newPlayers = state.players.map((p) =>
     p.tribeId === pillagerTribeId
@@ -768,9 +850,10 @@ export function canCreateTradeRoute(
   }
 
   const currentRoutes = getPlayerTradeRoutes(state, origin.owner)
-  const capacity = getTradeRouteCapacity(state, origin.owner)
-  if (currentRoutes.length >= capacity) {
-    return { canCreate: false, reason: `Trade route capacity full (${currentRoutes.length}/${capacity})` }
+  const effectiveCapacity = getEffectiveTradeCapacity(state, origin.owner, destination.owner)
+  if (currentRoutes.length >= effectiveCapacity) {
+    const baseCapacity = getTradeRouteCapacity(state, origin.owner)
+    return { canCreate: false, reason: `Trade route capacity full (${currentRoutes.length}/${baseCapacity})` }
   }
 
   const isInternal = origin.owner === destination.owner
@@ -913,6 +996,9 @@ export function processProduction(
   let currentItem = settlement.productionQueue[0]!
   let overflow = settlement.currentProduction + totalProduction
 
+  // Get policy production modifiers
+  const policyMods = player ? calculatePolicyProductionModifiers(player) : null
+
   // Process items until we run out of production
   const newQueue: ProductionItem[] = []
   let itemIndex = 0
@@ -921,8 +1007,9 @@ export function processProduction(
     currentItem = settlement.productionQueue[itemIndex]!
     const remaining = currentItem.cost - currentItem.progress
 
-    // Calculate effective production for this item (with unit type bonuses)
+    // Calculate effective production for this item (with unit type bonuses and policy bonuses)
     let effectiveProduction = overflow
+
     if (currentItem.type === 'unit' && tribeBonuses) {
       const unitBonus = getUnitProductionBonus(currentItem.id, tribeBonuses)
       if (unitBonus > 0) {
@@ -930,13 +1017,35 @@ export function processProduction(
       }
     }
 
+    // Apply policy production bonuses for buildings
+    if (currentItem.type === 'building' && policyMods) {
+      // General building production bonus
+      if (policyMods.buildingProductionPercent > 0) {
+        effectiveProduction = Math.floor(effectiveProduction * (1 + policyMods.buildingProductionPercent / 100))
+      }
+      // Special bonus for walls
+      if (currentItem.id === 'walls' && policyMods.wallProductionPercent > 0) {
+        effectiveProduction = Math.floor(effectiveProduction * (1 + policyMods.wallProductionPercent / 100))
+      }
+    }
+
     if (effectiveProduction >= remaining) {
       // Item completed
       completed.push(currentItem)
       // Subtract the actual production used (before bonus), not the effective production
-      const productionUsed = tribeBonuses && currentItem.type === 'unit'
-        ? Math.ceil(remaining / (1 + getUnitProductionBonus(currentItem.id, tribeBonuses)))
-        : remaining
+      let productionUsed = remaining
+      if (tribeBonuses && currentItem.type === 'unit') {
+        productionUsed = Math.ceil(remaining / (1 + getUnitProductionBonus(currentItem.id, tribeBonuses)))
+      } else if (currentItem.type === 'building' && policyMods) {
+        let divisor = 1
+        if (policyMods.buildingProductionPercent > 0) {
+          divisor *= (1 + policyMods.buildingProductionPercent / 100)
+        }
+        if (currentItem.id === 'walls' && policyMods.wallProductionPercent > 0) {
+          divisor *= (1 + policyMods.wallProductionPercent / 100)
+        }
+        productionUsed = Math.ceil(remaining / divisor)
+      }
       overflow -= Math.min(productionUsed, overflow)
       itemIndex++
     } else {
@@ -1136,7 +1245,7 @@ export function getAvailableUnits(state: GameState, tribeId: TribeId): UnitDefin
   const availableUnits: UnitDefinition[] = []
 
   // Basic units always available (no tech requirement)
-  const basicUnits: UnitType[] = ['scout', 'settler', 'builder']
+  const basicUnits: UnitType[] = ['scout', 'settler', 'builder', 'warrior']
   for (const unitType of basicUnits) {
     const def = UNIT_DEFINITIONS[unitType]
     if (def && def.productionCost > 0) {

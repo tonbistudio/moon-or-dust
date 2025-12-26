@@ -608,7 +608,7 @@ export type GameAction =
   | { type: 'CANCEL_PRODUCTION'; settlementId: SettlementId; queueIndex: number }
   | { type: 'START_RESEARCH'; techId: TechId }
   | { type: 'START_CULTURE'; cultureId: CultureId }
-  | { type: 'SELECT_POLICY'; cultureId: CultureId; choice: 0 | 1 }
+  | { type: 'SELECT_POLICY'; choice: 'a' | 'b' }
   | { type: 'SELECT_PROMOTION'; unitId: UnitId; promotionId: PromotionId }
   | { type: 'SELECT_MILESTONE'; settlementId: SettlementId; level: number; choice: 'a' | 'b' }
   | { type: 'CREATE_TRADE_ROUTE'; origin: SettlementId; destination: SettlementId }

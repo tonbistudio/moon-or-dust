@@ -20,6 +20,7 @@ import { hexRange, hexKey } from '../hex'
 import { createUnit, addUnit } from '../units'
 import { applyPromotion, ALL_PROMOTIONS } from '../promotions'
 import { getPlayerSettlements } from '../settlements'
+import { calculatePolicyGPPointsPercent } from '../cultures'
 
 // =============================================================================
 // Constants
@@ -810,6 +811,8 @@ export function updateTradeRouteCount(state: GameState, tribeId: TribeId): GameS
 
 /**
  * Generic accumulator update helper
+ * Applies great_person_points policy bonus (+25%) to accumulator stats (alpha, gold, vibes, combat)
+ * Count-based stats (kills, captures, tradeRoutes, wondersBuilt, buildingsBuilt) are not affected
  */
 function updateAccumulator(
   state: GameState,
@@ -823,9 +826,19 @@ function updateAccumulator(
   const player = state.players[playerIndex]!
   const currentValue = player.greatPeople.accumulator[stat]
 
+  // Apply GP points bonus to accumulator-type stats only
+  let adjustedAmount = amount
+  const accumulatorStats: (keyof GreatPeopleAccumulator)[] = ['alpha', 'gold', 'vibes', 'combat']
+  if (accumulatorStats.includes(stat)) {
+    const gpPointsBonus = calculatePolicyGPPointsPercent(player)
+    if (gpPointsBonus > 0) {
+      adjustedAmount = Math.floor(amount * (1 + gpPointsBonus / 100))
+    }
+  }
+
   const updatedAccumulator: GreatPeopleAccumulator = {
     ...player.greatPeople.accumulator,
-    [stat]: currentValue + amount,
+    [stat]: currentValue + adjustedAmount,
   }
 
   const updatedGreatPeople: GreatPeopleState = {

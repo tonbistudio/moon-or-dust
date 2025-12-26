@@ -87,7 +87,7 @@ const TECH_POSITIONS: Record<string, { x: number; y: number }> = {
 const ERA_BOUNDARIES = [
   { era: 1, startX: -20, endX: 500, label: 'Era 1: Exploration', color: 'rgba(76, 175, 80, 0.08)' },
   { era: 2, startX: 500, endX: 840, label: 'Era 2: Development', color: 'rgba(33, 150, 243, 0.08)' },
-  { era: 3, startX: 840, endX: 1220, label: 'Era 3: Perfection', color: 'rgba(156, 39, 176, 0.08)' },
+  { era: 3, startX: 840, endX: 1220, label: 'Era 3: Optimization', color: 'rgba(156, 39, 176, 0.08)' },
 ]
 
 export function TechTreePanel({
@@ -372,6 +372,9 @@ export function TechTreePanel({
             const isInChain = highlightedChain.has(tech.id)
             const isDimmed = hoveredTech !== null && !isHovered && !isInChain
 
+            // Show tooltip above for techs in bottom two rows (row 6+)
+            const tooltipPosition = pos.y >= TOP_OFFSET + ROW_HEIGHT * 6 ? 'above' : 'below'
+
             return (
               <TechNode
                 key={tech.id}
@@ -382,6 +385,7 @@ export function TechTreePanel({
                 onHover={handleTechHover}
                 isHighlighted={isHovered || isInChain}
                 isDimmed={isDimmed}
+                tooltipPosition={tooltipPosition}
                 style={{
                   left: `${pos.x}px`,
                   top: `${pos.y}px`,

@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import { hexKey } from '../hex'
 import { UNIT_DEFINITIONS } from '../units'
+import { getPolicy } from '../cultures'
 
 // =============================================================================
 // Improvement Definitions
@@ -361,7 +362,26 @@ export function pillageImprovement(
   }
 
   const improvement = IMPROVEMENT_DEFINITIONS[tile.improvement]
-  const goldGained = improvement.builderChargesCost * 25 // Gold reward for pillaging
+  let goldGained = improvement.builderChargesCost * 25 // Base gold reward for pillaging
+
+  // Apply pillage policy bonuses
+  const player = state.players.find(p => p.tribeId === pillagerTribeId)
+  if (player) {
+    for (const policyId of player.policies.active) {
+      const policy = getPolicy(policyId)
+      if (!policy) continue
+
+      const effect = policy.effect
+
+      if (effect.type === 'pillage_damage') {
+        // +X% pillage gold (interpreting "damage" as gold for improvements)
+        goldGained = Math.floor(goldGained * (1 + ((effect.percent as number) ?? 0) / 100))
+      } else if (effect.type === 'pillage_gold_heal') {
+        // +X% gold from pillaging
+        goldGained = Math.floor(goldGained * (1 + ((effect.gold_percent as number) ?? 0) / 100))
+      }
+    }
+  }
 
   // Remove improvement - omit the improvement property
   const newTiles = new Map(state.map.tiles)

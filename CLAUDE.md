@@ -974,10 +974,15 @@ interface MilestoneChoice {
 **Phase 12: UI & Polish**
 - Main menu and tribe selection
 - ✅ Tech Tree UI (Civ 4 style horizontal layout, path highlighting, custom tooltips)
+- ✅ Culture Tree UI (similar to Tech Tree)
+- ✅ Policy System UI (Civ 6-style drag-and-drop cards, A/B selection popup, slot management)
+- ✅ Milestone Selection UI (A/B choice popup on settlement level-up)
+- ✅ Trade Panel UI (route management, formation tracking, gold income display)
+- ✅ All policy effects implemented (47 effects across yield, combat, trade, production, GP)
 - Tooltips and info panels (other panels)
 - End game screen with Floor Price breakdown
 - Turn notifications (golden age, great person, wonder)
-- Promotion/policy/milestone selection UIs
+- Promotion selection UI
 - Unit minting animation (rarity reveal)
 
 **Phase 13: Blockchain Integration**
@@ -1038,6 +1043,84 @@ Builders have 2 build charges and can use multiple charges per turn. When all ch
 
 ### Resource Improvements Visual
 Improved resources show a green checkmark (✓) overlay on the resource icon. This is rendered in `HexTileRenderer.createResourceIndicator()`.
+
+### Policy System UI
+Civ 6-style policy card management with drag-and-drop.
+
+**Key files:**
+- `app/src/components/policies/PolicyPanel.tsx` - Main panel with drag-and-drop slot management
+- `app/src/components/policies/PolicyCard.tsx` - Color-coded card component by slot type
+- `app/src/components/policies/PolicySlot.tsx` - Empty slot placeholder
+- `app/src/components/policies/PolicySelectionPopup.tsx` - A/B choice popup on culture completion
+- `game-core/src/cultures/index.ts` - Policy definitions, slot logic, culture completion
+
+**Features:**
+- Custom mouse-based drag system (not HTML5 drag-and-drop) for full visual control
+- Floating card follows cursor with white glow effect during drag
+- Wildcard slots accept any policy type; other slots only accept matching types
+- Filter buttons in pool section (All/Military/Economy/Progress/Wildcard) with count badges
+- Slot validation prevents placing cards in incompatible slots
+- Cards can be swapped between slots or moved back to pool
+
+**Actions:**
+- `SELECT_POLICY { choice: 'a' | 'b' }` - Choose policy when culture completes
+- `SWAP_POLICIES { toSlot: PolicyId[], toUnslot: PolicyId[] }` - Confirm slot changes
+
+### Trade Panel UI
+Full trade route management interface.
+
+**Key files:**
+- `app/src/components/TradePanel.tsx` - Main panel with route creation, active/forming routes display
+- `game-core/src/economy/index.ts` - Trade route logic, capacity, gold calculation with policy bonuses
+
+**Features:**
+- Shows lock icon if trade not unlocked (requires Smart Contracts tech)
+- Displays total trade income with gold icon
+- Active routes section with gold yield per route
+- Forming routes section with turns remaining
+- Create new route workflow with destination selection
+- Route cancellation
+- Policy bonuses applied: trade_capacity, trade_gold, trade_gold_percent, friendly_trade
+
+**Actions:**
+- `CREATE_TRADE_ROUTE { originId, destinationId }` - Start a new trade route
+- `CANCEL_TRADE_ROUTE { routeId }` - Cancel an existing route
+
+### Policy Effects System
+All 47 policy effects are fully implemented across these modules:
+
+**Yield bonuses** (`cultures/index.ts` - `calculatePolicyYieldBonuses`):
+- capital_vibes, settlement_vibes, settlement_production, settlement_gold
+- trade_gold, ally_gold, culture_gold_flat, building_alpha, friendly_vibes, pop_vibes
+- gold_percent, vibes_percent, alpha_percent, scaling_production, wonder_production, wonder_gold
+
+**Combat bonuses** (`combat/index.ts` - `calculatePolicyCombatBonus`):
+- aggressive_combat, territory_defense, defense_bonus, low_health_defense
+- territory_debuff, defender_debuff, war_defense_debuff, settlement_defense
+
+**Healing** (`combat/index.ts`):
+- unit_healing, friendly_healing, adjacent_healing, pillage_gold_heal (heal on kill)
+
+**Production** (`cultures/index.ts` - `calculatePolicyProductionModifiers`):
+- wall_production, building_discount, production_buildings
+
+**Trade** (`economy/index.ts`):
+- trade_capacity, trade_gold_percent, friendly_trade (in getEffectiveTradeCapacity)
+
+**Unit creation** (`state/index.ts` - `handleCompletedProduction`):
+- free_promotion, cavalry_movement, unit_vision, settle_population
+
+**Great People** (`greatpeople/index.ts`):
+- great_people_chance (spawn chance), great_person_points (accumulation bonus)
+
+**Floor Price** (`cultures/index.ts`):
+- pop_floor_price, tile_floor_price, wonder_vibes
+
+**Combat rewards** (`cultures/index.ts` helper functions):
+- kill_vibes, promotion_vibes, territory_kill_gold
+
+**Pillaging** (`economy/index.ts`):
+- pillage_damage, pillage_gold_heal (gold bonus)
 
 ## TODO / Future Improvements
 

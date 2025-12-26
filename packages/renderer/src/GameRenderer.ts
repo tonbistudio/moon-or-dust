@@ -253,13 +253,46 @@ export class GameRenderer {
     // Update units with rarity borders
     this.unitRenderer.update(state, state.currentPlayer)
 
-    // Center camera on map if first update
+    // Center camera on player's starting units if first update
     if (!prevState) {
-      this.centerOnMap()
+      this.centerOnPlayerUnits()
     }
   }
 
-  private centerOnMap(): void {
+  private centerOnPlayerUnits(): void {
+    if (!this.currentState) return
+
+    // Find the human player
+    const humanPlayer = this.currentState.players.find(p => p.isHuman)
+    if (!humanPlayer) {
+      // Fallback to map center if no human player
+      this.centerOnMapCenter()
+      return
+    }
+
+    // Find the settler unit belonging to the human player
+    for (const unit of this.currentState.units.values()) {
+      if (unit.owner === humanPlayer.tribeId && unit.type === 'settler') {
+        const worldPos = this.hexRenderer.hexToPixel(unit.position.q, unit.position.r)
+        this.camera.centerOn(worldPos.x, worldPos.y)
+        return
+      }
+    }
+
+    // Fallback: find any unit belonging to the human player
+    for (const unit of this.currentState.units.values()) {
+      if (unit.owner === humanPlayer.tribeId) {
+        const worldPos = this.hexRenderer.hexToPixel(unit.position.q, unit.position.r)
+        this.camera.centerOn(worldPos.x, worldPos.y)
+        return
+      }
+    }
+
+    // Fallback to map center if no units found
+    this.centerOnMapCenter()
+  }
+
+  private centerOnMapCenter(): void {
     if (!this.currentState) return
 
     const { width, height } = this.currentState.map
@@ -288,6 +321,10 @@ export class GameRenderer {
     if (this.initialized && this.app.stage) {
       this.app.destroy(true)
     }
+  }
+
+  isDestroyed(): boolean {
+    return this.destroyed
   }
 
   // Public camera controls

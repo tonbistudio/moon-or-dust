@@ -23,6 +23,8 @@ import {
 import { damageSettlement } from '../settlements'
 import { pillageSettlementTradeRoutes } from '../economy'
 import { areAtWar } from '../diplomacy'
+import { getPolicy } from '../cultures'
+import { getWonderHealingBonus } from '../wonders'
 
 // =============================================================================
 // Combat Constants
@@ -35,6 +37,29 @@ const XP_TO_LEVEL = 10 // XP needed for promotion
 
 // Settlement combat constants
 const SETTLEMENT_DEFENSE_STRENGTH = 20 // Base defense strength of settlements
+
+/**
+ * Calculates effective settlement defense including policy bonuses
+ */
+export function calculateSettlementDefense(state: GameState, settlement: Settlement): number {
+  let defense = SETTLEMENT_DEFENSE_STRENGTH
+
+  // Get the settlement owner's policies
+  const player = state.players.find(p => p.tribeId === settlement.owner)
+  if (player) {
+    for (const policyId of player.policies.active) {
+      const policy = getPolicy(policyId)
+      if (!policy) continue
+
+      if (policy.effect.type === 'settlement_defense') {
+        // +X% settlement defense
+        defense = Math.floor(defense * (1 + ((policy.effect.percent as number) ?? 0) / 100))
+      }
+    }
+  }
+
+  return defense
+}
 
 // =============================================================================
 // Terrain Defense Modifiers
@@ -177,7 +202,118 @@ export interface CombatStrengthBreakdown {
   healthPenalty: number
   promotionBonus: number
   riverCrossingPenalty: number
+  policyBonus: number
   total: number
+}
+
+/**
+ * Calculates combat bonus/penalty from active policies
+ * @param state - Current game state
+ * @param unit - The unit to calculate for
+ * @param isDefending - Whether the unit is defending
+ * @param enemyTribeId - The enemy tribe (for enemy debuff policies)
+ */
+function calculatePolicyCombatBonus(
+  state: GameState,
+  unit: Unit,
+  base: number,
+  isDefending: boolean,
+  enemyTribeId?: TribeId
+): number {
+  let bonus = 0
+
+  // Get the unit owner's player
+  const player = state.players.find(p => p.tribeId === unit.owner)
+  if (!player) return 0
+
+  const tile = state.map.tiles.get(hexKey(unit.position))
+  const isInOwnTerritory = tile?.owner === unit.owner
+  const healthRatio = unit.health / unit.maxHealth
+
+  // Apply friendly policies (unit owner's policies)
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (!policy) continue
+
+    const effect = policy.effect
+
+    switch (effect.type) {
+      case 'aggressive_combat':
+        // +X% attack when attacking, -Y% defense when defending
+        if (!isDefending) {
+          bonus += Math.floor(base * ((effect.attack as number) ?? 0) / 100)
+        } else {
+          bonus += Math.floor(base * ((effect.defense as number) ?? 0) / 100) // defense is negative
+        }
+        break
+
+      case 'territory_defense':
+        // +X% defense in owned territory
+        if (isDefending && isInOwnTerritory) {
+          bonus += Math.floor(base * ((effect.percent as number) ?? 0) / 100)
+        }
+        break
+
+      case 'defense_bonus':
+        // +X% combat strength when defending
+        if (isDefending) {
+          bonus += Math.floor(base * ((effect.percent as number) ?? 0) / 100)
+        }
+        break
+
+      case 'low_health_defense':
+        // +X% defense below threshold HP
+        if (isDefending) {
+          const threshold = ((effect.threshold as number) ?? 50) / 100
+          if (healthRatio < threshold) {
+            bonus += Math.floor(base * ((effect.percent as number) ?? 0) / 100)
+          }
+        }
+        break
+    }
+  }
+
+  // Apply enemy debuff policies (enemy's policies that debuff this unit)
+  if (enemyTribeId) {
+    const enemyPlayer = state.players.find(p => p.tribeId === enemyTribeId)
+    if (enemyPlayer) {
+      const enemyTile = state.map.tiles.get(hexKey(unit.position))
+      const isInEnemyTerritory = enemyTile?.owner === enemyTribeId
+
+      for (const policyId of enemyPlayer.policies.active) {
+        const policy = getPolicy(policyId)
+        if (!policy) continue
+
+        const effect = policy.effect
+
+        switch (effect.type) {
+          case 'territory_debuff':
+            // Enemy units in your territory -X combat strength
+            if (isInEnemyTerritory) {
+              bonus += (effect.amount as number) ?? 0 // amount is negative
+            }
+            break
+
+          case 'defender_debuff':
+            // Enemy units -X combat strength when attacking you (applies to attacker)
+            if (!isDefending) {
+              bonus += (effect.amount as number) ?? 0 // amount is negative
+            }
+            break
+
+          case 'war_defense_debuff':
+            // Enemies at war with you have -X% defense
+            if (isDefending && areAtWar(state, unit.owner, enemyTribeId)) {
+              const percentReduction = (effect.percent as number) ?? 0
+              bonus -= Math.floor(base * percentReduction / 100)
+            }
+            break
+        }
+      }
+    }
+  }
+
+  return bonus
 }
 
 /**
@@ -186,12 +322,14 @@ export interface CombatStrengthBreakdown {
  * @param unit - The unit to calculate strength for
  * @param isDefending - Whether the unit is defending (vs attacking)
  * @param targetPosition - Optional target position (for river crossing calculation when attacking)
+ * @param enemyTribeId - Optional enemy tribe ID (for policy debuffs)
  */
 export function calculateCombatStrength(
   state: GameState,
   unit: Unit,
   isDefending: boolean,
-  targetPosition?: HexCoord
+  targetPosition?: HexCoord,
+  enemyTribeId?: TribeId
 ): CombatStrengthBreakdown {
   const def = UNIT_DEFINITIONS[unit.type]
   const tile = state.map.tiles.get(hexKey(unit.position))
@@ -241,6 +379,9 @@ export function calculateCombatStrength(
     }
   }
 
+  // Policy bonuses/penalties
+  const policyBonus = calculatePolicyCombatBonus(state, unit, base, isDefending, enemyTribeId)
+
   const total = Math.max(
     1,
     base +
@@ -250,7 +391,8 @@ export function calculateCombatStrength(
       fortificationBonus -
       healthPenalty +
       promotionBonus +
-      riverCrossingPenalty // This is negative, so adding it reduces strength
+      riverCrossingPenalty + // This is negative, so adding it reduces strength
+      policyBonus
   )
 
   return {
@@ -263,6 +405,7 @@ export function calculateCombatStrength(
     healthPenalty,
     promotionBonus,
     riverCrossingPenalty,
+    policyBonus,
     total,
   }
 }
@@ -319,9 +462,9 @@ export function resolveCombat(
   const attackerDef = UNIT_DEFINITIONS[attacker.type]
   const isRanged = attackerDef.baseRangedStrength > 0
 
-  // Calculate combat strengths (pass defender position for river crossing check)
-  const attackerStrength = calculateCombatStrength(state, attacker, false, defender.position)
-  const defenderStrength = calculateCombatStrength(state, defender, true)
+  // Calculate combat strengths (pass defender position for river crossing check, enemy tribe for policy effects)
+  const attackerStrength = calculateCombatStrength(state, attacker, false, defender.position, defender.owner)
+  const defenderStrength = calculateCombatStrength(state, defender, true, undefined, attacker.owner)
 
   // Calculate damage
   const strengthRatio = attackerStrength.total / Math.max(1, defenderStrength.total)
@@ -380,6 +523,26 @@ export function resolveCombat(
 }
 
 /**
+ * Calculates heal-on-kill amount from policies
+ */
+function calculateHealOnKill(state: GameState, tribeId: TribeId): number {
+  let healAmount = 0
+  const player = state.players.find(p => p.tribeId === tribeId)
+
+  if (player) {
+    for (const policyId of player.policies.active) {
+      const policy = getPolicy(policyId)
+      if (policy?.effect.type === 'pillage_gold_heal') {
+        // "units heal X HP on kill"
+        healAmount += (policy.effect.heal as number) ?? 0
+      }
+    }
+  }
+
+  return healAmount
+}
+
+/**
  * Applies combat result to game state
  */
 export function applyCombatResult(
@@ -399,6 +562,12 @@ export function applyCombatResult(
     newState = removeUnit(newState, result.attacker.id)
     // Increment kill count for defender's owner
     newState = incrementKillCount(newState, result.defender.owner)
+    // Apply heal-on-kill to defender if they have the policy
+    const healAmount = calculateHealOnKill(newState, result.defender.owner)
+    if (healAmount > 0) {
+      const healedDefender = healUnit(result.defender, healAmount)
+      newState = updateUnit(newState, healedDefender)
+    }
   } else {
     newState = updateUnit(newState, result.attacker)
     // Check for level up
@@ -412,6 +581,12 @@ export function applyCombatResult(
     newState = removeUnit(newState, result.defender.id)
     // Increment kill count for attacker's owner
     newState = incrementKillCount(newState, result.attacker.owner)
+    // Apply heal-on-kill to attacker if they have the policy
+    const healAmount = calculateHealOnKill(newState, result.attacker.owner)
+    if (healAmount > 0) {
+      const healedAttacker = healUnit(result.attacker, healAmount)
+      newState = updateUnit(newState, healedAttacker)
+    }
   } else {
     newState = updateUnit(newState, result.defender)
   }
@@ -559,6 +734,7 @@ const HEAL_IN_SETTLEMENT = 20 // HP healed in settlement
 
 /**
  * Calculates healing for a unit at end of turn
+ * Includes policy and wonder bonuses
  */
 export function calculateHealing(
   state: GameState,
@@ -570,22 +746,91 @@ export function calculateHealing(
   }
 
   const tile = state.map.tiles.get(hexKey(unit.position))
+  const isInFriendlyTerritory = tile?.owner === unit.owner
+  let isInSettlement = false
 
   // Check if in settlement
   for (const settlement of state.settlements.values()) {
     if (hexKey(settlement.position) === hexKey(unit.position)) {
       if (settlement.owner === unit.owner) {
-        return HEAL_IN_SETTLEMENT
+        isInSettlement = true
+        break
       }
     }
   }
 
-  // Check if in friendly territory
-  if (tile?.owner === unit.owner) {
-    return HEAL_IN_TERRITORY
+  // Base healing amount
+  let healing = 0
+  if (isInSettlement) {
+    healing = HEAL_IN_SETTLEMENT
+  } else if (isInFriendlyTerritory) {
+    healing = HEAL_IN_TERRITORY
+  } else {
+    healing = HEAL_PER_TURN
   }
 
-  return HEAL_PER_TURN
+  // Add wonder healing bonus
+  healing += getWonderHealingBonus(state, unit.owner)
+
+  // Add policy healing bonuses
+  const player = state.players.find(p => p.tribeId === unit.owner)
+  if (player) {
+    for (const policyId of player.policies.active) {
+      const policy = getPolicy(policyId)
+      if (!policy) continue
+
+      const effect = policy.effect
+
+      switch (effect.type) {
+        case 'unit_healing':
+          // +X HP healing per turn
+          healing += (effect.amount as number) ?? 0
+          break
+
+        case 'friendly_healing':
+          // +X HP when in friendly territory
+          if (isInFriendlyTerritory) {
+            healing += (effect.amount as number) ?? 0
+          }
+          break
+      }
+    }
+  }
+
+  return healing
+}
+
+/**
+ * Calculates healing bonus from adjacent units with adjacent_healing policy
+ * This is a separate function because it affects adjacent units, not the unit itself
+ */
+export function calculateAdjacentHealingReceived(
+  state: GameState,
+  unit: Unit
+): number {
+  let healing = 0
+  const neighbors = hexNeighbors(unit.position)
+
+  for (const neighborCoord of neighbors) {
+    const unitsAtNeighbor = getUnitsAt(state, neighborCoord)
+    for (const neighborUnit of unitsAtNeighbor) {
+      // Only friendly units can heal us
+      if (neighborUnit.owner !== unit.owner) continue
+
+      // Check if the neighbor's owner has adjacent_healing policy
+      const neighborPlayer = state.players.find(p => p.tribeId === neighborUnit.owner)
+      if (neighborPlayer) {
+        for (const policyId of neighborPlayer.policies.active) {
+          const policy = getPolicy(policyId)
+          if (policy?.effect.type === 'adjacent_healing') {
+            healing += (policy.effect.amount as number) ?? 0
+          }
+        }
+      }
+    }
+  }
+
+  return healing
 }
 
 /**
@@ -620,8 +865,8 @@ export function getCombatPreview(
   attacker: Unit,
   defender: Unit
 ): CombatPreview {
-  const attackerStrength = calculateCombatStrength(state, attacker, false, defender.position)
-  const defenderStrength = calculateCombatStrength(state, defender, true)
+  const attackerStrength = calculateCombatStrength(state, attacker, false, defender.position, defender.owner)
+  const defenderStrength = calculateCombatStrength(state, defender, true, undefined, attacker.owner)
 
   const attackerDef = UNIT_DEFINITIONS[attacker.type]
   const isRanged = attackerDef.baseRangedStrength > 0
@@ -781,8 +1026,11 @@ export function resolveSettlementCombat(
   // Siege units have much higher settlementStrength (5x their combat strength)
   const attackStrength = attacker.settlementStrength
 
+  // Calculate effective settlement defense including policy bonuses
+  const settlementDefense = calculateSettlementDefense(state, settlement)
+
   // Calculate damage based on strength ratio
-  const strengthRatio = attackStrength / Math.max(1, SETTLEMENT_DEFENSE_STRENGTH)
+  const strengthRatio = attackStrength / Math.max(1, settlementDefense)
   const damageDealt = Math.floor(BASE_COMBAT_DAMAGE * strengthRatio)
 
   // Apply damage to settlement
@@ -861,11 +1109,12 @@ export function getSettlementCombatPreview(
   attacker: Unit,
   settlement: Settlement
 ): SettlementCombatPreview {
-  const attackerStrength = calculateCombatStrength(state, attacker, false, settlement.position)
+  const attackerStrength = calculateCombatStrength(state, attacker, false, settlement.position, settlement.owner)
 
   // Use settlementStrength for attacking settlements
   const settlementAttackStrength = attacker.settlementStrength
-  const strengthRatio = settlementAttackStrength / Math.max(1, SETTLEMENT_DEFENSE_STRENGTH)
+  const settlementDefense = calculateSettlementDefense(state, settlement)
+  const strengthRatio = settlementAttackStrength / Math.max(1, settlementDefense)
   const estimatedDamage = Math.floor(BASE_COMBAT_DAMAGE * strengthRatio)
 
   // Estimate turns to conquer (assuming no regen during siege)
@@ -874,7 +1123,7 @@ export function getSettlementCombatPreview(
   return {
     attackerStrength,
     settlementStrength: settlementAttackStrength,
-    settlementDefense: SETTLEMENT_DEFENSE_STRENGTH,
+    settlementDefense,
     estimatedDamage,
     isSiege: isSiegeUnit(attacker.type),
     turnsToConquer,

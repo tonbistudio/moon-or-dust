@@ -5,6 +5,8 @@ import {
   useContext,
   useReducer,
   useCallback,
+  useRef,
+  useEffect,
   type ReactNode,
 } from 'react'
 import type {
@@ -27,6 +29,7 @@ import {
   areAtWar,
   getTech,
   getCulture,
+  getPolicy,
   getMilestoneForLevel,
   type GameConfig,
   type ActionResult,
@@ -68,6 +71,9 @@ export interface GameContextValue {
   // War confirmation popup
   pendingWarAttack: PendingWarAttack | null
 
+  // Policy swap state
+  canSwapPolicies: boolean
+
   // Event log
   events: GameEvent[]
 
@@ -96,6 +102,7 @@ interface InternalState {
   selectedSettlement: SettlementId | null
   pendingLootboxReward: LootboxRewardInfo | null
   pendingWarAttack: PendingWarAttack | null
+  canSwapPolicies: boolean
   events: GameEvent[]
   eventIdCounter: number
 }
@@ -111,6 +118,7 @@ type InternalAction =
   | { type: 'DISMISS_LOOTBOX_REWARD' }
   | { type: 'ADD_EVENT'; message: string; eventType: GameEvent['type']; turn: number }
   | { type: 'CLEAR_EVENTS' }
+  | { type: 'SET_CAN_SWAP_POLICIES'; canSwap: boolean }
 
 function internalReducer(state: InternalState, action: InternalAction): InternalState {
   switch (action.type) {
@@ -189,6 +197,7 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
         selectedUnit: null,
         selectedSettlement: null,
         pendingLootboxReward: null,
+        canSwapPolicies: true,
         events: [],
         eventIdCounter: 0,
       }
@@ -237,6 +246,9 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
 
     case 'CLEAR_EVENTS':
       return { ...state, events: [] }
+
+    case 'SET_CAN_SWAP_POLICIES':
+      return { ...state, canSwapPolicies: action.canSwap }
 
     default:
       return state
@@ -369,6 +381,7 @@ const initialState: InternalState = {
   selectedSettlement: null,
   pendingLootboxReward: null,
   pendingWarAttack: null,
+  canSwapPolicies: true,
   events: [],
   eventIdCounter: 0,
 }
@@ -452,6 +465,7 @@ function detectResearchCompletion(
 }
 
 // Detect culture completion by comparing old and new player state
+// Only fires when SELECT_POLICY action completes a culture
 function detectCultureCompletion(
   oldState: GameState,
   newState: GameState,
@@ -461,15 +475,14 @@ function detectCultureCompletion(
   const newPlayer = newState.players.find(p => p.tribeId === tribeId)
   if (!oldPlayer || !newPlayer) return null
 
-  // Check if a culture was completed
-  if (oldPlayer.currentCulture && !newPlayer.currentCulture) {
-    const newlyCompleted = newPlayer.unlockedCultures.find(
-      (cultureId) => !oldPlayer.unlockedCultures.includes(cultureId)
-    )
-    if (newlyCompleted) {
-      const culture = getCulture(newlyCompleted)
-      return culture?.name ?? newlyCompleted
-    }
+  // Check if a NEW culture was added to unlocked list
+  // This is more reliable than checking currentCulture transitions
+  const newlyCompleted = newPlayer.unlockedCultures.find(
+    (cultureId) => !oldPlayer.unlockedCultures.includes(cultureId)
+  )
+  if (newlyCompleted) {
+    const culture = getCulture(newlyCompleted)
+    return culture?.name ?? newlyCompleted
   }
   return null
 }
@@ -488,8 +501,50 @@ function detectGoldenAgeStart(
   return !oldPlayer.goldenAge.active && newPlayer.goldenAge.active
 }
 
+// Detect settlement founding
+function detectSettlementFounded(
+  oldState: GameState,
+  newState: GameState,
+  tribeId: TribeId
+): string | null {
+  // Check if a new settlement was added for this tribe
+  for (const [id, settlement] of newState.settlements) {
+    if (settlement.owner === tribeId && !oldState.settlements.has(id)) {
+      return settlement.name
+    }
+  }
+  return null
+}
+
+// Detect policy selection
+function detectPolicySelection(
+  oldState: GameState,
+  newState: GameState,
+  tribeId: TribeId
+): string | null {
+  const oldPlayer = oldState.players.find(p => p.tribeId === tribeId)
+  const newPlayer = newState.players.find(p => p.tribeId === tribeId)
+  if (!oldPlayer || !newPlayer) return null
+
+  // Check if a new policy was added to the pool
+  const newPolicy = newPlayer.policies.pool.find(
+    (policyId) => !oldPlayer.policies.pool.includes(policyId)
+  )
+  if (newPolicy) {
+    const policy = getPolicy(newPolicy)
+    return policy?.name ?? newPolicy
+  }
+  return null
+}
+
 export function GameProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, internalDispatch] = useReducer(internalReducer, initialState)
+
+  // Keep a ref to the latest game state to avoid stale closure issues
+  const latestGameStateRef = useRef<GameState | null>(null)
+  useEffect(() => {
+    latestGameStateRef.current = state.gameState
+  }, [state.gameState])
 
   const startGame = useCallback((config: GameConfig) => {
     internalDispatch({ type: 'START_GAME', config })
@@ -497,11 +552,13 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
 
   const dispatch = useCallback(
     (action: GameAction): ActionResult => {
-      if (!state.gameState) {
+      // Use ref to get the latest state, avoiding stale closure issues
+      const currentGameState = latestGameStateRef.current ?? state.gameState
+      if (!currentGameState) {
         return { success: false, error: 'Game not started' }
       }
 
-      const oldState = state.gameState
+      const oldState = currentGameState
 
       // Check if this is an attack on a non-war target - if so, show confirmation
       if (action.type === 'ATTACK') {
@@ -590,7 +647,7 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         internalDispatch({
           type: 'ADD_EVENT',
           message: `Culture unlocked: ${completedCulture}!`,
-          eventType: 'research',
+          eventType: 'culture',
           turn: currentState.turn,
         })
       }
@@ -605,6 +662,38 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
           eventType: 'golden',
           turn: currentState.turn,
         })
+      }
+
+      // Detect settlement founding
+      const foundedSettlement = detectSettlementFounded(oldState, currentState, currentState.currentPlayer)
+      if (foundedSettlement) {
+        internalDispatch({
+          type: 'ADD_EVENT',
+          message: `Settlement founded: ${foundedSettlement}!`,
+          eventType: 'settlement',
+          turn: currentState.turn,
+        })
+      }
+
+      // Detect policy selection
+      const selectedPolicy = detectPolicySelection(oldState, currentState, currentState.currentPlayer)
+      if (selectedPolicy) {
+        internalDispatch({
+          type: 'ADD_EVENT',
+          message: `Policy chosen: ${selectedPolicy}`,
+          eventType: 'policy',
+          turn: currentState.turn,
+        })
+      }
+
+      // Lock policy swapping when SWAP_POLICIES is dispatched
+      if (action.type === 'SWAP_POLICIES') {
+        internalDispatch({ type: 'SET_CAN_SWAP_POLICIES', canSwap: false })
+      }
+
+      // Unlock policy swapping when a culture is completed
+      if (completedCulture) {
+        internalDispatch({ type: 'SET_CAN_SWAP_POLICIES', canSwap: true })
       }
 
       // Clear events and run AI after END_TURN
@@ -629,6 +718,8 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         }
       }
 
+      // Update state and ref synchronously so subsequent dispatches see the new state
+      latestGameStateRef.current = currentState
       internalDispatch(
         lootboxReward
           ? { type: 'SET_STATE', state: currentState, lootboxReward }
@@ -708,6 +799,7 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     })
 
     if (attackResult.success && attackResult.state) {
+      latestGameStateRef.current = attackResult.state
       internalDispatch({ type: 'SET_STATE', state: attackResult.state })
     }
 
@@ -728,6 +820,7 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     selectedSettlement: state.selectedSettlement,
     pendingLootboxReward: state.pendingLootboxReward,
     pendingWarAttack: state.pendingWarAttack,
+    canSwapPolicies: state.canSwapPolicies,
     events: state.events,
     startGame,
     dispatch,

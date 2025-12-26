@@ -13,6 +13,12 @@ import { generateSettlementId } from '../state'
 import { hexKey, hexRange, hexNeighbors } from '../hex'
 import { calculateBuildingYields } from '../buildings'
 import { getPlayerTribeBonuses } from '../tribes'
+import {
+  calculatePolicyYieldBonuses,
+  applyPolicyBonusesToYields,
+  calculatePolicyWonderVibes,
+  calculatePolicyImprovementGoldPercent,
+} from '../cultures'
 
 // =============================================================================
 // Settlement Names (Tribe-Specific)
@@ -319,6 +325,7 @@ export function calculateSettlementYields(state: GameState, settlement: Settleme
 
 /**
  * Calculates total yields for a player from all their settlements
+ * Includes policy bonuses from active policies
  */
 export function calculatePlayerYields(state: GameState, tribeId: TribeId): Yields {
   let yields: Yields = {
@@ -329,9 +336,42 @@ export function calculatePlayerYields(state: GameState, tribeId: TribeId): Yield
     growth: 0,
   }
 
+  // Calculate gold from improvements separately for policy boost
+  let improvementGold = 0
+
   for (const settlement of state.settlements.values()) {
     if (settlement.owner === tribeId) {
       yields = addYields(yields, calculateSettlementYields(state, settlement))
+    }
+  }
+
+  // Calculate improvement gold from owned tiles
+  for (const tile of state.map.tiles.values()) {
+    if (tile.owner === tribeId && tile.improvement) {
+      // Get improvement gold yield
+      const tileYields = calculateTileYields(tile)
+      improvementGold += tileYields.gold
+    }
+  }
+
+  // Apply policy bonuses
+  const player = state.players.find(p => p.tribeId === tribeId)
+  if (player) {
+    const policyBonuses = calculatePolicyYieldBonuses(state, player)
+    yields = applyPolicyBonusesToYields(state, player, yields, policyBonuses)
+
+    // Apply wonder_vibes policy bonus
+    const wondersBuilt = state.wonders.filter(w => w.builtBy === tribeId).length
+    const wonderVibes = calculatePolicyWonderVibes(player, wondersBuilt)
+    if (wonderVibes > 0) {
+      yields = { ...yields, vibes: yields.vibes + wonderVibes }
+    }
+
+    // Apply improvement_gold policy bonus (percentage)
+    const improvementGoldPercent = calculatePolicyImprovementGoldPercent(player)
+    if (improvementGoldPercent > 0 && improvementGold > 0) {
+      const bonusGold = Math.floor(improvementGold * improvementGoldPercent / 100)
+      yields = { ...yields, gold: yields.gold + bonusGold }
     }
   }
 

@@ -13,6 +13,7 @@ interface TechNodeProps {
   isHighlighted?: boolean
   isDimmed?: boolean
   style?: React.CSSProperties
+  tooltipPosition?: 'above' | 'below'
 }
 
 // Get icon path for a tech
@@ -77,6 +78,7 @@ export function TechNode({
   isHighlighted,
   isDimmed,
   style,
+  tooltipPosition = 'below',
 }: TechNodeProps): JSX.Element {
   const [showTooltip, setShowTooltip] = useState(false)
   const isResearched = player.researchedTechs.includes(tech.id)
@@ -302,10 +304,11 @@ export function TechNode({
         <div
           style={{
             position: 'absolute',
-            top: '100%',
+            ...(tooltipPosition === 'above'
+              ? { bottom: '100%', marginBottom: '8px' }
+              : { top: '100%', marginTop: '8px' }),
             left: '50%',
             transform: 'translateX(-50%)',
-            marginTop: '8px',
             background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
             border: '1px solid #444',
             borderRadius: '6px',
@@ -403,14 +406,15 @@ export function TechNode({
           {/* Tooltip arrow */}
           <div style={{
             position: 'absolute',
-            top: '-6px',
             left: '50%',
             transform: 'translateX(-50%)',
             width: 0,
             height: 0,
             borderLeft: '6px solid transparent',
             borderRight: '6px solid transparent',
-            borderBottom: '6px solid #444',
+            ...(tooltipPosition === 'above'
+              ? { bottom: '-6px', borderTop: '6px solid #444' }
+              : { top: '-6px', borderBottom: '6px solid #444' }),
           }} />
         </div>
       )}
