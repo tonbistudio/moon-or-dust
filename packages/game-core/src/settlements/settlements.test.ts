@@ -206,7 +206,6 @@ describe('Settlement Yield Calculation', () => {
       ...state,
       map: mapResult.map,
       lootboxes: mapResult.lootboxes,
-      barbarianCamps: mapResult.barbarianCamps,
     }
   })
 
@@ -317,7 +316,6 @@ describe('Settlement Validation', () => {
       ...state,
       map: mapResult.map,
       lootboxes: mapResult.lootboxes,
-      barbarianCamps: mapResult.barbarianCamps,
     }
   })
 
@@ -387,7 +385,6 @@ describe('Settlement State Management', () => {
       ...state,
       map: mapResult.map,
       lootboxes: mapResult.lootboxes,
-      barbarianCamps: mapResult.barbarianCamps,
     }
   })
 

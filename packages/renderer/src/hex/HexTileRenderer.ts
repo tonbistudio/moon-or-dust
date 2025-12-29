@@ -1,6 +1,6 @@
 import { Container, Graphics, Text, TextStyle, Sprite, Texture, Assets } from 'pixi.js'
 import type { GameState, HexCoord, Tile, TerrainType, Lootbox, TribeId, Settlement } from '@tribes/game-core'
-import { hexToPixel, getTribe, hexRange, hexKey, hexNeighbors, calculateTileYields, type HexLayout } from '@tribes/game-core'
+import { hexToPixel, getTribe, hexKey, hexNeighbors, calculateTileYields, type HexLayout } from '@tribes/game-core'
 
 // Terrain sprite system loaded
 
@@ -146,7 +146,18 @@ export class HexTileRenderer {
   private readonly tileContainer: Container
   private readonly overlayContainer: Container
 
+  // Separate containers for different overlay types (for selective updates)
+  private readonly fogContainer: Container
+  private readonly rangeContainer: Container
+  private readonly uiContainer: Container // hover, selection, arrows
+  private readonly yieldContainer: Container // settlement yields (separate for caching)
+
   private hoveredTile: HexCoord | null = null
+
+  // Throttling for hover updates
+  private hoverUpdatePending = false
+  private lastHoverUpdate = 0
+  private readonly HOVER_THROTTLE_MS = 16 // ~60fps
   private selectedTile: HexCoord | null = null
   private reachableHexes: Set<string> = new Set()
   private attackTargetHexes: Set<string> = new Set()
@@ -154,6 +165,21 @@ export class HexTileRenderer {
   private lastState: GameState | null = null
   private selectedUnitPosition: HexCoord | null = null
   private selectedSettlement: Settlement | null = null
+
+  // Dirty flags for overlay optimization
+  private lastFogSet: Set<string> | null = null
+  private lastReachableHexes: Set<string> = new Set()
+  private lastAttackTargetHexes: Set<string> = new Set()
+  private lastSelectedSettlementId: string | null = null
+
+  // Memoization cache for tile yield calculations
+  private yieldCache: Map<string, { gold: number; alpha: number; vibes: number; production: number; growth: number }> = new Map()
+
+  // Graphics object pools for yield indicators
+  private yieldGraphicsPool: Graphics[] = []
+  private yieldTextPool: Text[] = []
+  private pooledGraphicsIndex = 0
+  private pooledTextIndex = 0
 
   constructor(hexSize: number) {
     this.hexSize = hexSize
@@ -163,6 +189,18 @@ export class HexTileRenderer {
     }
     this.tileContainer = new Container()
     this.overlayContainer = new Container()
+
+    // Create layered overlay containers for selective updates
+    this.fogContainer = new Container()
+    this.rangeContainer = new Container()
+    this.yieldContainer = new Container() // Settlement yields
+    this.uiContainer = new Container()
+
+    // Add in order: fog (bottom), range overlays, yields, ui highlights (top)
+    this.overlayContainer.addChild(this.fogContainer)
+    this.overlayContainer.addChild(this.rangeContainer)
+    this.overlayContainer.addChild(this.yieldContainer)
+    this.overlayContainer.addChild(this.uiContainer)
   }
 
   update(state: GameState, parent: Container): void {
@@ -244,9 +282,10 @@ export class HexTileRenderer {
   }
 
   private rebuildTiles(state: GameState): void {
-    // Clear existing graphics
+    // Clear existing graphics and caches
     this.tileContainer.removeChildren()
     this.tileGraphics.clear()
+    this.yieldCache.clear() // Invalidate yield cache when tiles change
 
     // Create graphics for each tile
     for (const [key, tile] of state.map.tiles) {
@@ -620,44 +659,76 @@ export class HexTileRenderer {
   }
 
   private updateOverlays(state: GameState): void {
-    this.overlayContainer.removeChildren()
-
-    // Draw fog of war (fully opaque to hide terrain)
     const currentPlayerFog = state.fog.get(state.currentPlayer)
-    if (currentPlayerFog) {
-      for (const [key, tile] of state.map.tiles) {
-        if (!currentPlayerFog.has(key)) {
-          const { x, y } = hexToPixel(tile.coord, this.layout)
-          const fog = new Graphics()
-          this.drawHex(fog, x, y, UI_COLORS.fog)
-          fog.alpha = 1.0
-          this.overlayContainer.addChild(fog)
+
+    // === FOG LAYER (only rebuild when fog changes) ===
+    const fogChanged = this.hasFogChanged(currentPlayerFog)
+    if (fogChanged) {
+      this.fogContainer.removeChildren()
+      if (currentPlayerFog) {
+        for (const [key, tile] of state.map.tiles) {
+          if (!currentPlayerFog.has(key)) {
+            const { x, y } = hexToPixel(tile.coord, this.layout)
+            const fog = new Graphics()
+            this.drawHex(fog, x, y, UI_COLORS.fog)
+            fog.alpha = 1.0
+            this.fogContainer.addChild(fog)
+          }
         }
       }
+      // Update fog tracking
+      this.lastFogSet = currentPlayerFog ? new Set(currentPlayerFog) : null
     }
 
-    // Draw reachable hexes (movement range)
-    for (const hexKey of this.reachableHexes) {
-      const tile = state.map.tiles.get(hexKey)
-      if (tile && currentPlayerFog?.has(hexKey)) {
-        const { x, y } = hexToPixel(tile.coord, this.layout)
-        const reachable = new Graphics()
-        this.drawHexFill(reachable, x, y, UI_COLORS.reachable, 0.3)
-        this.overlayContainer.addChild(reachable)
+    // === RANGE LAYER (only rebuild when reachable/attack hexes change) ===
+    const rangeChanged = this.hasRangeChanged()
+    if (rangeChanged) {
+      this.rangeContainer.removeChildren()
+
+      // Draw reachable hexes (movement range)
+      for (const hKey of this.reachableHexes) {
+        const tile = state.map.tiles.get(hKey)
+        if (tile && currentPlayerFog?.has(hKey)) {
+          const { x, y } = hexToPixel(tile.coord, this.layout)
+          const reachable = new Graphics()
+          this.drawHexFill(reachable, x, y, UI_COLORS.reachable, 0.3)
+          this.rangeContainer.addChild(reachable)
+        }
       }
+
+      // Draw attack target hexes (enemy units in range)
+      for (const hKey of this.attackTargetHexes) {
+        const tile = state.map.tiles.get(hKey)
+        if (tile && currentPlayerFog?.has(hKey)) {
+          const { x, y } = hexToPixel(tile.coord, this.layout)
+          const attackTarget = new Graphics()
+          this.drawHexFill(attackTarget, x, y, UI_COLORS.attackTarget, 0.4)
+          this.drawHexOutline(attackTarget, x, y, UI_COLORS.attackTarget, 2)
+          this.rangeContainer.addChild(attackTarget)
+        }
+      }
+
+      // Update range tracking
+      this.lastReachableHexes = new Set(this.reachableHexes)
+      this.lastAttackTargetHexes = new Set(this.attackTargetHexes)
     }
 
-    // Draw attack target hexes (enemy units in range)
-    for (const hexKey of this.attackTargetHexes) {
-      const tile = state.map.tiles.get(hexKey)
-      if (tile && currentPlayerFog?.has(hexKey)) {
-        const { x, y } = hexToPixel(tile.coord, this.layout)
-        const attackTarget = new Graphics()
-        this.drawHexFill(attackTarget, x, y, UI_COLORS.attackTarget, 0.4)
-        this.drawHexOutline(attackTarget, x, y, UI_COLORS.attackTarget, 2)
-        this.overlayContainer.addChild(attackTarget)
-      }
+    // === UI LAYER (hover/selection/arrows) ===
+    this.updateUILayer(state)
+
+    // === YIELD LAYER (only rebuild when settlement selection changes) ===
+    const currentSettlementId = this.selectedSettlement?.id ?? null
+    if (currentSettlementId !== this.lastSelectedSettlementId) {
+      this.lastSelectedSettlementId = currentSettlementId
+      this.updateYieldLayer(state)
     }
+  }
+
+  /**
+   * Update only the UI layer (hover, selection, arrows) - called frequently on hover
+   */
+  private updateUILayer(_state: GameState): void {
+    this.uiContainer.removeChildren()
 
     // Draw path arrow from selected unit to hovered tile
     if (this.selectedUnitPosition && this.hoveredTile) {
@@ -671,7 +742,7 @@ export class HexTileRenderer {
         const arrow = new Graphics()
         const arrowColor = isAttackTarget ? UI_COLORS.attackTarget : UI_COLORS.reachable
         this.drawArrow(arrow, from.x, from.y, to.x, to.y, arrowColor)
-        this.overlayContainer.addChild(arrow)
+        this.uiContainer.addChild(arrow)
       }
     }
 
@@ -680,7 +751,7 @@ export class HexTileRenderer {
       const { x, y } = hexToPixel(this.hoveredTile, this.layout)
       const hover = new Graphics()
       this.drawHexOutline(hover, x, y, UI_COLORS.hover, 2)
-      this.overlayContainer.addChild(hover)
+      this.uiContainer.addChild(hover)
     }
 
     // Draw selection highlight
@@ -688,37 +759,83 @@ export class HexTileRenderer {
       const { x, y } = hexToPixel(this.selectedTile, this.layout)
       const selection = new Graphics()
       this.drawHexOutline(selection, x, y, UI_COLORS.selected, 3)
-      this.overlayContainer.addChild(selection)
+      this.uiContainer.addChild(selection)
     }
+  }
 
-    // Draw yield indicators when a settlement is selected
+  /**
+   * Update the yield layer (settlement tile yields) - called only when settlement selection changes
+   */
+  private updateYieldLayer(state: GameState): void {
+    // Reset pool indices
+    this.pooledGraphicsIndex = 0
+    this.pooledTextIndex = 0
+
+    // Hide all pooled objects (will show as needed)
+    for (const g of this.yieldGraphicsPool) g.visible = false
+    for (const t of this.yieldTextPool) t.visible = false
+
     if (this.selectedSettlement && this.selectedSettlement.owner === state.currentPlayer) {
       this.drawSettlementYields(state)
     }
   }
 
+  /**
+   * Check if fog of war has changed
+   */
+  private hasFogChanged(currentFog: ReadonlySet<string> | undefined): boolean {
+    if (!this.lastFogSet && !currentFog) return false
+    if (!this.lastFogSet || !currentFog) return true
+    if (this.lastFogSet.size !== currentFog.size) return true
+
+    for (const key of currentFog) {
+      if (!this.lastFogSet.has(key)) return true
+    }
+    return false
+  }
+
+  /**
+   * Check if reachable/attack hexes have changed
+   */
+  private hasRangeChanged(): boolean {
+    if (this.reachableHexes.size !== this.lastReachableHexes.size) return true
+    if (this.attackTargetHexes.size !== this.lastAttackTargetHexes.size) return true
+
+    for (const key of this.reachableHexes) {
+      if (!this.lastReachableHexes.has(key)) return true
+    }
+    for (const key of this.attackTargetHexes) {
+      if (!this.lastAttackTargetHexes.has(key)) return true
+    }
+    return false
+  }
+
   private drawSettlementYields(state: GameState): void {
     if (!this.selectedSettlement) return
 
-    // Get all tiles in settlement's working range (radius 2)
+    const settlementOwner = this.selectedSettlement.owner
     const settlementCoord = this.selectedSettlement.position
-    const workableTiles = hexRange(settlementCoord, 2)
+    const currentPlayerFog = state.fog.get(state.currentPlayer)
 
-    for (const coord of workableTiles) {
-      const key = hexKey(coord)
-      const tile = state.map.tiles.get(key)
-      if (!tile) continue
+    // Iterate all tiles owned by this settlement's owner
+    for (const [key, tile] of state.map.tiles) {
+      // Only show tiles owned by the same tribe as the settlement
+      if (tile.owner !== settlementOwner) continue
 
       // Skip the settlement tile itself
-      if (coord.q === settlementCoord.q && coord.r === settlementCoord.r) continue
+      if (tile.coord.q === settlementCoord.q && tile.coord.r === settlementCoord.r) continue
 
       // Check if visible
-      const currentPlayerFog = state.fog.get(state.currentPlayer)
       if (currentPlayerFog && !currentPlayerFog.has(key)) continue
 
-      // Calculate yields for this tile
-      const yields = calculateTileYields(tile)
-      const { x, y } = hexToPixel(coord, this.layout)
+      // Get yields from cache or calculate and cache
+      let yields = this.yieldCache.get(key)
+      if (!yields) {
+        yields = calculateTileYields(tile)
+        this.yieldCache.set(key, yields)
+      }
+
+      const { x, y } = hexToPixel(tile.coord, this.layout)
 
       // Draw yield indicators
       this.drawTileYields(x, y, yields)
@@ -750,24 +867,57 @@ export class HexTileRenderer {
       const entry = yieldEntries[i]!
       const xPos = startX + i * spacing
 
-      // Background circle
-      const bg = new Graphics()
+      // Get or create pooled background graphic
+      const bg = this.getPooledGraphics()
+      bg.clear()
       bg.circle(xPos, yPos, 10)
       bg.fill({ color: 0x000000, alpha: 0.7 })
-      this.overlayContainer.addChild(bg)
+      bg.visible = true
 
-      // Yield number
-      const style = new TextStyle({
-        fontSize: 12,
-        fontWeight: 'bold',
-        fill: entry.color,
-      })
-      const text = new Text({ text: entry.value.toString(), style })
-      text.anchor.set(0.5)
+      // Get or create pooled text
+      const text = this.getPooledText()
+      text.text = entry.value.toString()
+      text.style.fill = entry.color
       text.x = xPos
       text.y = yPos
-      this.overlayContainer.addChild(text)
+      text.visible = true
     }
+  }
+
+  /**
+   * Get a pooled Graphics object, creating if needed
+   */
+  private getPooledGraphics(): Graphics {
+    if (this.pooledGraphicsIndex < this.yieldGraphicsPool.length) {
+      return this.yieldGraphicsPool[this.pooledGraphicsIndex++]!
+    }
+    // Create new graphics and add to pool
+    const g = new Graphics()
+    this.yieldGraphicsPool.push(g)
+    this.yieldContainer.addChild(g)
+    this.pooledGraphicsIndex++
+    return g
+  }
+
+  /**
+   * Get a pooled Text object, creating if needed
+   */
+  private getPooledText(): Text {
+    if (this.pooledTextIndex < this.yieldTextPool.length) {
+      return this.yieldTextPool[this.pooledTextIndex++]!
+    }
+    // Create new text and add to pool
+    const style = new TextStyle({
+      fontSize: 12,
+      fontWeight: 'bold',
+      fill: 0xffffff,
+    })
+    const t = new Text({ text: '0', style })
+    t.anchor.set(0.5)
+    this.yieldTextPool.push(t)
+    this.yieldContainer.addChild(t)
+    this.pooledTextIndex++
+    return t
   }
 
   private drawHexOutline(
@@ -860,10 +1010,33 @@ export class HexTileRenderer {
 
   // Public methods for interaction
   setHoveredTile(coord: HexCoord | null): void {
+    // Skip if no change
+    if (this.hoveredTile?.q === coord?.q && this.hoveredTile?.r === coord?.r) {
+      return
+    }
+
     this.hoveredTile = coord
-    // Redraw overlays immediately for responsive hover feedback
+
+    // Throttle hover updates for performance
+    const now = Date.now()
+    if (now - this.lastHoverUpdate < this.HOVER_THROTTLE_MS) {
+      if (!this.hoverUpdatePending) {
+        this.hoverUpdatePending = true
+        requestAnimationFrame(() => {
+          this.hoverUpdatePending = false
+          this.lastHoverUpdate = Date.now()
+          if (this.lastState) {
+            this.updateUILayer(this.lastState)
+          }
+        })
+      }
+      return
+    }
+
+    this.lastHoverUpdate = now
+    // Only update UI layer (hover/selection), NOT yields or fog
     if (this.lastState) {
-      this.updateOverlays(this.lastState)
+      this.updateUILayer(this.lastState)
     }
   }
 
@@ -888,10 +1061,15 @@ export class HexTileRenderer {
   }
 
   setSelectedSettlement(settlement: Settlement | null): void {
+    // Skip if no change
+    if (this.selectedSettlement?.id === settlement?.id) {
+      return
+    }
     this.selectedSettlement = settlement
-    // Redraw overlays immediately
+    this.lastSelectedSettlementId = null // Force yield layer rebuild
+    // Update yield layer (selection changes less frequently, so always update)
     if (this.lastState) {
-      this.updateOverlays(this.lastState)
+      this.updateYieldLayer(this.lastState)
     }
   }
 

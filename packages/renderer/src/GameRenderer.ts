@@ -33,6 +33,19 @@ export class GameRenderer {
   private initialized = false
   private destroyed = false
 
+  // Event handler references for cleanup
+  private eventHandlers: {
+    pointerdown?: (e: PointerEvent) => void
+    pointermove?: (e: PointerEvent) => void
+    pointerup?: (e: PointerEvent) => void
+    pointerleave?: () => void
+    contextmenu?: (e: MouseEvent) => void
+    wheel?: (e: WheelEvent) => void
+    touchstart?: (e: TouchEvent) => void
+    touchmove?: (e: TouchEvent) => void
+    touchend?: () => void
+  } = {}
+
   constructor(config: GameRendererConfig) {
     this.config = config
     this.app = new Application()
@@ -93,13 +106,15 @@ export class GameRenderer {
     // Mouse/touch events for camera panning
     let isDragging = false
     let lastPosition = { x: 0, y: 0 }
+    let lastTouchDistance = 0
 
-    canvas.addEventListener('pointerdown', (e) => {
+    // Store handlers for cleanup
+    this.eventHandlers.pointerdown = (e: PointerEvent) => {
       isDragging = true
       lastPosition = { x: e.clientX, y: e.clientY }
-    })
+    }
 
-    canvas.addEventListener('pointermove', (e) => {
+    this.eventHandlers.pointermove = (e: PointerEvent) => {
       const worldPos = this.screenToWorld(e.clientX, e.clientY)
       const hexCoord = this.hexRenderer.pixelToHex(worldPos.x, worldPos.y)
 
@@ -121,9 +136,9 @@ export class GameRenderer {
         this.camera.pan(dx, dy)
         lastPosition = { x: e.clientX, y: e.clientY }
       }
-    })
+    }
 
-    canvas.addEventListener('pointerup', (e) => {
+    this.eventHandlers.pointerup = (e: PointerEvent) => {
       // Only handle left-click (button 0), not right-click (button 2)
       if (e.button === 0 && isDragging && Math.abs(e.clientX - lastPosition.x) < 5) {
         // This was a click, not a drag
@@ -136,17 +151,16 @@ export class GameRenderer {
         }
       }
       isDragging = false
-    })
+    }
 
-    canvas.addEventListener('pointerleave', () => {
+    this.eventHandlers.pointerleave = () => {
       isDragging = false
       this.config.onTileHover?.(null)
       this.hexRenderer.setHoveredTile(null)
       this.unitRenderer.setHoverTarget(null)
-    })
+    }
 
-    // Right-click handler (reserved for future use)
-    canvas.addEventListener('contextmenu', (e) => {
+    this.eventHandlers.contextmenu = (e: MouseEvent) => {
       e.preventDefault()
       const worldPos = this.screenToWorld(e.clientX, e.clientY)
       const hexCoord = this.hexRenderer.pixelToHex(worldPos.x, worldPos.y)
@@ -154,30 +168,26 @@ export class GameRenderer {
       if (this.currentState && this.isInBounds(hexCoord)) {
         this.config.onTileRightClick?.(hexCoord)
       }
-    })
+    }
 
-    // Mouse wheel for zoom
-    canvas.addEventListener('wheel', (e) => {
+    this.eventHandlers.wheel = (e: WheelEvent) => {
       e.preventDefault()
       const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1
       const rect = canvas.getBoundingClientRect()
       const mouseX = e.clientX - rect.left
       const mouseY = e.clientY - rect.top
       this.camera.zoom(zoomDelta, mouseX, mouseY)
-    })
+    }
 
-    // Touch pinch zoom
-    let lastTouchDistance = 0
-
-    canvas.addEventListener('touchstart', (e) => {
+    this.eventHandlers.touchstart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         const dx = e.touches[0]!.clientX - e.touches[1]!.clientX
         const dy = e.touches[0]!.clientY - e.touches[1]!.clientY
         lastTouchDistance = Math.sqrt(dx * dx + dy * dy)
       }
-    })
+    }
 
-    canvas.addEventListener('touchmove', (e) => {
+    this.eventHandlers.touchmove = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         const dx = e.touches[0]!.clientX - e.touches[1]!.clientX
         const dy = e.touches[0]!.clientY - e.touches[1]!.clientY
@@ -193,11 +203,56 @@ export class GameRenderer {
 
         lastTouchDistance = distance
       }
-    })
+    }
 
-    canvas.addEventListener('touchend', () => {
+    this.eventHandlers.touchend = () => {
       lastTouchDistance = 0
-    })
+    }
+
+    // Add all event listeners
+    canvas.addEventListener('pointerdown', this.eventHandlers.pointerdown)
+    canvas.addEventListener('pointermove', this.eventHandlers.pointermove)
+    canvas.addEventListener('pointerup', this.eventHandlers.pointerup)
+    canvas.addEventListener('pointerleave', this.eventHandlers.pointerleave)
+    canvas.addEventListener('contextmenu', this.eventHandlers.contextmenu)
+    canvas.addEventListener('wheel', this.eventHandlers.wheel, { passive: false })
+    canvas.addEventListener('touchstart', this.eventHandlers.touchstart)
+    canvas.addEventListener('touchmove', this.eventHandlers.touchmove)
+    canvas.addEventListener('touchend', this.eventHandlers.touchend)
+  }
+
+  private cleanupInputHandlers(): void {
+    const { canvas } = this.config
+
+    if (this.eventHandlers.pointerdown) {
+      canvas.removeEventListener('pointerdown', this.eventHandlers.pointerdown)
+    }
+    if (this.eventHandlers.pointermove) {
+      canvas.removeEventListener('pointermove', this.eventHandlers.pointermove)
+    }
+    if (this.eventHandlers.pointerup) {
+      canvas.removeEventListener('pointerup', this.eventHandlers.pointerup)
+    }
+    if (this.eventHandlers.pointerleave) {
+      canvas.removeEventListener('pointerleave', this.eventHandlers.pointerleave)
+    }
+    if (this.eventHandlers.contextmenu) {
+      canvas.removeEventListener('contextmenu', this.eventHandlers.contextmenu)
+    }
+    if (this.eventHandlers.wheel) {
+      canvas.removeEventListener('wheel', this.eventHandlers.wheel)
+    }
+    if (this.eventHandlers.touchstart) {
+      canvas.removeEventListener('touchstart', this.eventHandlers.touchstart)
+    }
+    if (this.eventHandlers.touchmove) {
+      canvas.removeEventListener('touchmove', this.eventHandlers.touchmove)
+    }
+    if (this.eventHandlers.touchend) {
+      canvas.removeEventListener('touchend', this.eventHandlers.touchend)
+    }
+
+    this.eventHandlers = {}
   }
 
   private screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
@@ -318,6 +373,7 @@ export class GameRenderer {
 
   destroy(): void {
     this.destroyed = true
+    this.cleanupInputHandlers()
     if (this.initialized && this.app.stage) {
       this.app.destroy(true)
     }

@@ -4,6 +4,7 @@ interface YieldIconProps {
   type: 'gold' | 'alpha' | 'vibes' | 'production' | 'growth'
   value: number
   size?: number
+  label?: string // Optional suffix label (e.g., "/turn")
 }
 
 const YIELD_COLORS: Record<string, string> = {
@@ -32,14 +33,14 @@ const YIELD_LABELS: Record<string, string> = {
   growth: 'Growth',
 }
 
-export function YieldIcon({ type, value, size = 20 }: YieldIconProps): JSX.Element {
+export function YieldIcon({ type, value, size = 20, label: suffixLabel }: YieldIconProps): JSX.Element {
   const color = YIELD_COLORS[type]
   const filter = YIELD_FILTERS[type]
-  const label = YIELD_LABELS[type]
+  const typeName = YIELD_LABELS[type]
 
   return (
     <div
-      title={`${label}: ${value}`}
+      title={`${typeName}: ${value}${suffixLabel ?? ''}`}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -49,14 +50,16 @@ export function YieldIcon({ type, value, size = 20 }: YieldIconProps): JSX.Eleme
     >
       <img
         src={`/assets/icons/${type}.svg`}
-        alt={label}
+        alt={typeName}
         style={{
           width: size,
           height: size,
           filter,
         }}
       />
-      <span style={{ color, fontWeight: 'bold', fontSize: '14px' }}>{value}</span>
+      <span style={{ color, fontWeight: 'bold', fontSize: '14px' }}>
+        {value}{suffixLabel && <span style={{ fontSize: '11px', opacity: 0.7 }}>{suffixLabel}</span>}
+      </span>
     </div>
   )
 }

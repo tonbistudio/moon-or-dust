@@ -7,7 +7,7 @@ import type {
   TribeId,
   Tile,
 } from '../types'
-import { hexNeighbors, hexKey } from '../hex'
+import { hexNeighbors, hexKey, hexRange } from '../hex'
 import { createUnit } from '../units'
 import { updateSettlement, calculateTileYields } from '../settlements'
 
@@ -326,7 +326,7 @@ function spawnUniqueUnit(state: GameState, settlement: Settlement): GameState {
 }
 
 /**
- * Expands borders by claiming N best-yield tiles adjacent to owned territory
+ * Expands borders by claiming N best-yield tiles adjacent to the triggering settlement's territory
  */
 function expandBorders(
   state: GameState,
@@ -336,15 +336,20 @@ function expandBorders(
   let currentState = state
 
   for (let i = 0; i < tilesToAdd; i++) {
-    // Get all currently owned tiles
+    // Find tiles within range of this settlement (max 5 tiles from center)
+    const maxRadius = Math.min(settlement.level + 2, 6) // Slightly larger for milestone bonus
+    const tilesNearSettlement = hexRange(settlement.position, maxRadius)
+    const nearSettlementKeys = new Set(tilesNearSettlement.map(c => hexKey(c)))
+
+    // Get owned tiles near this settlement
     const ownedTileKeys = new Set<string>()
     for (const [key, tile] of currentState.map.tiles) {
-      if (tile.owner === settlement.owner) {
+      if (tile.owner === settlement.owner && nearSettlementKeys.has(key)) {
         ownedTileKeys.add(key)
       }
     }
 
-    // Find candidate tiles: unowned tiles adjacent to owned territory
+    // Find candidate tiles: unowned tiles adjacent to owned territory near this settlement
     const candidateTiles: Array<{ key: string; tile: Tile; totalYield: number }> = []
 
     for (const ownedKey of ownedTileKeys) {

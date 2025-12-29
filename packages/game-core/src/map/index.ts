@@ -11,8 +11,6 @@ import type {
   HexCoord,
   Lootbox,
   LootboxId,
-  BarbarianCamp,
-  CampId,
 } from '../types'
 import { hex, hexKey, hexDistance, hexRange } from '../hex'
 import { createRng } from '../state'
@@ -236,7 +234,6 @@ export function generateMap(config: MapGenerationConfig): {
   map: HexMap
   startPositions: HexCoord[]
   lootboxes: Lootbox[]
-  barbarianCamps: BarbarianCamp[]
 } {
   const { width, height, seed, playerCount } = config
   const rng = createRng(seed)
@@ -275,14 +272,10 @@ export function generateMap(config: MapGenerationConfig): {
   // Place lootboxes (4-6, edge/corner biased, away from starts)
   const lootboxes = placeLootboxes(width, height, startPositions, rng)
 
-  // Place barbarian camps (3-5, in fog, away from starts)
-  const barbarianCamps = placeBarbarianCamps(width, height, startPositions, tiles, rng)
-
   return {
     map: { width, height, tiles },
     startPositions,
     lootboxes,
-    barbarianCamps,
   }
 }
 
@@ -710,54 +703,4 @@ function placeLootboxes(
   }
 
   return lootboxes
-}
-
-function placeBarbarianCamps(
-  width: number,
-  height: number,
-  startPositions: HexCoord[],
-  tiles: Map<string, Tile>,
-  rng: () => number
-): BarbarianCamp[] {
-  const camps: BarbarianCamp[] = []
-  const count = 3 + Math.floor(rng() * 3) // 3-5 camps
-  const minDistFromStart = 5
-
-  const candidates: HexCoord[] = []
-
-  for (let q = 2; q < width - 2; q++) {
-    for (let r = 2; r < height - 2; r++) {
-      const coord = hex(q, r)
-      const tile = tiles.get(hexKey(coord))
-
-      if (!tile || !isPassable(tile)) continue
-
-      const tooClose = startPositions.some((s) => hexDistance(coord, s) < minDistFromStart)
-      if (tooClose) continue
-
-      candidates.push(coord)
-    }
-  }
-
-  for (let i = 0; i < count && candidates.length > 0; i++) {
-    const index = Math.floor(rng() * candidates.length)
-    const coord = candidates[index]!
-
-    // Remove nearby positions
-    for (let j = candidates.length - 1; j >= 0; j--) {
-      if (hexDistance(candidates[j]!, coord) < 4) {
-        candidates.splice(j, 1)
-      }
-    }
-
-    camps.push({
-      id: `camp_${i + 1}` as CampId,
-      position: coord,
-      spawnCooldown: 3,
-      unitsSpawned: [],
-      destroyed: false,
-    })
-  }
-
-  return camps
 }

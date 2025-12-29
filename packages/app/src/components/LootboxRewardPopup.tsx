@@ -43,101 +43,105 @@ export function LootboxRewardPopup({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(0, 0, 0, 0.6)',
+        background: 'rgba(0, 0, 0, 0.92)',
         zIndex: 1000,
       }}
       onClick={onDismiss}
     >
       <div
         style={{
-          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-          borderRadius: '16px',
-          padding: '32px',
-          minWidth: '300px',
-          maxWidth: '400px',
+          background: '#0d0d1a',
+          borderRadius: '12px',
+          minWidth: '360px',
+          maxWidth: '420px',
           textAlign: 'center',
           color: '#fff',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-          border: '2px solid #d946ef',
+          border: '1px solid #333',
           animation: 'popIn 0.3s ease-out',
+          overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Lootbox icon */}
+        {/* Header */}
         <div
           style={{
-            fontSize: '48px',
-            marginBottom: '16px',
+            padding: '16px 24px',
+            background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
+            borderBottom: '1px solid #333',
           }}
         >
-          {'\u{1F381}'} {/* gift box */}
+          <div style={{ fontSize: '40px', marginBottom: '8px' }}>
+            {'\u{1F381}'}
+          </div>
+          <div
+            style={{
+              fontSize: '18px',
+              fontWeight: 600,
+              color: '#d946ef',
+            }}
+          >
+            Lootbox Opened!
+          </div>
         </div>
 
-        {/* Title */}
-        <div
-          style={{
-            fontSize: '20px',
-            fontWeight: 'bold',
-            marginBottom: '8px',
-            color: '#d946ef',
-          }}
-        >
-          Lootbox Opened!
-        </div>
+        {/* Content */}
+        <div style={{ padding: '24px' }}>
+          {/* Reward type */}
+          <div
+            style={{
+              fontSize: '22px',
+              fontWeight: 'bold',
+              marginBottom: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+            }}
+          >
+            <span style={{ fontSize: '28px' }}>{rewardIcon}</span>
+            <span>{rewardName}</span>
+          </div>
 
-        {/* Reward type */}
-        <div
-          style={{
-            fontSize: '24px',
-            fontWeight: 'bold',
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-          }}
-        >
-          <span>{rewardIcon}</span>
-          <span>{rewardName}</span>
-        </div>
+          {/* Reward details */}
+          <div
+            style={{
+              fontSize: '14px',
+              color: '#888',
+              marginBottom: '24px',
+              lineHeight: 1.5,
+            }}
+          >
+            {reward.details}
+          </div>
 
-        {/* Reward details */}
-        <div
-          style={{
-            fontSize: '14px',
-            color: '#9ca3af',
-            marginBottom: '24px',
-          }}
-        >
-          {reward.details}
+          {/* Dismiss button */}
+          <button
+            onClick={onDismiss}
+            style={{
+              background: 'linear-gradient(180deg, #d946ef 0%, #a855f7 100%)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '12px 40px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              transition: 'opacity 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.opacity = '0.9')}
+            onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            Collect
+          </button>
         </div>
-
-        {/* Dismiss button */}
-        <button
-          onClick={onDismiss}
-          style={{
-            background: '#d946ef',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '12px 32px',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            transition: 'background 0.2s',
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.background = '#c026d3')}
-          onMouseOut={(e) => (e.currentTarget.style.background = '#d946ef')}
-        >
-          Collect
-        </button>
       </div>
 
       {/* CSS animation */}
       <style>{`
         @keyframes popIn {
           0% {
-            transform: scale(0.8);
+            transform: scale(0.9);
             opacity: 0;
           }
           100% {

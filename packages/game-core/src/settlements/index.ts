@@ -295,14 +295,14 @@ export function calculateSettlementYields(state: GameState, settlement: Settleme
   const tiles = getSettlementTiles(state, settlement)
 
   // Base settlement yields
-  // Capitals: 10 Alpha, 10 Vibes, +2 production, +2 gold
-  // Regular cities: 5 Alpha, 5 Vibes, +2 production, +2 gold
-  const baseAlphaVibes = settlement.isCapital ? 10 : 5
+  // Capitals: 10 gold, 10 production, 10 Alpha, 10 Vibes
+  // Regular cities: 5 gold, 5 production, 5 Alpha, 5 Vibes
+  const baseYield = settlement.isCapital ? 10 : 5
   let yields: Yields = {
-    gold: 2,
-    alpha: baseAlphaVibes,
-    vibes: baseAlphaVibes,
-    production: 2,
+    gold: baseYield,
+    alpha: baseYield,
+    vibes: baseYield,
+    production: baseYield,
     growth: 0,
   }
 
@@ -315,6 +315,40 @@ export function calculateSettlementYields(state: GameState, settlement: Settleme
   const tribeBonuses = getPlayerTribeBonuses(state, settlement.owner)
   const buildingYields = calculateBuildingYields(state, settlement, tribeBonuses)
   yields = addYields(yields, buildingYields)
+
+  return yields
+}
+
+/**
+ * Calculates settlement yields WITH applicable policy bonuses for UI display
+ * This includes per-settlement policies like capital_vibes, settlement_vibes, etc.
+ */
+export function calculateSettlementYieldsWithPolicies(state: GameState, settlement: Settlement): Yields {
+  // Get base settlement yields
+  let yields = calculateSettlementYields(state, settlement)
+
+  // Find the owner player to get their policy bonuses
+  const player = state.players.find(p => p.tribeId === settlement.owner)
+  if (!player) return yields
+
+  // Calculate policy bonuses
+  const policyBonuses = calculatePolicyYieldBonuses(state, player)
+
+  // Apply per-settlement policy bonuses
+  if (settlement.isCapital) {
+    yields = { ...yields, vibes: yields.vibes + policyBonuses.capitalVibes }
+  }
+  yields = {
+    ...yields,
+    vibes: yields.vibes + policyBonuses.settlementVibes,
+    production: yields.production + policyBonuses.settlementProduction,
+    gold: yields.gold + policyBonuses.settlementGold,
+  }
+
+  // Apply pop-based vibes bonus (for capital level)
+  if (settlement.isCapital) {
+    yields = { ...yields, vibes: yields.vibes + policyBonuses.popVibesPerLevel * settlement.level }
+  }
 
   return yields
 }
@@ -465,6 +499,15 @@ export function addSettlement(state: GameState, settlement: Settlement): GameSta
     }
   }
 
+  // Remove resource from the settlement tile (can't be improved)
+  const settlementKey = hexKey(settlement.position)
+  const settlementTile = newTiles.get(settlementKey)
+  if (settlementTile?.resource) {
+    // Destructure to omit resource property
+    const { resource: _, ...tileWithoutResource } = settlementTile
+    newTiles.set(settlementKey, tileWithoutResource)
+  }
+
   return {
     ...state,
     settlements: newSettlements,
@@ -491,18 +534,25 @@ export function updateSettlement(state: GameState, settlement: Settlement): Game
 /**
  * Expands a settlement's borders by claiming ONE adjacent tile
  * Called when a settlement levels up past level 5
+ * Only claims tiles within a reasonable radius of the triggering settlement
  * Chooses the unowned tile with the highest total yields
  */
 export function expandSettlementBorders(state: GameState, settlement: Settlement): GameState {
-  // Find all tiles currently owned by this player
+  // Find tiles owned by this player that are within range of this settlement
+  // Use a radius based on settlement level (max 5 tiles from settlement center)
+  const maxRadius = Math.min(settlement.level, 5)
+  const tilesNearSettlement = hexRange(settlement.position, maxRadius)
+  const nearSettlementKeys = new Set(tilesNearSettlement.map(c => hexKey(c)))
+
+  // Find owned tiles near this settlement
   const ownedTileKeys = new Set<string>()
   for (const [key, tile] of state.map.tiles) {
-    if (tile.owner === settlement.owner) {
+    if (tile.owner === settlement.owner && nearSettlementKeys.has(key)) {
       ownedTileKeys.add(key)
     }
   }
 
-  // Find all unowned tiles adjacent to owned territory
+  // Find all unowned tiles adjacent to owned territory near this settlement
   const candidateTiles: Array<{ key: string; tile: Tile; totalYield: number }> = []
 
   for (const ownedKey of ownedTileKeys) {

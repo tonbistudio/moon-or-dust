@@ -149,9 +149,8 @@ packages/
       tech/        # Tech tree, research
       cultures/    # Cultures tree, policy cards
       diplomacy/   # Diplomatic states, reputation, alliances
-      trade/       # Trade routes, yields calculation
+      economy/     # Trade routes, yields calculation
       greatpeople/ # Great person accumulation, actions
-      barbarians/  # Camp spawning, barbarian AI
       goldenage/   # Triggers, effects, tracking
       wonders/     # Wonder definitions, construction, effects
       lootbox/     # Lootbox placement, rewards, claiming
@@ -204,79 +203,13 @@ pnpm lint:fix         # Fix auto-fixable issues
 ## Architecture Principles
 
 ### Deterministic Game State
+All game logic in `game-core` with zero side effects. Same seed + inputs = identical outputs. Enables replay verification and future onchain state verification.
 
-All game logic lives in `game-core` with zero side effects. Given the same seed and inputs, the game produces identical outputs. This enables:
-- Replay verification
-- Headless testing without rendering
-- Future onchain state verification
-
-```typescript
-// Core state shape
-interface GameState {
-  version: string
-  seed: number
-  turn: number
-  currentPlayer: TribeId
-  players: Player[]
-  map: HexMap
-  units: Map<UnitId, Unit>
-  settlements: Map<SettlementId, Settlement>
-  fog: Map<TribeId, Set<HexCoord>>
-  diplomacy: DiplomacyState
-  tradeRoutes: TradeRoute[]
-  barbarianCamps: BarbarianCamp[]
-  greatPeopleProgress: Map<TribeId, GreatPeopleAccumulator>
-  goldenAges: Map<TribeId, GoldenAgeState>
-  lootboxes: Lootbox[]
-  wonders: Wonder[]
-  floorPrices: Map<TribeId, number>  // cached victory scores
-}
-
-// All mutations return new state
-function applyAction(state: GameState, action: GameAction): GameState
-```
-
-### Hex Grid Coordinate System
-
-Use axial coordinates (q, r) for hex math. Pointy-top hexes.
-
-```typescript
-interface HexCoord {
-  q: number  // column
-  r: number  // row
-}
-
-// Convert to cube coordinates for algorithms
-interface CubeCoord {
-  q: number
-  r: number
-  s: number  // s = -q - r
-}
-```
-
-Key hex functions needed:
-- `hexNeighbors(coord)` - 6 adjacent hexes
-- `hexDistance(a, b)` - distance between hexes
-- `hexLine(a, b)` - all hexes in a line
-- `hexRange(center, radius)` - all hexes within radius
-- `hexPathfind(start, end, cost)` - A* pathfinding with terrain costs
+### Hex Grid
+Axial coordinates (q, r), pointy-top hexes. Key functions: `hexNeighbors`, `hexDistance`, `hexLine`, `hexRange`, `hexPathfind`.
 
 ### Rendering Separation
-
-The renderer subscribes to state changes and renders accordingly. It never mutates game state.
-
-```typescript
-// Renderer receives state, produces visuals
-class GameRenderer {
-  update(state: GameState, prevState: GameState): void
-}
-
-// Input events produce actions, not state changes
-canvas.on('click', (hex) => {
-  const action = interpretClick(state, hex)
-  if (action) dispatch(action)
-})
-```
+Renderer subscribes to state changes, never mutates state. Input events produce actions via dispatch.
 
 ## Game Systems
 
@@ -294,7 +227,7 @@ canvas.on('click', (hex) => {
 **Civilian Units (always available):**
 - Scout (exploration, 3 movement)
 - Settler (founds settlements)
-- Builder (3 build charges)
+- Builder (2 build charges)
 
 **Military Units by Era:**
 
@@ -350,7 +283,7 @@ canvas.on('click', (hex) => {
 | Tribe | Primary | Secondary | Unique Unit | Unique Building |
 |-------|---------|-----------|-------------|-----------------|
 | Monkes | Vibes | Economy | Banana Slinger (replaces Archer, 3 range, 3/6 strength) | Degen Mints Cabana |
-| Geckos | Tech | Naval | Neon Geck (replaces Sniper, 3 mobility, kills grant +5 Alpha) | The Garage |
+| Geckos | Tech | Military | Neon Geck (replaces Sniper, 3 mobility, kills grant +5 Alpha) | The Garage |
 | DeGods | Military | Economy | DeadGod (replaces Swordsman, 8 strength, kills grant +20 Gold) | Eternal Bridge |
 | Cets | Vibes | Production | Stuckers (replaces Swordsman, 6 strength, 3 mobility, enemies mobility=0 for 2 turns when attacked by Stuckers) | Creckhouse |
 
@@ -429,16 +362,6 @@ Units gain XP from combat (10 XP to level). Each level grants one promotion choi
 - Last Stand: +25% strength when below 50% HP
 - Medic: Adjacent friendly units heal +5 HP per turn
 
-```typescript
-interface UnitPromotion {
-  id: PromotionId
-  name: string
-  path: 'combat' | 'mobility' | 'survival'
-  effect: PromotionEffect
-  prerequisite?: PromotionId
-}
-```
-
 ### Diplomatic Relationships
 
 Five diplomatic states between tribes:
@@ -456,16 +379,6 @@ Five diplomatic states between tribes:
 - Declaring war will automatically cause Allies of opponent to also go to war with you
 - Alliance requires mutual agreement (AI considers shared enemies, trade value)
 - Shared vision: Allied tribes see 2-hex radius around each other's capitals
-
-```typescript
-interface DiplomacyState {
-  relations: Map<TribePairKey, DiplomaticRelation>
-  warWeariness: Map<TribeId, number>
-  reputationModifiers: Map<TribeId, ReputationEvent[]>
-}
-
-type DiplomaticStance = 'war' | 'hostile' | 'neutral' | 'friendly' | 'allied'
-```
 
 ### Policy Cards (Slotted System)
 
@@ -508,30 +421,6 @@ Cultures unlock policy cards through A/B choices. Cards are slotted by type and 
 - Can only swap cards when completing a culture
 - Cards must match slot type (or use Wildcard)
 - Unslotted cards remain in pool for later use
-
-```typescript
-type PolicySlotType = 'military' | 'economy' | 'progress' | 'wildcard'
-
-interface PolicyCard {
-  id: PolicyId
-  name: string
-  cultureId: CultureId
-  slotType: PolicySlotType
-  choice: 'a' | 'b'
-  effect: PolicyEffect
-}
-
-interface PlayerPolicies {
-  slots: {
-    military: number
-    economy: number
-    progress: number
-    wildcard: number
-  }
-  pool: PolicyId[]        // all unlocked cards
-  active: PolicyId[]      // currently slotted cards
-}
-```
 
 ### Cross-Prerequisites (Tech ↔ Culture)
 
@@ -622,14 +511,6 @@ Triggered by achievements, providing temporary yield boosts.
 
 **Golden Age Effects:** +25% all yields, +1 movement for all units
 
-```typescript
-interface GoldenAgeState {
-  active: boolean
-  turnsRemaining: number
-  triggersUsed: GoldenAgeTrigger[]  // can't repeat same trigger
-}
-```
-
 ### Trade Routes
 
 Abstract trade connections between settlements for gold income.
@@ -645,18 +526,7 @@ Abstract trade connections between settlements for gold income.
 | Internal (own settlements) | +3 | +1 per unique building at destination |
 | External (other tribe) | +4 | +1 per unique luxury resource at destination, +2 if Allied |
 
-**Pillaging (optional):** Military units can pillage enemy trade routes, breaking them and gaining gold equal to 3 turns of route value.
-
-```typescript
-interface TradeRoute {
-  id: TradeRouteId
-  origin: SettlementId
-  destination: SettlementId
-  targetTribe: TribeId  // same as owner for internal
-  goldPerTurn: number
-  active: boolean
-}
-```
+**Pillaging:** Military units can pillage enemy trade routes, breaking them and gaining gold equal to 3 turns of route value.
 
 ### Great People
 
@@ -716,83 +586,6 @@ Unique powerful units spawned from accumulated yields. Only one of each can be e
 | Genuine Articles | Geckos | The Garage + Whitelisting | Immortal Journey | +20% production and +25% Alpha for 5 turns |
 | Peblo | Cets | Creckhouse + Virality | We are Peblo | +50% defense and +25% Vibes for 5 turns |
 
-```typescript
-type GreatPersonId =
-  // Universal (19)
-  | 'fxnction' | 'mert' | 'big_brain' | 'scum' | 'hge' | 'solport_tom'
-  | 'the_solstice' | 'toly' | 'dingaling' | 'john_le' | 'ravi' | 'renji'
-  | 'iced_knife' | 'raj' | 'retired_chad_dev' | 'monoliff' | 'watch_king'
-  | 'blocksmyth' | 'jpeggler'
-  // Tribal (4)
-  | 'nom' | 'frank' | 'genuine_articles' | 'peblo'
-
-type GreatPersonCategory = 'combat' | 'alpha' | 'gold' | 'vibes' | 'trade' | 'production' | 'kills' | 'captures' | 'tribal'
-
-interface GreatPersonDefinition {
-  id: GreatPersonId
-  name: string
-  category: GreatPersonCategory
-  threshold: GreatPersonThreshold
-  action: string
-  effect: GreatPersonEffect
-  tribe?: TribeName  // Only for tribal great people
-}
-
-type GreatPersonThreshold =
-  | { type: 'accumulator'; stat: 'combat' | 'alpha' | 'gold' | 'vibes'; amount: number }
-  | { type: 'count'; stat: 'tradeRoutes' | 'wondersBuilt' | 'buildingsBuilt' | 'kills' | 'captures'; amount: number }
-  | { type: 'combo'; wonders: number; buildings: number }
-  | { type: 'tribal'; building: BuildingId; culture: CultureId }
-
-interface GreatPeopleAccumulator {
-  combat: number    // XP from all units
-  alpha: number     // Total Alpha earned
-  gold: number      // Total Gold earned
-  vibes: number     // Total Vibes earned
-  kills: number     // Enemy units killed
-  captures: number  // Cities captured
-  tradeRoutes: number      // Current active trade routes
-  wondersBuilt: number     // Total wonders built
-  buildingsBuilt: number   // Total buildings built
-}
-
-interface GreatPerson {
-  id: UnitId
-  greatPersonId: GreatPersonId
-  hasActed: boolean  // one-time action used
-}
-```
-
-### Barbarian Camps
-
-Neutral hostile spawners in unexplored territory.
-
-**Spawn Rules:**
-- 3-5 camps placed on map generation, always in fog
-- Must be 4+ hexes from any starting position
-- Spawn 1 barbarian unit every 3 turns (Warrior or Scout)
-
-**Barbarian Behavior:**
-- Roam within 5 hexes of camp
-- Attack any non-barbarian unit in range
-- Pillage improvements, cannot capture settlements
-- Do not scale with game progress (always basic units)
-
-**Clearing Rewards:**
-- 25 gold on camp destruction
-- 50% chance: reveal nearest unrevealed luxury resource
-- Camp does not respawn
-
-```typescript
-interface BarbarianCamp {
-  id: CampId
-  position: HexCoord
-  spawnCooldown: number  // turns until next spawn
-  unitsSpawned: UnitId[]
-  destroyed: boolean
-}
-```
-
 ### Lootboxes (Exploration Rewards)
 
 Mystery tiles scattered across the map that reward exploration.
@@ -806,22 +599,7 @@ Mystery tiles scattered across the map that reward exploration.
 | Community Growth | +3 population to capital |
 | Scout | Reveals large area of map (5-hex radius) |
 
-**Placement Rules:**
-- 4-6 Lootboxes per map
-- Never spawn within 2 tiles of a starting position
-- Tend to spawn in corners, edges, or hard-to-reach areas
-- Claimed when any unit steps on the tile
-
-```typescript
-interface Lootbox {
-  id: LootboxId
-  position: HexCoord
-  claimed: boolean
-  reward?: LootboxReward  // determined on claim, not placement
-}
-
-type LootboxReward = 'airdrop' | 'alpha_leak' | 'og_holder' | 'community_growth' | 'scout'
-```
+**Placement:** 4-6 per map, never within 2 tiles of starting position, claimed when any unit steps on tile.
 
 ### Unit Minting (Rarity System)
 
@@ -839,26 +617,7 @@ When training military units, they roll a rarity that affects stats. Mirrors the
 **Applies to:** All military units (Scout, Warrior, Ranged, unique units)
 **Does not apply to:** Settlers, Builders, Great People
 
-**Visual:** Rarity is NOT shown on map (keeps sprites clean). Instead, rarity is displayed as a colored border around the UnitActionsPanel when a unit is selected:
-- Common: No border
-- Uncommon: Green border
-- Rare: Blue border
-- Epic: Purple border
-- Legendary: Gold border with glow
-
-```typescript
-type UnitRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
-
-interface Unit {
-  // ... existing fields
-  rarity: UnitRarity
-  rarityBonuses: {
-    combat: number
-    movement: number
-    vision: number
-  }
-}
-```
+**Visual:** Rarity shown as colored border in UnitActionsPanel (not on map): Common=none, Uncommon=green, Rare=blue, Epic=purple, Legendary=gold+glow.
 
 ### Wonders
 
@@ -886,33 +645,7 @@ interface Unit {
 | The Portal | Portal NFTs | Economy | Culture: Hard Shilling | 300 | +50% gold in this settlement |
 | Balloonsville Lair | Balloonsville | Military | Culture: Rugging | 320 | +2 combat strength all units |
 
-**Mechanics:**
-- Only one player can build each wonder
-- If another player completes first, your production is refunded as gold
-- Wonders require unlocking prerequisites (tech or culture) before building
-- Era-scaled costs and effects reward late-game investment
-
-```typescript
-interface WonderDefinition {
-  id: WonderId
-  name: string
-  reference: string
-  category: 'tech' | 'economy' | 'vibes' | 'military' | 'production'
-  era: 1 | 2 | 3
-  productionCost: number
-  floorPriceBonus: number
-  effect: WonderEffect
-  description: string
-  techPrereq?: TechId    // Tech required to build
-  culturePrereq?: CultureId  // Culture required to build
-}
-
-interface Wonder {
-  id: WonderId
-  builtBy?: TribeId  // undefined if not yet built
-  location?: SettlementId
-}
-```
+**Mechanics:** First to complete owns it forever. Production refunded as gold if another player finishes first.
 
 ### Population Milestones
 
@@ -931,23 +664,6 @@ When settlements level up, player chooses between two rewards.
 | 3 | Bonus Gold (+10 Gold) | Border Expansion (+1 tile radius) |
 | 4 | Population Boom (+3 pop) | Vibes Push (+5 Vibes) |
 | 5+ | Unique Unit (tribe's special) | Monument (+20 Floor Price) |
-
-**UI:** Clear progress bar beneath each settlement showing current/required pop for next level.
-
-```typescript
-interface Settlement {
-  // ... existing fields
-  level: number
-  populationProgress: number
-  populationThreshold: number  // increases per level
-  milestonesChosen: MilestoneChoice[]
-}
-
-interface MilestoneChoice {
-  level: number
-  choice: 'a' | 'b'
-}
-```
 
 ---
 
@@ -981,7 +697,8 @@ interface MilestoneChoice {
 - ✅ All policy effects implemented (47 effects across yield, combat, trade, production, GP)
 - Tooltips and info panels (other panels)
 - End game screen with Floor Price breakdown
-- Turn notifications (golden age, great person, wonder)
+- ✅ Turn notifications (golden age popup, border glow effect)
+- Turn notifications (great person, wonder) - remaining
 - Promotion selection UI
 - Unit minting animation (rarity reveal)
 
@@ -1029,99 +746,22 @@ interface MilestoneChoice {
 - **Left click:** Select units/settlements, move selected unit, attack enemies
 - **Right click:** Deselect current unit/settlement
 
-## Completed Systems
+## Key Implementation Notes
 
 ### Builder System
-Builders have 2 build charges and can use multiple charges per turn. When all charges are used, the builder is consumed.
+Builders have 2 charges, can use multiple per turn. Key files: `improvements/index.ts`, `state/index.ts`, `UnitActionsPanel.tsx`.
 
-**Key files:**
-- `game-core/src/improvements/index.ts` - Improvement definitions and validation
-- `game-core/src/state/index.ts` - BUILD_IMPROVEMENT action handler
-- `app/src/components/UnitActionsPanel.tsx` - Builder UI with charge display
+### Policy System
+Civ 6-style drag-and-drop cards. Custom mouse drag (not HTML5). Wildcard slots accept any type.
+- `SELECT_POLICY { choice: 'a' | 'b' }` - Choose on culture completion
+- `SWAP_POLICIES { toSlot, toUnslot }` - Confirm slot changes
 
-**Validation:** Uses robust string comparison (`String().trim()`) for terrain/resource matching to avoid edge cases.
+### Trade Routes
+Requires Smart Contracts tech. Routes managed in `TradePanel.tsx`, logic in `economy/index.ts`.
 
-### Resource Improvements Visual
-Improved resources show a green checkmark (✓) overlay on the resource icon. This is rendered in `HexTileRenderer.createResourceIndicator()`.
+### Policy Effects
+47 effects implemented across: yields (`cultures/index.ts`), combat (`combat/index.ts`), production, trade (`economy/index.ts`), unit creation (`state/index.ts`), great people (`greatpeople/index.ts`).
 
-### Policy System UI
-Civ 6-style policy card management with drag-and-drop.
+## TODO
 
-**Key files:**
-- `app/src/components/policies/PolicyPanel.tsx` - Main panel with drag-and-drop slot management
-- `app/src/components/policies/PolicyCard.tsx` - Color-coded card component by slot type
-- `app/src/components/policies/PolicySlot.tsx` - Empty slot placeholder
-- `app/src/components/policies/PolicySelectionPopup.tsx` - A/B choice popup on culture completion
-- `game-core/src/cultures/index.ts` - Policy definitions, slot logic, culture completion
-
-**Features:**
-- Custom mouse-based drag system (not HTML5 drag-and-drop) for full visual control
-- Floating card follows cursor with white glow effect during drag
-- Wildcard slots accept any policy type; other slots only accept matching types
-- Filter buttons in pool section (All/Military/Economy/Progress/Wildcard) with count badges
-- Slot validation prevents placing cards in incompatible slots
-- Cards can be swapped between slots or moved back to pool
-
-**Actions:**
-- `SELECT_POLICY { choice: 'a' | 'b' }` - Choose policy when culture completes
-- `SWAP_POLICIES { toSlot: PolicyId[], toUnslot: PolicyId[] }` - Confirm slot changes
-
-### Trade Panel UI
-Full trade route management interface.
-
-**Key files:**
-- `app/src/components/TradePanel.tsx` - Main panel with route creation, active/forming routes display
-- `game-core/src/economy/index.ts` - Trade route logic, capacity, gold calculation with policy bonuses
-
-**Features:**
-- Shows lock icon if trade not unlocked (requires Smart Contracts tech)
-- Displays total trade income with gold icon
-- Active routes section with gold yield per route
-- Forming routes section with turns remaining
-- Create new route workflow with destination selection
-- Route cancellation
-- Policy bonuses applied: trade_capacity, trade_gold, trade_gold_percent, friendly_trade
-
-**Actions:**
-- `CREATE_TRADE_ROUTE { originId, destinationId }` - Start a new trade route
-- `CANCEL_TRADE_ROUTE { routeId }` - Cancel an existing route
-
-### Policy Effects System
-All 47 policy effects are fully implemented across these modules:
-
-**Yield bonuses** (`cultures/index.ts` - `calculatePolicyYieldBonuses`):
-- capital_vibes, settlement_vibes, settlement_production, settlement_gold
-- trade_gold, ally_gold, culture_gold_flat, building_alpha, friendly_vibes, pop_vibes
-- gold_percent, vibes_percent, alpha_percent, scaling_production, wonder_production, wonder_gold
-
-**Combat bonuses** (`combat/index.ts` - `calculatePolicyCombatBonus`):
-- aggressive_combat, territory_defense, defense_bonus, low_health_defense
-- territory_debuff, defender_debuff, war_defense_debuff, settlement_defense
-
-**Healing** (`combat/index.ts`):
-- unit_healing, friendly_healing, adjacent_healing, pillage_gold_heal (heal on kill)
-
-**Production** (`cultures/index.ts` - `calculatePolicyProductionModifiers`):
-- wall_production, building_discount, production_buildings
-
-**Trade** (`economy/index.ts`):
-- trade_capacity, trade_gold_percent, friendly_trade (in getEffectiveTradeCapacity)
-
-**Unit creation** (`state/index.ts` - `handleCompletedProduction`):
-- free_promotion, cavalry_movement, unit_vision, settle_population
-
-**Great People** (`greatpeople/index.ts`):
-- great_people_chance (spawn chance), great_person_points (accumulation bonus)
-
-**Floor Price** (`cultures/index.ts`):
-- pop_floor_price, tile_floor_price, wonder_vibes
-
-**Combat rewards** (`cultures/index.ts` helper functions):
-- kill_vibes, promotion_vibes, territory_kill_gold
-
-**Pillaging** (`economy/index.ts`):
-- pillage_damage, pillage_gold_heal (gold bonus)
-
-## TODO / Future Improvements
-
-- **River System Overhaul:** Currently rivers are stored per-tile and rendered as a simple line on one edge. Needs proper edge-based river data model where rivers flow along hex edges between tiles, with connected river segments that form natural waterways. See `HexTileRenderer.drawRiver()` for current implementation.
+- **Rivers:** Currently per-tile, needs edge-based river system. See `HexTileRenderer.drawRiver()`.

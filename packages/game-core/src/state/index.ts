@@ -87,7 +87,6 @@ import {
   canProposeAlliance,
   areAtWar,
 } from '../diplomacy'
-import { processBarbarianSpawning } from '../barbarians'
 import { applyPromotion, getAvailablePromotions } from '../promotions'
 import { selectMilestone } from '../milestones'
 import {
@@ -288,7 +287,6 @@ export function createInitialState(config: GameConfig): GameState {
     fog,
     diplomacy,
     tradeRoutes: [],
-    barbarianCamps: [],
     greatPersons: new Map(),
     lootboxes: [],
     wonders: [],
@@ -512,13 +510,6 @@ function applyEndTurn(state: GameState): ActionResult {
   // Update diplomacy timers (increment turnsAtCurrentStance)
   newState = updateDiplomacyTimers(newState)
 
-  // Spawn barbarians (only on new round, i.e., when first player ends turn)
-  const isFirstPlayer = state.players.findIndex((p) => p.tribeId === currentPlayer) === 0
-  if (isFirstPlayer) {
-    const rng = createRng(state.seed + state.turn)
-    newState = processBarbarianSpawning(newState, rng)
-  }
-
   // Check for great person spawning
   const gpRng = createRng(state.seed + state.turn * 100 + currentPlayer.charCodeAt(0))
   newState = checkAndSpawnGreatPeople(newState, currentPlayer, gpRng)
@@ -605,27 +596,25 @@ function processSettlementGrowthForPlayer(state: GameState, tribeId: TribeId): G
  */
 function processSettlementProduction(state: GameState, tribeId: TribeId): GameState {
   let newState = state
-  const newSettlements = new Map(state.settlements)
 
   for (const [settlementId, settlement] of state.settlements) {
     if (settlement.owner !== tribeId) continue
 
-    // Process production
-    const result = processProduction(state, settlement)
+    // Process production (updates queue, progress, currentProduction)
+    const result = processProduction(newState, settlement)
 
-    // Update settlement
+    // Update settlement with production result first
+    const newSettlements = new Map(newState.settlements)
     newSettlements.set(settlementId, result.settlement)
+    newState = { ...newState, settlements: newSettlements }
 
-    // Handle completed items
+    // Handle completed items (adds buildings, spawns units, etc.)
     for (const item of result.completed) {
       newState = handleCompletedProduction(newState, settlementId, item)
     }
   }
 
-  return {
-    ...newState,
-    settlements: newSettlements,
-  }
+  return newState
 }
 
 /**

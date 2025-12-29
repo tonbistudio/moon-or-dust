@@ -82,6 +82,7 @@ export function AvailableItems({ items, onSelectItem }: AvailableItemsProps): JS
               name={item.name}
               cost={item.cost}
               turnsRemaining={item.turnsRemaining}
+              description={item.description}
               onClick={() => onSelectItem(item)}
             />
           ))}

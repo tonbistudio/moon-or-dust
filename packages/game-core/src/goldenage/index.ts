@@ -11,6 +11,7 @@ import type {
   Era,
 } from '../types'
 import { getPlayerSettlements } from '../settlements'
+import { getPolicyGoldenAgeDuration } from '../cultures'
 
 // =============================================================================
 // Constants
@@ -406,11 +407,16 @@ export function activateGoldenAge(
   const era = getPlayerEra(state, tribeId)
   const effect = selectRandomEffect(era, rng)
 
+  // Check for policy duration override (e.g., Retweet Bonanza: 4 turns instead of 3)
+  const policyDuration = getPolicyGoldenAgeDuration(player)
+  const duration = policyDuration ?? trigger.duration
+
   const updatedGoldenAge: GoldenAgeState = {
     ...player.goldenAge,
     active: true,
-    turnsRemaining: trigger.duration,
+    turnsRemaining: duration,
     currentEffect: effect,
+    currentTrigger: triggerId,
     triggersUsed: [...player.goldenAge.triggersUsed, triggerId],
   }
 
@@ -517,17 +523,23 @@ export function processGoldenAgeTurn(state: GameState, tribeId: TribeId): GameSt
   const newTurnsRemaining = player.goldenAge.turnsRemaining - 1
   const stillActive = newTurnsRemaining > 0
 
-  // Build new golden age state, only including currentEffect if still active
-  const baseState = {
+  // Build new golden age state, only including currentEffect/currentTrigger if still active
+  let updatedGoldenAge: GoldenAgeState = {
     active: stillActive,
     turnsRemaining: newTurnsRemaining,
     triggersUsed: player.goldenAge.triggersUsed,
     recentTechTurns: player.goldenAge.recentTechTurns,
   }
 
-  const updatedGoldenAge: GoldenAgeState = stillActive && player.goldenAge.currentEffect
-    ? { ...baseState, currentEffect: player.goldenAge.currentEffect }
-    : baseState
+  // Preserve currentEffect and currentTrigger only if still active and they exist
+  if (stillActive) {
+    if (player.goldenAge.currentEffect) {
+      updatedGoldenAge = { ...updatedGoldenAge, currentEffect: player.goldenAge.currentEffect }
+    }
+    if (player.goldenAge.currentTrigger) {
+      updatedGoldenAge = { ...updatedGoldenAge, currentTrigger: player.goldenAge.currentTrigger }
+    }
+  }
 
   const updatedPlayer: Player = {
     ...player,

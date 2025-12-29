@@ -39,9 +39,6 @@ export * from './combat'
 // Promotions
 export * from './promotions'
 
-// Barbarians
-export * from './barbarians'
-
 // Tech tree
 export * from './tech'
 

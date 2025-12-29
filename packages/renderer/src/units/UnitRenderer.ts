@@ -97,6 +97,7 @@ const UNIT_BADGE_MAP: Partial<Record<UnitType, string>> = {
 
 const TRIBE_SPRITES: Record<string, Record<Direction, Texture>> = {}
 const UNIQUE_UNIT_SPRITES: Record<string, Record<Direction, Texture>> = {}
+const GREAT_PERSON_SPRITES: Record<string, Record<Direction, Texture>> = {}
 const BADGE_TEXTURES: Record<string, Texture> = {}
 const SPRITE_LOAD_PROMISES: Map<string, Promise<void>> = new Map()
 
@@ -105,6 +106,18 @@ const PLAYABLE_TRIBES: TribeName[] = ['monkes', 'geckos', 'degods', 'cets']
 
 // Unique units that have their own sprite sheets (instead of using tribe sprites)
 const UNIQUE_UNIT_TYPES: UnitType[] = ['banana_slinger', 'neon_geck', 'deadgod', 'stuckers']
+
+// Great people with custom sprites (map from greatPersonId to sprite folder name)
+const GREAT_PERSON_SPRITES_MAP: Record<string, string> = {
+  mert: 'mert',
+  toly: 'toly',
+  scum: 'scum',
+  dingaling: 'dingaling',
+  monoliff: 'monoliff',
+  blocksmyth: 'blocksmyth',
+  retired_chad_dev: 'retiredchad',
+  watch_king: 'watchking',
+}
 
 async function loadTribeSprites(tribeName: TribeName): Promise<void> {
   const key = tribeName
@@ -135,6 +148,44 @@ async function loadTribeSprites(tribeName: TribeName): Promise<void> {
     }
 
     TRIBE_SPRITES[key] = textures as Record<Direction, Texture>
+  })()
+
+  SPRITE_LOAD_PROMISES.set(key, loadPromise)
+  await loadPromise
+}
+
+// Load sprites for a great person
+async function loadGreatPersonSprites(greatPersonId: string): Promise<void> {
+  const folderName = GREAT_PERSON_SPRITES_MAP[greatPersonId]
+  if (!folderName) return // No custom sprite for this great person
+
+  const key = `gp_${greatPersonId}`
+
+  if (GREAT_PERSON_SPRITES[greatPersonId]) return // Already loaded
+
+  // Check if already loading
+  const existingPromise = SPRITE_LOAD_PROMISES.get(key)
+  if (existingPromise) {
+    await existingPromise
+    return
+  }
+
+  // Start loading
+  const loadPromise = (async () => {
+    const textures: Partial<Record<Direction, Texture>> = {}
+
+    for (const dir of DIRECTIONS) {
+      const url = `/assets/sprites/greatpeople/${folderName}/${dir}.png`
+      try {
+        const texture = await Assets.load(url)
+        textures[dir] = texture
+        console.log(`Loaded great person sprite: ${url}`)
+      } catch (error) {
+        console.warn(`Failed to load great person sprite: ${url}`, error)
+      }
+    }
+
+    GREAT_PERSON_SPRITES[greatPersonId] = textures as Record<Direction, Texture>
   })()
 
   SPRITE_LOAD_PROMISES.set(key, loadPromise)
@@ -193,13 +244,14 @@ async function loadBadgeTextures(): Promise<void> {
   }
 }
 
-// Preload all tribe sprites, unique unit sprites, and badges
+// Preload all tribe sprites, unique unit sprites, great people sprites, and badges
 export async function preloadAllSprites(): Promise<void> {
   try {
-    console.log('Preloading tribe sprites, unique unit sprites, and badges...')
+    console.log('Preloading tribe sprites, unique unit sprites, great people sprites, and badges...')
     await Promise.all([
       ...PLAYABLE_TRIBES.map(tribe => loadTribeSprites(tribe)),
       ...UNIQUE_UNIT_TYPES.map(unitType => loadUniqueUnitSprites(unitType)),
+      ...Object.keys(GREAT_PERSON_SPRITES_MAP).map(gpId => loadGreatPersonSprites(gpId)),
       loadBadgeTextures(),
     ])
     console.log('Sprite and badge preloading complete')
@@ -219,6 +271,16 @@ function getUniqueUnitTexture(unitType: UnitType, direction: Direction): Texture
   const unitTextures = UNIQUE_UNIT_SPRITES[unitType]
   if (!unitTextures) return null
   return unitTextures[direction] ?? null
+}
+
+function getGreatPersonTexture(greatPersonId: string, direction: Direction): Texture | null {
+  const gpTextures = GREAT_PERSON_SPRITES[greatPersonId]
+  if (!gpTextures) return null
+  return gpTextures[direction] ?? null
+}
+
+function hasGreatPersonSprite(greatPersonId: string): boolean {
+  return greatPersonId in GREAT_PERSON_SPRITES_MAP
 }
 
 function isUniqueUnitType(unitType: UnitType): boolean {
@@ -265,9 +327,15 @@ export class UnitRenderer {
   }
 
   setHoverTarget(hex: { q: number; r: number } | null): void {
+    // Skip if no change
+    if (this.hoverTargetHex?.q === hex?.q && this.hoverTargetHex?.r === hex?.r) {
+      return
+    }
     this.hoverTargetHex = hex
-    // Immediately update selected unit's direction for responsive hover rotation
-    this.updateSelectedUnitHoverDirection()
+    // Only update if we have a selected unit
+    if (this.selectedUnitId) {
+      this.updateSelectedUnitHoverDirection()
+    }
   }
 
   /**
@@ -288,6 +356,10 @@ export class UnitRenderer {
     )
 
     if (hoverDir) {
+      // Only update if direction actually changed
+      const currentDir = this.unitDirections.get(this.selectedUnitId)
+      if (currentDir === hoverDir) return
+
       this.unitDirections.set(this.selectedUnitId, hoverDir)
       // Update the sprite texture immediately
       this.updateSpriteDirection(unitContainer, hoverDir)
@@ -299,14 +371,18 @@ export class UnitRenderer {
    */
   private updateSpriteDirection(container: Container, direction: Direction): void {
     // Extract info from container name
-    // Format: unit_tribeName_direction OR unique_unitType_direction
+    // Format: unit_tribeName_direction OR unique_unitType_direction OR greatperson_gpId_direction
     const nameParts = container.name?.split('_')
     if (!nameParts || nameParts.length < 3) return
 
-    const isUnique = nameParts[0] === 'unique'
+    const spriteType = nameParts[0]
     let texture: Texture | null = null
 
-    if (isUnique) {
+    if (spriteType === 'greatperson') {
+      const greatPersonId = nameParts[1]!
+      texture = getGreatPersonTexture(greatPersonId, direction)
+      container.name = `greatperson_${greatPersonId}_${direction}`
+    } else if (spriteType === 'unique') {
       const unitType = nameParts[1] as UnitType
       texture = getUniqueUnitTexture(unitType, direction)
       container.name = `unique_${unitType}_${direction}`
@@ -491,6 +567,11 @@ export class UnitRenderer {
     // Get direction (default to south)
     const direction = this.unitDirections.get(unit.id) ?? 'south'
 
+    // Check if this is a great person unit
+    const isGreatPerson = unit.type === 'great_person'
+    const greatPersonData = isGreatPerson ? state.greatPersons?.get(unit.id) : null
+    const greatPersonId = greatPersonData?.greatPersonId ?? null
+
     // 1. Draw category glow (ellipse underneath) - smaller size
     const category = getUnitCategory(unit.type)
     const glowColor = CATEGORY_COLORS[category]
@@ -500,11 +581,25 @@ export class UnitRenderer {
     glow.name = 'glow'
     container.addChild(glow)
 
-    // 2. Add unit sprite - check for unique unit sprite first, then fall back to tribe sprite
+    // 2. Add unit sprite - check for great person, unique unit, then fall back to tribe sprite
     const isUnique = isUniqueUnitType(unit.type)
-    const texture = isUnique
-      ? getUniqueUnitTexture(unit.type, direction)
-      : getTribeTexture(tribeName, direction)
+    let texture: Texture | null = null
+    let spriteType = 'tribe' // for container naming
+
+    if (isGreatPerson && greatPersonId && hasGreatPersonSprite(greatPersonId)) {
+      texture = getGreatPersonTexture(greatPersonId, direction)
+      spriteType = 'greatperson'
+    } else if (isGreatPerson) {
+      // Great person without custom sprite - use tribe sprite as fallback
+      texture = getTribeTexture(tribeName, direction)
+      spriteType = 'tribe'
+    } else if (isUnique) {
+      texture = getUniqueUnitTexture(unit.type, direction)
+      spriteType = 'unique'
+    } else {
+      texture = getTribeTexture(tribeName, direction)
+      spriteType = 'tribe'
+    }
 
     if (texture) {
       const sprite = new Sprite(texture)
@@ -541,30 +636,34 @@ export class UnitRenderer {
     healthBarFill.name = 'healthBarFill'
     container.addChild(healthBarFill)
 
-    // 5. Badge icon (upper-right corner)
-    const badgeTexture = getBadgeTexture(unit.type)
-    if (badgeTexture) {
-      const badge = new Sprite(badgeTexture)
-      badge.anchor.set(0.5, 0.5)
-      badge.name = 'badge'
-      // Scale badge to ~12px
-      const badgeTargetSize = 12
-      const badgeScale = badgeTargetSize / Math.max(badge.width, badge.height)
-      badge.scale.set(badgeScale)
-      // Tint badge with rarity color
-      const rarityColor = RARITY_COLORS[unit.rarity]
-      badge.tint = rarityColor
-      // Use additive blend mode to make black background transparent
-      badge.blendMode = 'add'
-      // Position in upper-right corner
-      badge.x = 18
-      badge.y = -18
-      container.addChild(badge)
+    // 5. Badge icon (upper-right corner) - skip for great people (they have custom sprites)
+    if (!isGreatPerson) {
+      const badgeTexture = getBadgeTexture(unit.type)
+      if (badgeTexture) {
+        const badge = new Sprite(badgeTexture)
+        badge.anchor.set(0.5, 0.5)
+        badge.name = 'badge'
+        // Scale badge to ~12px
+        const badgeTargetSize = 12
+        const badgeScale = badgeTargetSize / Math.max(badge.width, badge.height)
+        badge.scale.set(badgeScale)
+        // Tint badge with rarity color
+        const rarityColor = RARITY_COLORS[unit.rarity]
+        badge.tint = rarityColor
+        // Use additive blend mode to make black background transparent
+        badge.blendMode = 'add'
+        // Position in upper-right corner
+        badge.x = 18
+        badge.y = -18
+        container.addChild(badge)
+      }
     }
 
-    // Store metadata for updates - include unit type for unique units
-    container.name = isUnique
-      ? `unique_${unit.type}_${direction}`
+    // Store metadata for updates - include unit type/great person id for proper tracking
+    container.name = spriteType === 'greatperson'
+      ? `greatperson_${greatPersonId}_${direction}`
+      : spriteType === 'unique'
+        ? `unique_${unit.type}_${direction}`
       : `unit_${tribeName}_${direction}`
 
     this.updateHealthBar(container, unit)
@@ -578,10 +677,22 @@ export class UnitRenderer {
     const direction = this.unitDirections.get(unit.id) ?? 'south'
     const isUnique = isUniqueUnitType(unit.type)
 
-    // Check if we need to update the sprite
-    const expectedName = isUnique
-      ? `unique_${unit.type}_${direction}`
-      : `unit_${tribeName}_${direction}`
+    // Check if this is a great person unit
+    const isGreatPerson = unit.type === 'great_person'
+    const greatPersonData = isGreatPerson ? state.greatPersons?.get(unit.id) : null
+    const greatPersonId = greatPersonData?.greatPersonId ?? null
+
+    // Determine expected container name based on unit type
+    let expectedName: string
+    if (isGreatPerson && greatPersonId && hasGreatPersonSprite(greatPersonId)) {
+      expectedName = `greatperson_${greatPersonId}_${direction}`
+    } else if (isUnique) {
+      expectedName = `unique_${unit.type}_${direction}`
+    } else {
+      expectedName = `unit_${tribeName}_${direction}`
+    }
+
+    // Skip if no change needed
     if (container.name === expectedName) return
 
     // Update glow color (in case unit type changed, unlikely but possible)
@@ -594,12 +705,22 @@ export class UnitRenderer {
       glow.fill({ color: glowColor, alpha: 0.6 })
     }
 
-    // Update sprite texture - use unique unit sprite if applicable
+    // Update sprite texture based on unit type
     const spriteChild = container.getChildByName('sprite')
     if (spriteChild && spriteChild instanceof Sprite) {
-      const texture = isUnique
-        ? getUniqueUnitTexture(unit.type, direction)
-        : getTribeTexture(tribeName, direction)
+      let texture: Texture | null = null
+
+      if (isGreatPerson && greatPersonId && hasGreatPersonSprite(greatPersonId)) {
+        texture = getGreatPersonTexture(greatPersonId, direction)
+      } else if (isGreatPerson) {
+        // Great person without custom sprite - use tribe sprite
+        texture = getTribeTexture(tribeName, direction)
+      } else if (isUnique) {
+        texture = getUniqueUnitTexture(unit.type, direction)
+      } else {
+        texture = getTribeTexture(tribeName, direction)
+      }
+
       if (texture) {
         spriteChild.texture = texture
       }

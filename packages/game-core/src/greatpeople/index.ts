@@ -16,10 +16,10 @@ import type {
   HexCoord,
   Player,
 } from '../types'
-import { hexRange, hexKey } from '../hex'
+import { hexRange, hexKey, hexNeighbors } from '../hex'
 import { createUnit, addUnit } from '../units'
 import { applyPromotion, ALL_PROMOTIONS } from '../promotions'
-import { getPlayerSettlements } from '../settlements'
+import { getPlayerSettlements, calculateTileYields } from '../settlements'
 import { calculatePolicyGPPointsPercent } from '../cultures'
 
 // =============================================================================
@@ -470,17 +470,17 @@ export function useGreatPersonAction(
   let newState = applyGreatPersonEffect(state, unit.owner, unit.position, definition.effect, rng)
   if (!newState) return null
 
-  // Mark as acted
-  const updatedGreatPerson: GreatPerson = {
-    ...greatPerson,
-    hasActed: true,
-  }
+  // Remove the great person unit after use (they are consumed)
+  const newUnits = new Map(newState.units)
+  newUnits.delete(unitId)
 
+  // Also remove from greatPersons tracking
   const newGreatPersons = new Map(newState.greatPersons ?? new Map())
-  newGreatPersons.set(unitId, updatedGreatPerson)
+  newGreatPersons.delete(unitId)
 
   return {
     ...newState,
+    units: newUnits,
     greatPersons: newGreatPersons,
   }
 }
@@ -598,41 +598,86 @@ function applyGreatPersonEffect(
     }
 
     case 'border_expansion': {
-      const { tiles, bonusVibes = 0 } = effect
+      const { tiles: tilesToClaim, bonusVibes = 0 } = effect
 
-      // Expand borders around position
-      const newTiles = new Map(state.map.tiles)
-      const range = hexRange(position, tiles)
+      // Expand borders by claiming N best-yield tiles adjacent to owned territory
+      let currentState = state
 
-      for (const coord of range) {
-        const key = hexKey(coord)
-        const tile = newTiles.get(key)
-        if (tile && !tile.owner) {
-          newTiles.set(key, { ...tile, owner: tribeId })
+      for (let i = 0; i < tilesToClaim; i++) {
+        // Find tiles within reasonable range of the great person's position
+        const maxRadius = 5
+        const tilesNearPosition = hexRange(position, maxRadius)
+        const nearPositionKeys = new Set(tilesNearPosition.map(c => hexKey(c)))
+
+        // Get owned tiles near this position
+        const ownedTileKeys = new Set<string>()
+        for (const [key, tile] of currentState.map.tiles) {
+          if (tile.owner === tribeId && nearPositionKeys.has(key)) {
+            ownedTileKeys.add(key)
+          }
         }
-      }
 
-      let newState: GameState = {
-        ...state,
-        map: { ...state.map, tiles: newTiles },
+        // Find candidate tiles: unowned tiles adjacent to owned territory
+        const candidateTiles: Array<{ key: string; coord: HexCoord; totalYield: number }> = []
+
+        for (const ownedKey of ownedTileKeys) {
+          const [qStr, rStr] = ownedKey.split(',')
+          const coord = { q: parseInt(qStr!, 10), r: parseInt(rStr!, 10) }
+
+          for (const neighborCoord of hexNeighbors(coord)) {
+            const neighborKey = hexKey(neighborCoord)
+
+            // Skip if already owned or already a candidate
+            if (ownedTileKeys.has(neighborKey)) continue
+            if (candidateTiles.some(c => c.key === neighborKey)) continue
+
+            const tile = currentState.map.tiles.get(neighborKey)
+            if (!tile || tile.owner) continue // Skip owned or non-existent tiles
+
+            // Skip unworkable terrain (water, mountain)
+            if (tile.terrain === 'water' || tile.terrain === 'mountain') continue
+
+            // Calculate total yields for this tile
+            const yields = calculateTileYields(tile)
+            const totalYield = yields.gold + yields.alpha + yields.vibes + yields.production + yields.growth
+
+            candidateTiles.push({ key: neighborKey, coord: neighborCoord, totalYield })
+          }
+        }
+
+        if (candidateTiles.length === 0) break
+
+        // Sort by yield (highest first) and pick the best
+        candidateTiles.sort((a, b) => b.totalYield - a.totalYield)
+        const bestTile = candidateTiles[0]!
+
+        // Claim the tile
+        const newTiles = new Map(currentState.map.tiles)
+        const tile = newTiles.get(bestTile.key)!
+        newTiles.set(bestTile.key, { ...tile, owner: tribeId })
+
+        currentState = {
+          ...currentState,
+          map: { ...currentState.map, tiles: newTiles },
+        }
       }
 
       // Add bonus vibes
       if (bonusVibes > 0) {
-        const newPlayerIndex = newState.players.findIndex((p) => p.tribeId === tribeId)
+        const newPlayerIndex = currentState.players.findIndex((p) => p.tribeId === tribeId)
         if (newPlayerIndex !== -1) {
-          const newPlayer = newState.players[newPlayerIndex]!
+          const newPlayer = currentState.players[newPlayerIndex]!
           const updatedPlayer: Player = {
             ...newPlayer,
             cultureProgress: newPlayer.cultureProgress + bonusVibes,
           }
-          const newPlayers = [...newState.players]
+          const newPlayers = [...currentState.players]
           newPlayers[newPlayerIndex] = updatedPlayer
-          newState = { ...newState, players: newPlayers }
+          currentState = { ...currentState, players: newPlayers }
         }
       }
 
-      return newState
+      return currentState
     }
 
     case 'area_promotion': {

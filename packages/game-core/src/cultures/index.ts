@@ -219,7 +219,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     prerequisites: { cultures: ['social_media' as CultureId], techs: [] },
     policyChoices: [
       createPolicy('100k_likes', '100k Likes', '+30% wonder production speed', 'virality', 'a', 'progress', 'wonder_production', { percent: 30 }),
-      createPolicy('retweet_bonanza', 'Retweet Bonanza', 'Great Person points +25%', 'virality', 'b', 'wildcard', 'great_person_points', { percent: 25 }),
+      createPolicy('retweet_bonanza', 'Retweet Bonanza', 'Golden Ages last 4 turns instead of 3', 'virality', 'b', 'wildcard', 'golden_age_duration', { turns: 4 }),
     ],
     slotUnlocks: { wildcard: 1 },
   },
@@ -1341,7 +1341,6 @@ export function calculatePolicyTradeGoldPercent(player: Player): number {
 
 /**
  * Calculates great person points bonus percentage from policies (great_person_points)
- * Policy: retweet_bonanza (+25% GP points)
  */
 export function calculatePolicyGPPointsPercent(player: Player): number {
   let percent = 0
@@ -1354,4 +1353,19 @@ export function calculatePolicyGPPointsPercent(player: Player): number {
   }
 
   return percent
+}
+
+/**
+ * Gets golden age duration override from policies (golden_age_duration)
+ * Policy: retweet_bonanza (4 turns instead of 3)
+ * Returns null if no override, otherwise the number of turns
+ */
+export function getPolicyGoldenAgeDuration(player: Player): number | null {
+  for (const policyId of player.policies.active) {
+    const policy = getPolicy(policyId)
+    if (policy?.effect.type === 'golden_age_duration') {
+      return (policy.effect.turns as number) ?? null
+    }
+  }
+  return null
 }

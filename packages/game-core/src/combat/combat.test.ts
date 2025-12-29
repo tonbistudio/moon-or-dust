@@ -114,7 +114,6 @@ function createTestState(tiles: Tile[]): GameState {
       reputationModifiers: new Map(),
     },
     tradeRoutes: [],
-    barbarianCamps: [],
     lootboxes: [],
     wonders: [],
   }

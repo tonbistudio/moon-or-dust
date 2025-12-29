@@ -1,4 +1,4 @@
-// Panel showing diplomatic relationships between tribes
+// Panel showing diplomatic relationships between tribes with node-based visualization
 
 import { useState } from 'react'
 import type { Player, DiplomaticStance, TribeId } from '@tribes/game-core'
@@ -13,7 +13,7 @@ interface DiplomacyPanelProps {
 const STANCE_COLORS: Record<DiplomaticStance, string> = {
   war: '#ef4444',      // Red
   hostile: '#f97316',  // Orange
-  neutral: '#9ca3af',  // Gray
+  neutral: '#6b7280',  // Gray
   friendly: '#22c55e', // Green
   allied: '#fbbf24',   // Gold
 }
@@ -34,38 +34,78 @@ const TRIBE_COLORS: Record<string, string> = {
   cets: '#3b82f6',     // Blue
 }
 
+// Node positions for 4 tribes (percentage based, centered layout)
+// Positions: top, right, bottom, left
+const NODE_POSITIONS = [
+  { x: 50, y: 12 },   // top
+  { x: 88, y: 50 },   // right
+  { x: 50, y: 88 },   // bottom
+  { x: 12, y: 50 },   // left
+]
+
 export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Element {
   const { state, dispatch } = useGame()
   const [isOpen, setIsOpen] = useState(false)
+  const [selectedTribe, setSelectedTribe] = useState<TribeId | null>(null)
 
   if (!state) return <></>
 
-  const otherPlayers = state.players.filter(p => p.tribeId !== currentPlayer.tribeId)
+  // Get all players and assign positions
+  const allPlayers = state.players
+  const currentPlayerIndex = allPlayers.findIndex(p => p.tribeId === currentPlayer.tribeId)
 
-  // Get stance with each other player
-  const relationships = otherPlayers.map(player => ({
-    player,
-    stance: getStance(state, currentPlayer.tribeId, player.tribeId),
-    canWar: canDeclareWar(state, currentPlayer.tribeId, player.tribeId).canDeclare,
-    canPeace: canProposePeace(state, currentPlayer.tribeId, player.tribeId).canPropose,
-    canAlly: canProposeAlliance(state, currentPlayer.tribeId, player.tribeId).canPropose,
-  }))
+  // Reorder so current player is always at bottom
+  const orderedPlayers = [
+    ...allPlayers.slice(currentPlayerIndex),
+    ...allPlayers.slice(0, currentPlayerIndex),
+  ]
+  // Rotate positions so current player is at bottom (index 2)
+  const positionOffset = 2
+
+  // Get relationships between all pairs
+  const relationships: { from: number; to: number; stance: DiplomaticStance }[] = []
+  for (let i = 0; i < orderedPlayers.length; i++) {
+    for (let j = i + 1; j < orderedPlayers.length; j++) {
+      const stance = getStance(state, orderedPlayers[i]!.tribeId, orderedPlayers[j]!.tribeId)
+      relationships.push({ from: i, to: j, stance })
+    }
+  }
 
   const handleDeclareWar = (targetId: TribeId) => {
     dispatch({ type: 'DECLARE_WAR', target: targetId })
+    setSelectedTribe(null)
   }
 
   const handleProposePeace = (targetId: TribeId) => {
     dispatch({ type: 'PROPOSE_PEACE', target: targetId })
+    setSelectedTribe(null)
   }
 
   const handleProposeAlliance = (targetId: TribeId) => {
     dispatch({ type: 'PROPOSE_ALLIANCE', target: targetId })
+    setSelectedTribe(null)
   }
 
   // Count relationships for button badge
-  const atWar = relationships.filter(r => r.stance === 'war').length
-  const allied = relationships.filter(r => r.stance === 'allied').length
+  const atWar = state.players.filter(p =>
+    p.tribeId !== currentPlayer.tribeId &&
+    getStance(state, currentPlayer.tribeId, p.tribeId) === 'war'
+  ).length
+  const allied = state.players.filter(p =>
+    p.tribeId !== currentPlayer.tribeId &&
+    getStance(state, currentPlayer.tribeId, p.tribeId) === 'allied'
+  ).length
+
+  // Get selected tribe info
+  const selectedPlayer = selectedTribe
+    ? orderedPlayers.find(p => p.tribeId === selectedTribe)
+    : null
+  const selectedStance = selectedTribe && selectedPlayer
+    ? getStance(state, currentPlayer.tribeId, selectedTribe)
+    : null
+  const canWar = selectedTribe ? canDeclareWar(state, currentPlayer.tribeId, selectedTribe).canDeclare : false
+  const canPeace = selectedTribe ? canProposePeace(state, currentPlayer.tribeId, selectedTribe).canPropose : false
+  const canAlly = selectedTribe ? canProposeAlliance(state, currentPlayer.tribeId, selectedTribe).canPropose : false
 
   return (
     <>
@@ -108,140 +148,264 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
+            background: 'rgba(0, 0, 0, 0.85)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
           }}
-          onClick={() => setIsOpen(false)}
+          onClick={() => {
+            setIsOpen(false)
+            setSelectedTribe(null)
+          }}
         >
           <div
-            style={{
-              background: '#1a1a2e',
-              borderRadius: '12px',
-              padding: '24px',
-              minWidth: '500px',
-              maxWidth: '700px',
-              border: '2px solid #374151',
-            }}
             onClick={e => e.stopPropagation()}
-          >
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px',
-            }}>
-              <h2 style={{ color: '#fff', margin: 0, fontSize: '20px' }}>
-                Diplomatic Relations
-              </h2>
-              <button
-                onClick={() => setIsOpen(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#9ca3af',
-                  cursor: 'pointer',
-                  fontSize: '24px',
-                }}
-              >
-                x
-              </button>
-            </div>
-
-            {/* Relationship Graph */}
-            <div style={{
+            style={{
+              width: '90%',
+              maxWidth: '600px',
+              background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
+              borderRadius: '16px',
+              border: '2px solid #333',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px',
-            }}>
-              {/* Current player header */}
-              <div style={{
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
                 display: 'flex',
+                justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                background: '#2a2a3a',
-                borderRadius: '8px',
-                border: `2px solid ${TRIBE_COLORS[currentPlayer.tribeName] || '#6b7280'}`,
-              }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
+                padding: '16px 24px',
+                borderBottom: '1px solid #333',
+                background: 'rgba(0, 0, 0, 0.3)',
+              }}
+            >
+              <div>
+                <h2 style={{
+                  margin: 0,
+                  color: '#fff',
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}>
+                  <span style={{ fontSize: '24px' }}>🤝</span>
+                  Diplomatic Relations
+                </h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#888' }}>
+                  Click a tribe to view actions
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  setSelectedTribe(null)
+                }}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  background: 'transparent',
+                  border: '1px solid #444',
                   borderRadius: '50%',
-                  background: TRIBE_COLORS[currentPlayer.tribeName] || '#6b7280',
+                  color: '#888',
+                  fontSize: '20px',
+                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: '#000',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  textTransform: 'uppercase',
-                }}>
-                  {currentPlayer.tribeName.slice(0, 2)}
-                </div>
-                <div>
-                  <div style={{ color: '#fff', fontWeight: 'bold', textTransform: 'capitalize' }}>
-                    {currentPlayer.tribeName}
-                  </div>
-                  <div style={{ color: '#9ca3af', fontSize: '12px' }}>You</div>
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Main Content - Node Visualization */}
+            <div style={{ padding: '24px' }}>
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '320px',
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: '12px',
+                  border: '1px solid #222',
+                }}
+              >
+                {/* SVG for connection lines */}
+                <svg
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {relationships.map(({ from, to, stance }, idx) => {
+                    const fromPos = NODE_POSITIONS[(from + positionOffset) % 4]!
+                    const toPos = NODE_POSITIONS[(to + positionOffset) % 4]!
+                    const color = STANCE_COLORS[stance]
+                    const isSelected = selectedTribe && (
+                      orderedPlayers[from]?.tribeId === selectedTribe ||
+                      orderedPlayers[to]?.tribeId === selectedTribe
+                    )
+
+                    return (
+                      <line
+                        key={idx}
+                        x1={`${fromPos.x}%`}
+                        y1={`${fromPos.y}%`}
+                        x2={`${toPos.x}%`}
+                        y2={`${toPos.y}%`}
+                        stroke={color}
+                        strokeWidth={isSelected ? 3 : 2}
+                        strokeOpacity={isSelected ? 1 : 0.5}
+                        strokeDasharray={stance === 'war' ? '8,4' : stance === 'hostile' ? '4,4' : 'none'}
+                      />
+                    )
+                  })}
+                </svg>
+
+                {/* Tribe Nodes */}
+                {orderedPlayers.map((player, idx) => {
+                  const pos = NODE_POSITIONS[(idx + positionOffset) % 4]!
+                  const isCurrentPlayer = player.tribeId === currentPlayer.tribeId
+                  const isSelected = player.tribeId === selectedTribe
+                  const tribeColor = TRIBE_COLORS[player.tribeName] || '#6b7280'
+
+                  // Get stance with current player (for non-current players)
+                  const stanceWithPlayer = !isCurrentPlayer
+                    ? getStance(state, currentPlayer.tribeId, player.tribeId)
+                    : null
+
+                  return (
+                    <div
+                      key={player.tribeId}
+                      onClick={() => {
+                        if (!isCurrentPlayer) {
+                          setSelectedTribe(isSelected ? null : player.tribeId)
+                        }
+                      }}
+                      style={{
+                        position: 'absolute',
+                        left: `${pos.x}%`,
+                        top: `${pos.y}%`,
+                        transform: 'translate(-50%, -50%)',
+                        cursor: isCurrentPlayer ? 'default' : 'pointer',
+                        zIndex: isSelected ? 10 : 1,
+                      }}
+                    >
+                      {/* Node rectangle */}
+                      <div
+                        style={{
+                          padding: isCurrentPlayer ? '10px 20px' : '8px 16px',
+                          borderRadius: '8px',
+                          background: `linear-gradient(135deg, ${tribeColor} 0%, ${tribeColor}cc 100%)`,
+                          border: isSelected
+                            ? '2px solid #fff'
+                            : isCurrentPlayer
+                              ? `2px solid ${tribeColor}`
+                              : `2px solid ${tribeColor}88`,
+                          boxShadow: isSelected
+                            ? `0 0 20px ${tribeColor}88, 0 0 8px rgba(255,255,255,0.3)`
+                            : isCurrentPlayer
+                              ? `0 0 12px ${tribeColor}44`
+                              : 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '2px',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{
+                          color: '#000',
+                          fontWeight: 600,
+                          fontSize: isCurrentPlayer ? '14px' : '13px',
+                          textTransform: 'capitalize',
+                        }}>
+                          {player.tribeName}
+                        </div>
+                        {isCurrentPlayer ? (
+                          <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '10px' }}>You</div>
+                        ) : stanceWithPlayer && (
+                          <div style={{
+                            color: stanceWithPlayer === 'war' || stanceWithPlayer === 'hostile'
+                              ? '#000'
+                              : 'rgba(0,0,0,0.7)',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            background: 'rgba(255,255,255,0.3)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            marginTop: '2px',
+                          }}>
+                            {STANCE_LABELS[stanceWithPlayer]}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Center label */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                    color: '#444',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '2px',
+                  }}
+                >
+                  Relations
                 </div>
               </div>
 
-              {/* Relationships list */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}>
-                {relationships.map(({ player, stance, canWar, canPeace, canAlly }) => (
-                  <div
-                    key={player.tribeId}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px',
-                      background: '#252535',
-                      borderRadius: '8px',
-                      borderLeft: `4px solid ${STANCE_COLORS[stance]}`,
-                    }}
-                  >
-                    {/* Connection line */}
-                    <div style={{
-                      width: '40px',
-                      height: '4px',
-                      background: STANCE_COLORS[stance],
-                      borderRadius: '2px',
-                      boxShadow: stance === 'allied' ? `0 0 8px ${STANCE_COLORS[stance]}` : 'none',
-                    }} />
-
-                    {/* Tribe icon */}
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: TRIBE_COLORS[player.tribeName] || '#6b7280',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#000',
-                      fontWeight: 'bold',
-                      fontSize: '14px',
-                      textTransform: 'uppercase',
-                    }}>
-                      {player.tribeName.slice(0, 2)}
-                    </div>
-
-                    {/* Tribe name */}
-                    <div style={{ flex: 1 }}>
-                      <div style={{
-                        color: '#fff',
-                        fontWeight: 'bold',
-                        textTransform: 'capitalize'
-                      }}>
-                        {player.tribeName}
+              {/* Action Panel - shows when a tribe is selected */}
+              {selectedPlayer && selectedStance && (
+                <div
+                  style={{
+                    marginTop: '16px',
+                    padding: '16px',
+                    background: 'rgba(255,255,255,0.03)',
+                    borderRadius: '8px',
+                    border: `1px solid ${TRIBE_COLORS[selectedPlayer.tribeName] || '#333'}44`,
+                  }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '12px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          background: `${TRIBE_COLORS[selectedPlayer.tribeName] || '#6b7280'}22`,
+                          border: `1px solid ${TRIBE_COLORS[selectedPlayer.tribeName] || '#6b7280'}`,
+                          color: TRIBE_COLORS[selectedPlayer.tribeName] || '#6b7280',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {selectedPlayer.tribeName}
+                      </div>
+                      <div style={{ color: '#666', fontSize: '12px' }}>
+                        Status: <span style={{ color: STANCE_COLORS[selectedStance], fontWeight: 600 }}>{STANCE_LABELS[selectedStance]}</span>
                       </div>
                     </div>
 
@@ -249,16 +413,16 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                     <div style={{ display: 'flex', gap: '8px' }}>
                       {canWar && (
                         <button
-                          onClick={() => handleDeclareWar(player.tribeId)}
+                          onClick={() => handleDeclareWar(selectedTribe!)}
                           style={{
-                            padding: '4px 10px',
-                            background: '#3a1a1a',
-                            border: '1px solid #ef4444',
+                            padding: '6px 12px',
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            border: '1px solid rgba(239, 68, 68, 0.5)',
                             borderRadius: '4px',
                             color: '#ef4444',
                             cursor: 'pointer',
                             fontSize: '11px',
-                            fontWeight: 'bold',
+                            fontWeight: 600,
                           }}
                         >
                           Declare War
@@ -266,16 +430,16 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                       )}
                       {canPeace && (
                         <button
-                          onClick={() => handleProposePeace(player.tribeId)}
+                          onClick={() => handleProposePeace(selectedTribe!)}
                           style={{
-                            padding: '4px 10px',
-                            background: '#1a2a1a',
-                            border: '1px solid #22c55e',
+                            padding: '6px 12px',
+                            background: 'rgba(34, 197, 94, 0.15)',
+                            border: '1px solid rgba(34, 197, 94, 0.5)',
                             borderRadius: '4px',
                             color: '#22c55e',
                             cursor: 'pointer',
                             fontSize: '11px',
-                            fontWeight: 'bold',
+                            fontWeight: 600,
                           }}
                         >
                           Propose Peace
@@ -283,67 +447,57 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                       )}
                       {canAlly && (
                         <button
-                          onClick={() => handleProposeAlliance(player.tribeId)}
+                          onClick={() => handleProposeAlliance(selectedTribe!)}
                           style={{
-                            padding: '4px 10px',
-                            background: '#2a2a1a',
-                            border: '1px solid #fbbf24',
+                            padding: '6px 12px',
+                            background: 'rgba(251, 191, 36, 0.15)',
+                            border: '1px solid rgba(251, 191, 36, 0.5)',
                             borderRadius: '4px',
                             color: '#fbbf24',
                             cursor: 'pointer',
                             fontSize: '11px',
-                            fontWeight: 'bold',
+                            fontWeight: 600,
                           }}
                         >
                           Propose Alliance
                         </button>
                       )}
-                    </div>
-
-                    {/* Stance badge */}
-                    <div style={{
-                      padding: '4px 12px',
-                      background: `${STANCE_COLORS[stance]}22`,
-                      border: `1px solid ${STANCE_COLORS[stance]}`,
-                      borderRadius: '12px',
-                      color: STANCE_COLORS[stance],
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      minWidth: '70px',
-                      textAlign: 'center',
-                    }}>
-                      {STANCE_LABELS[stance]}
+                      {!canWar && !canPeace && !canAlly && (
+                        <span style={{ color: '#555', fontSize: '11px', fontStyle: 'italic' }}>
+                          No actions available
+                        </span>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+            </div>
 
-              {/* Legend */}
-              <div style={{
+            {/* Footer Legend */}
+            <div
+              style={{
                 display: 'flex',
-                gap: '16px',
                 justifyContent: 'center',
-                paddingTop: '16px',
-                borderTop: '1px solid #374151',
-              }}>
-                {(Object.entries(STANCE_COLORS) as [DiplomaticStance, string][]).map(([stance, color]) => (
-                  <div key={stance} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}>
-                    <div style={{
-                      width: '20px',
-                      height: '4px',
-                      background: color,
-                      borderRadius: '2px',
-                    }} />
-                    <span style={{ color: '#9ca3af', fontSize: '11px', textTransform: 'capitalize' }}>
-                      {stance}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                gap: '16px',
+                padding: '12px 24px',
+                borderTop: '1px solid #333',
+                background: 'rgba(0, 0, 0, 0.3)',
+                fontSize: '10px',
+                flexWrap: 'wrap',
+              }}
+            >
+              {(Object.entries(STANCE_COLORS) as [DiplomaticStance, string][]).map(([stance, color]) => (
+                <span key={stance} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{
+                    width: '16px',
+                    height: '3px',
+                    background: color,
+                    borderRadius: '1px',
+                    opacity: stance === 'neutral' ? 0.5 : 1,
+                  }} />
+                  <span style={{ color: '#666', textTransform: 'capitalize' }}>{stance}</span>
+                </span>
+              ))}
             </div>
           </div>
         </div>

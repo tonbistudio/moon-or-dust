@@ -139,7 +139,7 @@ export function TradePanel({ currentPlayer }: TradePanelProps): JSX.Element {
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
+            background: 'rgba(0, 0, 0, 0.85)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -151,30 +151,45 @@ export function TradePanel({ currentPlayer }: TradePanelProps): JSX.Element {
           }}
         >
           <div
-            style={{
-              background: '#1a1a2e',
-              borderRadius: '12px',
-              padding: '24px',
-              minWidth: '600px',
-              maxWidth: '800px',
-              maxHeight: '80vh',
-              overflow: 'auto',
-              border: '2px solid #374151',
-            }}
             onClick={e => e.stopPropagation()}
+            style={{
+              width: '90%',
+              maxWidth: '700px',
+              maxHeight: '80vh',
+              background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
+              borderRadius: '16px',
+              border: '2px solid #333',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
           >
             {/* Header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px',
-            }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px 24px',
+                borderBottom: '1px solid #333',
+                background: 'rgba(0, 0, 0, 0.3)',
+              }}
+            >
               <div>
-                <h2 style={{ color: '#fff', margin: 0, fontSize: '20px' }}>
+                <h2 style={{
+                  margin: 0,
+                  color: '#fff',
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}>
+                  <span style={{ fontSize: '24px' }}>🔄</span>
                   Trade Routes
                 </h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#9ca3af', fontSize: '12px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#888', fontSize: '13px', marginTop: '4px' }}>
                   {tradeUnlocked ? (
                     <>
                       {activeRoutes.length}/{capacity} routes active | +{income}
@@ -192,224 +207,269 @@ export function TradePanel({ currentPlayer }: TradePanelProps): JSX.Element {
                   setSelectedOrigin(null)
                 }}
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#9ca3af',
+                  width: '36px',
+                  height: '36px',
+                  background: 'transparent',
+                  border: '1px solid #444',
+                  borderRadius: '50%',
+                  color: '#888',
+                  fontSize: '20px',
                   cursor: 'pointer',
-                  fontSize: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                x
+                ×
               </button>
             </div>
 
-            {!tradeUnlocked ? (
-              /* Locked state */
-              <div style={{
-                textAlign: 'center',
-                padding: '40px',
-                color: '#6b7280',
-              }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
-                <div style={{ fontSize: '16px', marginBottom: '8px' }}>Trade Routes Locked</div>
-                <div style={{ fontSize: '13px' }}>
-                  Research <strong style={{ color: '#22c55e' }}>Smart Contracts</strong> technology to unlock trade routes.
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Active Routes */}
-                <div style={{ marginBottom: '24px' }}>
-                  <h3 style={{ color: '#22c55e', fontSize: '14px', marginBottom: '12px', textTransform: 'uppercase' }}>
-                    Active Routes ({activeRoutes.length})
-                  </h3>
-                  {activeRoutes.length === 0 ? (
-                    <div style={{ color: '#6b7280', fontSize: '13px', padding: '12px', background: '#252535', borderRadius: '8px' }}>
-                      No active trade routes. Create one below.
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {activeRoutes.map(route => (
-                        <RouteCard
-                          key={route.id}
-                          route={route}
-                          getSettlementName={getSettlementName}
-                          getTribeName={getTribeName}
-                          getTribeColor={getTribeColor}
-                          onCancel={() => handleCancelRoute(route.id)}
-                          isInternal={route.ownerTribe === route.targetTribe}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Forming Routes */}
-                {formingRoutes.length > 0 && (
-                  <div style={{ marginBottom: '24px' }}>
-                    <h3 style={{ color: '#fbbf24', fontSize: '14px', marginBottom: '12px', textTransform: 'uppercase' }}>
-                      Forming ({formingRoutes.length})
-                    </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {formingRoutes.map(route => (
-                        <RouteCard
-                          key={route.id}
-                          route={route}
-                          getSettlementName={getSettlementName}
-                          getTribeName={getTribeName}
-                          getTribeColor={getTribeColor}
-                          onCancel={() => handleCancelRoute(route.id)}
-                          isInternal={route.ownerTribe === route.targetTribe}
-                          isForming
-                        />
-                      ))}
-                    </div>
+            {/* Main Content */}
+            <div
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                padding: '20px 24px',
+              }}
+            >
+              {!tradeUnlocked ? (
+                /* Locked state */
+                <div style={{
+                  textAlign: 'center',
+                  padding: '40px',
+                  color: '#6b7280',
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+                  <div style={{ fontSize: '16px', marginBottom: '8px' }}>Trade Routes Locked</div>
+                  <div style={{ fontSize: '13px' }}>
+                    Research <strong style={{ color: '#22c55e' }}>Smart Contracts</strong> technology to unlock trade routes.
                   </div>
-                )}
-
-                {/* Create New Route */}
-                {routes.length < capacity && (
-                  <div>
-                    <h3 style={{ color: '#3b82f6', fontSize: '14px', marginBottom: '12px', textTransform: 'uppercase' }}>
-                      Create New Route
+                </div>
+              ) : (
+                <>
+                  {/* Active Routes */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <h3 style={{
+                      color: '#22c55e',
+                      fontSize: '12px',
+                      marginBottom: '10px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '1px',
+                      fontWeight: 600,
+                    }}>
+                      Active Routes ({activeRoutes.length})
                     </h3>
-
-                    {/* Origin Selection */}
-                    <div style={{ marginBottom: '16px' }}>
-                      <div style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '8px' }}>
-                        1. Select origin settlement:
+                    {activeRoutes.length === 0 ? (
+                      <div style={{ color: '#555', fontSize: '13px', padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px dashed #333' }}>
+                        No active trade routes. Create one below.
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {playerSettlements.map(settlement => (
-                          <button
-                            key={settlement.id}
-                            onClick={() => setSelectedOrigin(settlement.id)}
-                            style={{
-                              padding: '8px 16px',
-                              background: selectedOrigin === settlement.id ? '#3b82f6' : '#252535',
-                              border: `1px solid ${selectedOrigin === settlement.id ? '#3b82f6' : '#4b5563'}`,
-                              borderRadius: '6px',
-                              color: selectedOrigin === settlement.id ? '#fff' : '#9ca3af',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                            }}
-                          >
-                            {settlement.name}
-                          </button>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {activeRoutes.map(route => (
+                          <RouteCard
+                            key={route.id}
+                            route={route}
+                            getSettlementName={getSettlementName}
+                            getTribeName={getTribeName}
+                            getTribeColor={getTribeColor}
+                            onCancel={() => handleCancelRoute(route.id)}
+                            isInternal={route.ownerTribe === route.targetTribe}
+                          />
                         ))}
-                      </div>
-                    </div>
-
-                    {/* Destination Selection */}
-                    {selectedOrigin && (
-                      <div>
-                        <div style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '8px' }}>
-                          2. Select destination:
-                        </div>
-                        {availableDestinations.length === 0 ? (
-                          <div style={{ color: '#6b7280', fontSize: '13px', padding: '12px', background: '#252535', borderRadius: '8px' }}>
-                            No available destinations. Explore more of the map or improve diplomatic relations.
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {availableDestinations.map(dest => {
-                              const validation = canCreateTradeRoute(state, selectedOrigin, dest.settlement.id)
-                              return (
-                                <div
-                                  key={dest.settlement.id}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    padding: '12px',
-                                    background: '#252535',
-                                    borderRadius: '8px',
-                                    borderLeft: `4px solid ${dest.isInternal ? '#3b82f6' : getTribeColor(dest.settlement.id)}`,
-                                  }}
-                                >
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ color: '#fff', fontWeight: 'bold' }}>
-                                      {dest.settlement.name}
-                                    </div>
-                                    <div style={{ color: '#9ca3af', fontSize: '12px' }}>
-                                      {dest.isInternal ? 'Internal Route' : getTribeName(dest.settlement.id)}
-                                    </div>
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#22c55e', fontSize: '14px', fontWeight: 'bold' }}>
-                                    +{dest.goldPerTurn}
-                                    <img src="/assets/icons/gold.svg" alt="gold" style={{ width: 14, height: 14, filter: 'brightness(0) saturate(100%) invert(83%) sepia(44%) saturate(1000%) hue-rotate(359deg) brightness(103%) contrast(106%)' }} />
-                                    /turn
-                                  </div>
-                                  <button
-                                    onClick={() => handleCreateRoute(dest.settlement.id)}
-                                    disabled={!validation.canCreate}
-                                    style={{
-                                      padding: '6px 16px',
-                                      background: validation.canCreate ? '#22c55e' : '#374151',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      color: validation.canCreate ? '#000' : '#6b7280',
-                                      cursor: validation.canCreate ? 'pointer' : 'not-allowed',
-                                      fontSize: '12px',
-                                      fontWeight: 'bold',
-                                    }}
-                                    title={validation.reason || ''}
-                                  >
-                                    {validation.canCreate ? 'Create' : validation.reason}
-                                  </button>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
-                )}
 
-                {/* Capacity Full */}
-                {routes.length >= capacity && (
+                  {/* Forming Routes */}
+                  {formingRoutes.length > 0 && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <h3 style={{
+                        color: '#fbbf24',
+                        fontSize: '12px',
+                        marginBottom: '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px',
+                        fontWeight: 600,
+                      }}>
+                        Forming ({formingRoutes.length})
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {formingRoutes.map(route => (
+                          <RouteCard
+                            key={route.id}
+                            route={route}
+                            getSettlementName={getSettlementName}
+                            getTribeName={getTribeName}
+                            getTribeColor={getTribeColor}
+                            onCancel={() => handleCancelRoute(route.id)}
+                            isInternal={route.ownerTribe === route.targetTribe}
+                            isForming
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Divider */}
                   <div style={{
-                    textAlign: 'center',
-                    padding: '20px',
-                    color: '#6b7280',
-                    background: '#252535',
-                    borderRadius: '8px',
-                  }}>
-                    Trade route capacity full ({capacity}/{capacity}).
-                    <br />
-                    <span style={{ fontSize: '12px' }}>
-                      Research more technologies or unlock policies to increase capacity.
-                    </span>
-                  </div>
-                )}
+                    height: '1px',
+                    background: 'linear-gradient(90deg, transparent, #444, transparent)',
+                    margin: '16px 0',
+                  }} />
 
-                {/* Legend */}
-                <div style={{
-                  display: 'flex',
-                  gap: '24px',
-                  justifyContent: 'center',
-                  paddingTop: '20px',
-                  marginTop: '20px',
-                  borderTop: '1px solid #374151',
-                  fontSize: '11px',
-                  color: '#9ca3af',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '12px', height: '12px', background: '#3b82f6', borderRadius: '2px' }} />
-                    Internal (own settlements)
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '12px', height: '12px', background: '#22c55e', borderRadius: '2px' }} />
-                    External (other tribes)
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '12px', height: '12px', background: '#fbbf24', borderRadius: '2px' }} />
-                    Allied (+25% yield)
-                  </div>
-                </div>
-              </>
-            )}
+                  {/* Create New Route */}
+                  {routes.length < capacity && (
+                    <div>
+                      <h3 style={{
+                        color: '#3b82f6',
+                        fontSize: '12px',
+                        marginBottom: '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px',
+                        fontWeight: 600,
+                      }}>
+                        Create New Route
+                      </h3>
+
+                      {/* Origin Selection */}
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{ color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+                          1. Select origin settlement:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {playerSettlements.map(settlement => (
+                            <button
+                              key={settlement.id}
+                              onClick={() => setSelectedOrigin(settlement.id)}
+                              style={{
+                                padding: '8px 16px',
+                                background: selectedOrigin === settlement.id ? '#3b82f6' : 'rgba(255,255,255,0.05)',
+                                border: `1px solid ${selectedOrigin === settlement.id ? '#3b82f6' : '#444'}`,
+                                borderRadius: '6px',
+                                color: selectedOrigin === settlement.id ? '#fff' : '#aaa',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {settlement.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Destination Selection */}
+                      {selectedOrigin && (
+                        <div>
+                          <div style={{ color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+                            2. Select destination:
+                          </div>
+                          {availableDestinations.length === 0 ? (
+                            <div style={{ color: '#555', fontSize: '13px', padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px dashed #333' }}>
+                              No available destinations. Explore more of the map or improve diplomatic relations.
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {availableDestinations.map(dest => {
+                                const validation = canCreateTradeRoute(state, selectedOrigin, dest.settlement.id)
+                                return (
+                                  <div
+                                    key={dest.settlement.id}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '12px',
+                                      padding: '10px 12px',
+                                      background: 'rgba(255,255,255,0.03)',
+                                      borderRadius: '8px',
+                                      borderLeft: `3px solid ${dest.isInternal ? '#3b82f6' : getTribeColor(dest.settlement.id)}`,
+                                    }}
+                                  >
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ color: '#fff', fontWeight: 600, fontSize: '13px' }}>
+                                        {dest.settlement.name}
+                                      </div>
+                                      <div style={{ color: '#666', fontSize: '11px' }}>
+                                        {dest.isInternal ? 'Internal Route' : getTribeName(dest.settlement.id)}
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#22c55e', fontSize: '13px', fontWeight: 'bold' }}>
+                                      +{dest.goldPerTurn}
+                                      <img src="/assets/icons/gold.svg" alt="gold" style={{ width: 12, height: 12, filter: 'brightness(0) saturate(100%) invert(83%) sepia(44%) saturate(1000%) hue-rotate(359deg) brightness(103%) contrast(106%)' }} />
+                                    </div>
+                                    <button
+                                      onClick={() => handleCreateRoute(dest.settlement.id)}
+                                      disabled={!validation.canCreate}
+                                      style={{
+                                        padding: '6px 14px',
+                                        background: validation.canCreate ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' : '#333',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        color: validation.canCreate ? '#fff' : '#666',
+                                        cursor: validation.canCreate ? 'pointer' : 'not-allowed',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                      }}
+                                      title={validation.reason || ''}
+                                    >
+                                      {validation.canCreate ? 'Create' : validation.reason}
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Capacity Full */}
+                  {routes.length >= capacity && (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '20px',
+                      color: '#666',
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: '8px',
+                      border: '1px dashed #333',
+                    }}>
+                      Trade route capacity full ({capacity}/{capacity}).
+                      <br />
+                      <span style={{ fontSize: '12px' }}>
+                        Research more technologies or unlock policies to increase capacity.
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer Legend */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '20px',
+                padding: '12px 24px',
+                borderTop: '1px solid #333',
+                background: 'rgba(0, 0, 0, 0.3)',
+                fontSize: '11px',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', background: '#3b82f6', borderRadius: '2px' }} />
+                <span style={{ color: '#666' }}>Internal</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '2px' }} />
+                <span style={{ color: '#666' }}>External</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', background: '#fbbf24', borderRadius: '2px' }} />
+                <span style={{ color: '#666' }}>Allied (+25%)</span>
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -437,25 +497,27 @@ function RouteCard({
   isInternal,
   isForming,
 }: RouteCardProps): JSX.Element {
+  const lineColor = isForming ? '#fbbf24' : (isInternal ? '#3b82f6' : '#22c55e')
+
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
-        padding: '12px',
-        background: isForming ? '#2a2a1a' : '#252535',
+        padding: '10px 12px',
+        background: 'rgba(255,255,255,0.03)',
         borderRadius: '8px',
-        borderLeft: `4px solid ${isInternal ? '#3b82f6' : getTribeColor(route.destination)}`,
-        opacity: isForming ? 0.8 : 1,
+        borderLeft: `3px solid ${isInternal ? '#3b82f6' : getTribeColor(route.destination)}`,
+        opacity: isForming ? 0.85 : 1,
       }}
     >
       {/* Origin */}
-      <div style={{ minWidth: '100px' }}>
-        <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '13px' }}>
+      <div style={{ minWidth: '90px' }}>
+        <div style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>
           {getSettlementName(route.origin)}
         </div>
-        <div style={{ color: '#9ca3af', fontSize: '11px' }}>Origin</div>
+        <div style={{ color: '#555', fontSize: '10px' }}>Origin</div>
       </div>
 
       {/* Arrow */}
@@ -463,49 +525,51 @@ function RouteCard({
         flex: 1,
         height: '2px',
         background: isForming
-          ? `repeating-linear-gradient(90deg, #fbbf24 0, #fbbf24 8px, transparent 8px, transparent 16px)`
-          : (isInternal ? '#3b82f6' : '#22c55e'),
+          ? `repeating-linear-gradient(90deg, ${lineColor} 0, ${lineColor} 6px, transparent 6px, transparent 12px)`
+          : lineColor,
         position: 'relative',
+        minWidth: '40px',
       }}>
         <div style={{
           position: 'absolute',
-          right: '-4px',
-          top: '-4px',
+          right: '-3px',
+          top: '-3px',
           width: 0,
           height: 0,
-          borderTop: '5px solid transparent',
-          borderBottom: '5px solid transparent',
-          borderLeft: `8px solid ${isForming ? '#fbbf24' : (isInternal ? '#3b82f6' : '#22c55e')}`,
+          borderTop: '4px solid transparent',
+          borderBottom: '4px solid transparent',
+          borderLeft: `6px solid ${lineColor}`,
         }} />
       </div>
 
       {/* Destination */}
-      <div style={{ minWidth: '100px' }}>
-        <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '13px' }}>
+      <div style={{ minWidth: '90px' }}>
+        <div style={{ color: '#fff', fontWeight: 600, fontSize: '12px' }}>
           {getSettlementName(route.destination)}
         </div>
-        <div style={{ color: '#9ca3af', fontSize: '11px' }}>
+        <div style={{ color: '#555', fontSize: '10px' }}>
           {isInternal ? 'Internal' : getTribeName(route.destination)}
         </div>
       </div>
 
       {/* Gold yield or forming status */}
       <div style={{
-        minWidth: '70px',
+        minWidth: '60px',
         textAlign: 'center',
-        padding: '4px 12px',
-        background: isForming ? '#3a3a1a' : '#1a2a1a',
+        padding: '4px 10px',
+        background: isForming ? 'rgba(251, 191, 36, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+        border: `1px solid ${isForming ? 'rgba(251, 191, 36, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
         borderRadius: '4px',
         color: isForming ? '#fbbf24' : '#22c55e',
-        fontWeight: 'bold',
-        fontSize: '13px',
+        fontWeight: 600,
+        fontSize: '12px',
       }}>
         {isForming ? (
-          `${route.turnsUntilActive} turns`
+          `${route.turnsUntilActive}t`
         ) : (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
             +{route.goldPerTurn}
-            <img src="/assets/icons/gold.svg" alt="gold" style={{ width: 14, height: 14, filter: 'brightness(0) saturate(100%) invert(83%) sepia(44%) saturate(1000%) hue-rotate(359deg) brightness(103%) contrast(106%)' }} />
+            <img src="/assets/icons/gold.svg" alt="gold" style={{ width: 12, height: 12, filter: 'brightness(0) saturate(100%) invert(83%) sepia(44%) saturate(1000%) hue-rotate(359deg) brightness(103%) contrast(106%)' }} />
           </span>
         )}
       </div>
@@ -514,16 +578,25 @@ function RouteCard({
       <button
         onClick={onCancel}
         style={{
-          padding: '4px 10px',
-          background: '#3a1a1a',
-          border: '1px solid #ef4444',
+          padding: '4px 8px',
+          background: 'transparent',
+          border: '1px solid #444',
           borderRadius: '4px',
-          color: '#ef4444',
+          color: '#666',
           cursor: 'pointer',
-          fontSize: '11px',
+          fontSize: '10px',
+          transition: 'all 0.15s',
+        }}
+        onMouseOver={e => {
+          e.currentTarget.style.borderColor = '#ef4444'
+          e.currentTarget.style.color = '#ef4444'
+        }}
+        onMouseOut={e => {
+          e.currentTarget.style.borderColor = '#444'
+          e.currentTarget.style.color = '#666'
         }}
       >
-        Cancel
+        ×
       </button>
     </div>
   )

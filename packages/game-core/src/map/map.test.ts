@@ -359,33 +359,6 @@ describe('generateMap', () => {
     }
   })
 
-  it('places barbarian camps', () => {
-    const { barbarianCamps } = generateMap({
-      width: 15,
-      height: 15,
-      seed: 12345,
-      playerCount: 2,
-    })
-
-    expect(barbarianCamps.length).toBeGreaterThanOrEqual(3)
-    expect(barbarianCamps.length).toBeLessThanOrEqual(5)
-  })
-
-  it('barbarian camps are away from starting positions', () => {
-    const { startPositions, barbarianCamps } = generateMap({
-      width: 15,
-      height: 15,
-      seed: 12345,
-      playerCount: 2,
-    })
-
-    for (const camp of barbarianCamps) {
-      for (const start of startPositions) {
-        expect(hexDistance(camp.position, start)).toBeGreaterThanOrEqual(5)
-      }
-    }
-  })
-
   it('places resources on map', () => {
     const { map } = generateMap({
       width: 15,

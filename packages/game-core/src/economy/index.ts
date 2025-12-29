@@ -1231,6 +1231,72 @@ export interface AvailableProductionItem {
   name: string
   cost: number
   turnsRemaining: number | null
+  description?: string
+}
+
+/**
+ * Generates a description string for a unit showing its stats
+ */
+function getUnitDescription(unit: UnitDefinition): string {
+  const parts: string[] = []
+
+  if (unit.isCivilian) {
+    if (unit.canFound) {
+      parts.push('Founds settlements')
+    } else if (unit.buildCharges > 0) {
+      parts.push(`${unit.buildCharges} build charges`)
+    } else {
+      parts.push('Explores territory')
+    }
+  } else {
+    // Combat unit
+    if (unit.baseRangedStrength > 0) {
+      parts.push(`${unit.baseRangedStrength} ranged str`)
+    } else {
+      parts.push(`${unit.baseCombatStrength} str`)
+    }
+    parts.push(`${unit.baseHealth} HP`)
+  }
+
+  parts.push(`${unit.baseMovement} mov`)
+
+  return parts.join(' · ')
+}
+
+/**
+ * Generates a description string for a building showing its yields
+ */
+function getBuildingDescription(building: BuildingDefinition): string {
+  const parts: string[] = []
+  const y = building.baseYields
+
+  if (y.gold > 0) parts.push(`+${y.gold} Gold`)
+  if (y.alpha > 0) parts.push(`+${y.alpha} Alpha`)
+  if (y.vibes > 0) parts.push(`+${y.vibes} Vibes`)
+  if (y.production > 0) parts.push(`+${y.production} Prod`)
+  if (y.growth > 0) parts.push(`+${y.growth} Growth`)
+
+  if (building.adjacencyBonus) {
+    const adj = building.adjacencyBonus
+    let conditionText: string
+    switch (adj.condition.type) {
+      case 'terrain':
+        conditionText = adj.condition.terrain
+        break
+      case 'resource':
+        conditionText = adj.condition.category + ' resource'
+        break
+      case 'building':
+        conditionText = adj.condition.buildingId ?? 'building'
+        break
+      case 'improvement':
+        conditionText = adj.condition.improvement
+        break
+    }
+    parts.push(`+${adj.amount} ${adj.yield} per adj. ${conditionText}`)
+  }
+
+  return parts.length > 0 ? parts.join(', ') : 'No direct yields'
 }
 
 /**
@@ -1315,6 +1381,7 @@ export function getAvailableProduction(
       name: formatUnitName(unit.type),
       cost: unit.productionCost,
       turnsRemaining: calculateTurnsRemaining(state, settlement, unit.productionCost),
+      description: getUnitDescription(unit),
     })
   }
 
@@ -1327,6 +1394,7 @@ export function getAvailableProduction(
       name: building.name,
       cost: building.productionCost,
       turnsRemaining: calculateTurnsRemaining(state, settlement, building.productionCost),
+      description: getBuildingDescription(building),
     })
   }
 
@@ -1341,6 +1409,7 @@ export function getAvailableProduction(
         name: wonder.name,
         cost: wonder.productionCost,
         turnsRemaining: calculateTurnsRemaining(state, settlement, wonder.productionCost),
+        description: wonder.description,
       })
     }
   }

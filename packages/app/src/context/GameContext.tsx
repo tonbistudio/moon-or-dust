@@ -17,6 +17,9 @@ import type {
   UnitId,
   LootboxReward,
   TribeId,
+  TechId,
+  GoldenAgeTrigger,
+  GoldenAgeEffectType,
 } from '@tribes/game-core'
 import {
   createInitialState,
@@ -31,6 +34,7 @@ import {
   getCulture,
   getPolicy,
   getMilestoneForLevel,
+  getGreatPersonDefinition,
   type GameConfig,
   type ActionResult,
 } from '@tribes/game-core'
@@ -54,6 +58,13 @@ export interface PendingWarAttack {
   defenderTribe: string
 }
 
+// Golden age info for popup display
+export interface GoldenAgeInfo {
+  trigger: GoldenAgeTrigger
+  effect: GoldenAgeEffectType
+  turnsRemaining: number
+}
+
 export interface GameContextValue {
   // Game state
   state: GameState | null
@@ -67,6 +78,12 @@ export interface GameContextValue {
 
   // Lootbox reward popup
   pendingLootboxReward: LootboxRewardInfo | null
+
+  // Tech completion popup
+  pendingTechCompletion: TechId | null
+
+  // Golden age popup
+  pendingGoldenAge: GoldenAgeInfo | null
 
   // War confirmation popup
   pendingWarAttack: PendingWarAttack | null
@@ -84,6 +101,8 @@ export interface GameContextValue {
   selectUnit: (unitId: UnitId | null) => void
   selectSettlement: (settlementId: SettlementId | null) => void
   dismissLootboxReward: () => void
+  dismissTechCompletion: () => void
+  dismissGoldenAge: () => void
   addEvent: (message: string, type: GameEvent['type']) => void
   confirmWarAttack: () => void
   cancelWarAttack: () => void
@@ -101,6 +120,8 @@ interface InternalState {
   selectedUnit: UnitId | null
   selectedSettlement: SettlementId | null
   pendingLootboxReward: LootboxRewardInfo | null
+  pendingTechCompletion: TechId | null
+  pendingGoldenAge: GoldenAgeInfo | null
   pendingWarAttack: PendingWarAttack | null
   canSwapPolicies: boolean
   events: GameEvent[]
@@ -109,13 +130,15 @@ interface InternalState {
 
 type InternalAction =
   | { type: 'START_GAME'; config: GameConfig }
-  | { type: 'SET_STATE'; state: GameState; lootboxReward?: LootboxRewardInfo }
+  | { type: 'SET_STATE'; state: GameState; lootboxReward?: LootboxRewardInfo; completedTech?: TechId; goldenAgeInfo?: GoldenAgeInfo }
   | { type: 'SET_PENDING_WAR_ATTACK'; attack: PendingWarAttack | null }
   | { type: 'SET_ERROR'; error: string }
   | { type: 'SELECT_TILE'; coord: HexCoord | null }
   | { type: 'SELECT_UNIT'; unitId: UnitId | null }
   | { type: 'SELECT_SETTLEMENT'; settlementId: SettlementId | null }
   | { type: 'DISMISS_LOOTBOX_REWARD' }
+  | { type: 'DISMISS_TECH_COMPLETION' }
+  | { type: 'DISMISS_GOLDEN_AGE' }
   | { type: 'ADD_EVENT'; message: string; eventType: GameEvent['type']; turn: number }
   | { type: 'CLEAR_EVENTS' }
   | { type: 'SET_CAN_SWAP_POLICIES'; canSwap: boolean }
@@ -127,7 +150,7 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
       let gameState = createInitialState(action.config)
 
       // Generate map
-      const { map, startPositions, lootboxes, barbarianCamps } = generateMap({
+      const { map, startPositions, lootboxes } = generateMap({
         width: gameState.map.width,
         height: gameState.map.height,
         seed: action.config.seed,
@@ -139,7 +162,6 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
         ...gameState,
         map,
         lootboxes,
-        barbarianCamps,
       }
 
       // Reveal starting areas for each player
@@ -197,6 +219,7 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
         selectedUnit: null,
         selectedSettlement: null,
         pendingLootboxReward: null,
+        pendingTechCompletion: null,
         canSwapPolicies: true,
         events: [],
         eventIdCounter: 0,
@@ -208,6 +231,8 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
         ...state,
         gameState: action.state,
         pendingLootboxReward: action.lootboxReward ?? state.pendingLootboxReward,
+        pendingTechCompletion: action.completedTech ?? state.pendingTechCompletion,
+        pendingGoldenAge: action.goldenAgeInfo ?? state.pendingGoldenAge,
       }
 
     case 'SET_ERROR':
@@ -224,6 +249,12 @@ function internalReducer(state: InternalState, action: InternalAction): Internal
 
     case 'DISMISS_LOOTBOX_REWARD':
       return { ...state, pendingLootboxReward: null }
+
+    case 'DISMISS_TECH_COMPLETION':
+      return { ...state, pendingTechCompletion: null }
+
+    case 'DISMISS_GOLDEN_AGE':
+      return { ...state, pendingGoldenAge: null }
 
     case 'SET_PENDING_WAR_ATTACK':
       return { ...state, pendingWarAttack: action.attack }
@@ -380,6 +411,8 @@ const initialState: InternalState = {
   selectedUnit: null,
   selectedSettlement: null,
   pendingLootboxReward: null,
+  pendingTechCompletion: null,
+  pendingGoldenAge: null,
   pendingWarAttack: null,
   canSwapPolicies: true,
   events: [],
@@ -441,27 +474,21 @@ function formatRewardName(reward: LootboxReward): string {
 }
 
 // Detect research completion by comparing old and new player state
+// Returns the TechId of the completed tech if any
 function detectResearchCompletion(
   oldState: GameState,
   newState: GameState,
   tribeId: TribeId
-): string | null {
+): TechId | null {
   const oldPlayer = oldState.players.find(p => p.tribeId === tribeId)
   const newPlayer = newState.players.find(p => p.tribeId === tribeId)
   if (!oldPlayer || !newPlayer) return null
 
-  // Check if a tech was completed (was researching, now not, and it's in completed list)
-  if (oldPlayer.currentResearch && !newPlayer.currentResearch) {
-    // Find the newly completed tech
-    const newlyCompleted = newPlayer.researchedTechs.find(
-      (techId) => !oldPlayer.researchedTechs.includes(techId)
-    )
-    if (newlyCompleted) {
-      const tech = getTech(newlyCompleted)
-      return tech?.name ?? newlyCompleted
-    }
-  }
-  return null
+  // Check if a new tech was added to the researched list
+  const newlyCompleted = newPlayer.researchedTechs.find(
+    (techId) => !oldPlayer.researchedTechs.includes(techId)
+  )
+  return newlyCompleted ?? null
 }
 
 // Detect culture completion by comparing old and new player state
@@ -537,6 +564,27 @@ function detectPolicySelection(
   return null
 }
 
+// Detect great person spawn
+function detectGreatPersonSpawn(
+  oldState: GameState,
+  newState: GameState,
+  tribeId: TribeId
+): string | null {
+  const oldPlayer = oldState.players.find(p => p.tribeId === tribeId)
+  const newPlayer = newState.players.find(p => p.tribeId === tribeId)
+  if (!oldPlayer || !newPlayer) return null
+
+  // Check if a new great person was earned
+  const newGreatPerson = newPlayer.greatPeople.earned.find(
+    (gpId) => !oldPlayer.greatPeople.earned.includes(gpId)
+  )
+  if (newGreatPerson) {
+    const definition = getGreatPersonDefinition(newGreatPerson)
+    return definition?.name ?? newGreatPerson
+  }
+  return null
+}
+
 export function GameProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, internalDispatch] = useReducer(internalReducer, initialState)
 
@@ -553,7 +601,7 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
   const dispatch = useCallback(
     (action: GameAction): ActionResult => {
       // Use ref to get the latest state, avoiding stale closure issues
-      const currentGameState = latestGameStateRef.current ?? state.gameState
+      const currentGameState = latestGameStateRef.current
       if (!currentGameState) {
         return { success: false, error: 'Game not started' }
       }
@@ -630,42 +678,12 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         }
       }
 
-      // Detect research completion
-      const completedTech = detectResearchCompletion(oldState, currentState, currentState.currentPlayer)
-      if (completedTech) {
-        internalDispatch({
-          type: 'ADD_EVENT',
-          message: `Research complete: ${completedTech}!`,
-          eventType: 'research',
-          turn: currentState.turn,
-        })
-      }
+      // Use oldState.currentPlayer for detections because after END_TURN,
+      // currentState.currentPlayer has already changed to the next player
+      const actingPlayer = oldState.currentPlayer
 
-      // Detect culture completion
-      const completedCulture = detectCultureCompletion(oldState, currentState, currentState.currentPlayer)
-      if (completedCulture) {
-        internalDispatch({
-          type: 'ADD_EVENT',
-          message: `Culture unlocked: ${completedCulture}!`,
-          eventType: 'culture',
-          turn: currentState.turn,
-        })
-      }
-
-      // Detect golden age start
-      if (detectGoldenAgeStart(oldState, currentState, currentState.currentPlayer)) {
-        const newPlayer = currentState.players.find(p => p.tribeId === currentState.currentPlayer)
-        const turns = newPlayer?.goldenAge.turnsRemaining ?? 0
-        internalDispatch({
-          type: 'ADD_EVENT',
-          message: `Golden Era begins! (+25% yields for ${turns} turns)`,
-          eventType: 'golden',
-          turn: currentState.turn,
-        })
-      }
-
-      // Detect settlement founding
-      const foundedSettlement = detectSettlementFounded(oldState, currentState, currentState.currentPlayer)
+      // Detect settlement founding (can happen on FOUND_SETTLEMENT action)
+      const foundedSettlement = detectSettlementFounded(oldState, currentState, actingPlayer)
       if (foundedSettlement) {
         internalDispatch({
           type: 'ADD_EVENT',
@@ -675,8 +693,8 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         })
       }
 
-      // Detect policy selection
-      const selectedPolicy = detectPolicySelection(oldState, currentState, currentState.currentPlayer)
+      // Detect policy selection (can happen on SELECT_POLICY action)
+      const selectedPolicy = detectPolicySelection(oldState, currentState, actingPlayer)
       if (selectedPolicy) {
         internalDispatch({
           type: 'ADD_EVENT',
@@ -692,13 +710,69 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
       }
 
       // Unlock policy swapping when a culture is completed
+      const completedCulture = detectCultureCompletion(oldState, currentState, actingPlayer)
       if (completedCulture) {
         internalDispatch({ type: 'SET_CAN_SWAP_POLICIES', canSwap: true })
       }
 
-      // Clear events and run AI after END_TURN
+      // Handle END_TURN: clear old events, detect completions, run AI
+      let completedTechId: TechId | null = null
+      let goldenAgeInfo: GoldenAgeInfo | null = null
       if (action.type === 'END_TURN') {
         internalDispatch({ type: 'CLEAR_EVENTS' })
+
+        // Detect research completion (only happens on END_TURN)
+        completedTechId = detectResearchCompletion(oldState, currentState, actingPlayer)
+        if (completedTechId) {
+          const tech = getTech(completedTechId)
+          const techName = tech?.name ?? completedTechId
+          internalDispatch({
+            type: 'ADD_EVENT',
+            message: `Tech completed: ${techName}`,
+            eventType: 'research',
+            turn: currentState.turn,
+          })
+        }
+
+        // Detect culture completion (only happens on END_TURN)
+        if (completedCulture) {
+          internalDispatch({
+            type: 'ADD_EVENT',
+            message: `Culture completed: ${completedCulture}`,
+            eventType: 'culture',
+            turn: currentState.turn,
+          })
+        }
+
+        // Detect golden age start (only happens on END_TURN)
+        if (detectGoldenAgeStart(oldState, currentState, actingPlayer)) {
+          const newPlayer = currentState.players.find(p => p.tribeId === actingPlayer)
+          const turns = newPlayer?.goldenAge.turnsRemaining ?? 0
+          const trigger = newPlayer?.goldenAge.currentTrigger
+          const effect = newPlayer?.goldenAge.currentEffect
+
+          if (trigger && effect) {
+            goldenAgeInfo = { trigger, effect, turnsRemaining: turns }
+          }
+
+          internalDispatch({
+            type: 'ADD_EVENT',
+            message: `Golden Era begins! (+25% yields for ${turns} turns)`,
+            eventType: 'golden',
+            turn: currentState.turn,
+          })
+        }
+
+        // Detect great person spawn (only happens on END_TURN)
+        const spawnedGreatPerson = detectGreatPersonSpawn(oldState, currentState, actingPlayer)
+        if (spawnedGreatPerson) {
+          internalDispatch({
+            type: 'ADD_EVENT',
+            message: `${spawnedGreatPerson} has appeared!`,
+            eventType: 'great_person',
+            turn: currentState.turn,
+          })
+        }
 
         // Find human player's tribe ID to track attacks on their units
         const humanPlayer = currentState.players.find(p => p.isHuman)
@@ -720,14 +794,25 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
 
       // Update state and ref synchronously so subsequent dispatches see the new state
       latestGameStateRef.current = currentState
-      internalDispatch(
-        lootboxReward
-          ? { type: 'SET_STATE', state: currentState, lootboxReward }
-          : { type: 'SET_STATE', state: currentState }
-      )
+
+      // Build the SET_STATE action, only including optional properties if they have values
+      const setStateAction: { type: 'SET_STATE'; state: GameState; lootboxReward?: LootboxRewardInfo; completedTech?: TechId; goldenAgeInfo?: GoldenAgeInfo } = {
+        type: 'SET_STATE',
+        state: currentState,
+      }
+      if (lootboxReward) {
+        setStateAction.lootboxReward = lootboxReward
+      }
+      if (completedTechId) {
+        setStateAction.completedTech = completedTechId
+      }
+      if (goldenAgeInfo) {
+        setStateAction.goldenAgeInfo = goldenAgeInfo
+      }
+      internalDispatch(setStateAction)
       return result
     },
-    [state.gameState]
+    [] // No dependencies - uses refs for latest state to avoid cascading re-renders
   )
 
   const selectTile = useCallback((coord: HexCoord | null) => {
@@ -744,6 +829,14 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
 
   const dismissLootboxReward = useCallback(() => {
     internalDispatch({ type: 'DISMISS_LOOTBOX_REWARD' })
+  }, [])
+
+  const dismissTechCompletion = useCallback(() => {
+    internalDispatch({ type: 'DISMISS_TECH_COMPLETION' })
+  }, [])
+
+  const dismissGoldenAge = useCallback(() => {
+    internalDispatch({ type: 'DISMISS_GOLDEN_AGE' })
   }, [])
 
   const addEvent = useCallback(
@@ -819,6 +912,8 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     selectedUnit: state.selectedUnit,
     selectedSettlement: state.selectedSettlement,
     pendingLootboxReward: state.pendingLootboxReward,
+    pendingTechCompletion: state.pendingTechCompletion,
+    pendingGoldenAge: state.pendingGoldenAge,
     pendingWarAttack: state.pendingWarAttack,
     canSwapPolicies: state.canSwapPolicies,
     events: state.events,
@@ -828,6 +923,8 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     selectUnit,
     selectSettlement,
     dismissLootboxReward,
+    dismissTechCompletion,
+    dismissGoldenAge,
     addEvent,
     confirmWarAttack,
     cancelWarAttack,

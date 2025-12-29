@@ -42,7 +42,6 @@ import {
 import { getAvailableTechs, hasResearched } from '../tech'
 import { getAvailableCultures, hasUnlockedCulture } from '../cultures'
 import { getUnclaimedLootboxes } from '../lootbox'
-import { getActiveCamps, isBarbarian } from '../barbarians'
 import { canFoundSettlement, getPlayerSettlements } from '../settlements'
 import {
   hasTradeUnlocked,
@@ -171,13 +170,37 @@ export function getTribePersonality(tribeId: TribeId): TribePersonality {
 }
 
 // =============================================================================
-// Military Strength Calculation
+// Military Strength Calculation (with caching)
 // =============================================================================
 
+// Cache for military strength calculations (cleared each turn)
+let militaryStrengthCache: Map<TribeId, number> = new Map()
+let militaryStrengthCacheTurn = -1
+
 /**
- * Calculate total military strength for a tribe
+ * Clear the military strength cache (called when turn changes)
+ */
+function clearMilitaryStrengthCache(turn: number): void {
+  if (turn !== militaryStrengthCacheTurn) {
+    militaryStrengthCache = new Map()
+    militaryStrengthCacheTurn = turn
+  }
+}
+
+/**
+ * Calculate total military strength for a tribe (with caching)
  */
 function calculateMilitaryStrength(state: GameState, tribeId: TribeId): number {
+  // Clear cache if turn changed
+  clearMilitaryStrengthCache(state.turn)
+
+  // Check cache first
+  const cached = militaryStrengthCache.get(tribeId)
+  if (cached !== undefined) {
+    return cached
+  }
+
+  // Calculate strength
   let strength = 0
 
   for (const unit of state.units.values()) {
@@ -191,6 +214,9 @@ function calculateMilitaryStrength(state: GameState, tribeId: TribeId): number {
       strength += unit.promotions.length * 0.5
     }
   }
+
+  // Cache the result
+  militaryStrengthCache.set(tribeId, strength)
 
   return strength
 }
@@ -503,21 +529,14 @@ export function generateAIActions(state: GameState, tribeId: TribeId): GameActio
   for (const unit of military) {
     if (unit.hasActed) continue
 
-    // First priority: barbarian hunting if nearby
-    const barbarianAction = generateBarbarianHuntAction(state, unit, personality)
-    if (barbarianAction) {
-      actions.push(barbarianAction)
-      continue
-    }
-
-    // Second priority: attack enemies in range
+    // First priority: attack enemies in range
     const attackAction = generateAttackAction(state, unit, personality)
     if (attackAction) {
       actions.push(attackAction)
       continue
     }
 
-    // Third priority: move toward enemies
+    // Second priority: move toward enemies
     const moveAction = generateMoveAction(state, unit)
     if (moveAction) {
       actions.push(moveAction)
@@ -1490,140 +1509,6 @@ function generateLootboxHuntAction(
     const [q, r] = key.split(',').map(Number)
     const coord: HexCoord = { q: q!, r: r! }
     const dist = hexDistance(coord, nearestLootbox)
-
-    if (dist < bestDist) {
-      bestDist = dist
-      bestHex = coord
-    }
-  }
-
-  if (bestHex) {
-    return {
-      type: 'MOVE_UNIT',
-      unitId: unit.id,
-      to: bestHex,
-    }
-  }
-
-  return null
-}
-
-// =============================================================================
-// Barbarian Handling AI
-// =============================================================================
-
-/**
- * Find nearest barbarian camp or unit
- */
-function findNearestBarbarianTarget(
-  state: GameState,
-  unit: Unit
-): HexCoord | null {
-  // Check for barbarian units first
-  const barbarians = Array.from(state.units.values()).filter(isBarbarian)
-
-  let nearestTarget: HexCoord | null = null
-  let nearestDist = Infinity
-
-  // Find nearest barbarian unit
-  for (const barbarian of barbarians) {
-    const dist = hexDistance(unit.position, barbarian.position)
-    if (dist < nearestDist) {
-      nearestDist = dist
-      nearestTarget = barbarian.position
-    }
-  }
-
-  // Also check barbarian camps
-  const camps = getActiveCamps(state)
-  for (const camp of camps) {
-    const dist = hexDistance(unit.position, camp.position)
-    // Camps are higher priority if closer
-    if (dist < nearestDist) {
-      nearestDist = dist
-      nearestTarget = camp.position
-    }
-  }
-
-  return nearestTarget
-}
-
-/**
- * Check if unit should prioritize barbarian hunting
- */
-function shouldHuntBarbarians(
-  state: GameState,
-  unit: Unit,
-  personality: TribePersonality
-): boolean {
-  // Don't hunt if at war with players (focus on that)
-  const enemies = getEnemies(state, unit.owner)
-  if (enemies.length > 0 && personality.aggressionMultiplier >= 1.0) {
-    return false
-  }
-
-  // Check if barbarians are nearby (within 5 hexes)
-  const barbarians = Array.from(state.units.values()).filter(isBarbarian)
-  const camps = getActiveCamps(state)
-
-  for (const barbarian of barbarians) {
-    if (hexDistance(unit.position, barbarian.position) <= 5) {
-      return true
-    }
-  }
-
-  for (const camp of camps) {
-    if (hexDistance(unit.position, camp.position) <= 6) {
-      return true
-    }
-  }
-
-  return false
-}
-
-/**
- * Generate action to hunt barbarians
- */
-function generateBarbarianHuntAction(
-  state: GameState,
-  unit: Unit,
-  personality: TribePersonality
-): GameAction | null {
-  if (!shouldHuntBarbarians(state, unit, personality)) {
-    return null
-  }
-
-  // Try to attack barbarians in range first
-  const targets = getValidTargets(state, unit)
-  const barbarianTargets = targets.filter(isBarbarian)
-
-  if (barbarianTargets.length > 0) {
-    // Attack weakest barbarian
-    barbarianTargets.sort((a, b) => a.health - b.health)
-    return {
-      type: 'ATTACK',
-      attackerId: unit.id,
-      targetId: barbarianTargets[0]!.id,
-    }
-  }
-
-  // Move toward nearest barbarian target
-  if (unit.movementRemaining <= 0) return null
-
-  const target = findNearestBarbarianTarget(state, unit)
-  if (!target) return null
-
-  const reachable = getReachableHexes(state, unit)
-  let bestHex: HexCoord | null = null
-  let bestDist = hexDistance(unit.position, target)
-
-  for (const [key] of reachable) {
-    const [q, r] = key.split(',').map(Number)
-    const coord: HexCoord = { q: q!, r: r! }
-    const dist = hexDistance(coord, target)
-
-    // Don't move onto the target hex (can't stack)
-    if (dist === 0) continue
 
     if (dist < bestDist) {
       bestDist = dist

@@ -196,7 +196,6 @@ describe('Unit Stacking', () => {
       ...state,
       map: mapResult.map,
       lootboxes: mapResult.lootboxes,
-      barbarianCamps: mapResult.barbarianCamps,
     }
   })
 
@@ -333,7 +332,6 @@ describe('Unit Movement', () => {
       ...state,
       map: mapResult.map,
       lootboxes: mapResult.lootboxes,
-      barbarianCamps: mapResult.barbarianCamps,
     }
   })
 

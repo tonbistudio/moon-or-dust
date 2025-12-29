@@ -32,7 +32,6 @@ describe('Lootbox Queries', () => {
       ...state,
       map: mapResult.map,
       lootboxes: mapResult.lootboxes,
-      barbarianCamps: mapResult.barbarianCamps,
     }
   })
 

@@ -6,10 +6,10 @@ interface ItemCardProps {
   name: string
   cost: number
   turnsRemaining: number | null
-  category?: string
-  description?: string
+  category?: string | undefined
+  description?: string | undefined
   onClick: () => void
-  disabled?: boolean
+  disabled?: boolean | undefined
 }
 
 export function ItemCard({

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Settlement } from '@tribes/game-core'
-import { calculateSettlementYields, getLevelProgress } from '@tribes/game-core'
+import { calculateSettlementYieldsWithPolicies, getLevelProgress, BUILDING_DEFINITIONS } from '@tribes/game-core'
 import { useGame } from '../hooks/useGame'
 import { ProductionPanel } from './production'
 import { YieldIcon } from './YieldIcon'
@@ -15,8 +15,8 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
   const { state } = useGame()
   const [showProductionPanel, setShowProductionPanel] = useState(false)
 
-  // Calculate settlement yields
-  const yields = state ? calculateSettlementYields(state, settlement) : null
+  // Calculate settlement yields (includes policy bonuses for display)
+  const yields = state ? calculateSettlementYieldsWithPolicies(state, settlement) : null
 
   // Calculate level progress
   const levelProgress = getLevelProgress(settlement)
@@ -131,6 +131,41 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
             <YieldIcon type="production" value={yields.production} size={16} />
             <YieldIcon type="alpha" value={yields.alpha} size={16} />
             <YieldIcon type="vibes" value={yields.vibes} size={16} />
+          </div>
+        )}
+
+        {/* Buildings */}
+        {settlement.buildings.length > 0 && (
+          <div
+            style={{
+              padding: '10px',
+              background: 'rgba(255,255,255,0.05)',
+              borderRadius: '6px',
+            }}
+          >
+            <div style={{ color: '#aaa', fontSize: '11px', textTransform: 'uppercase', marginBottom: '6px' }}>
+              Buildings ({settlement.buildings.length})
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {settlement.buildings.map((buildingId) => {
+                const building = BUILDING_DEFINITIONS[buildingId]
+                return (
+                  <span
+                    key={buildingId}
+                    title={building?.name ?? buildingId}
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 6px',
+                      background: '#2196f3',
+                      borderRadius: '3px',
+                      color: '#fff',
+                    }}
+                  >
+                    {building?.name ?? buildingId}
+                  </span>
+                )
+              })}
+            </div>
           </div>
         )}
 

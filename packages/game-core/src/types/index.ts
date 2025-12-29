@@ -19,7 +19,6 @@ export type PromotionId = Brand<string, 'PromotionId'>
 export type WonderId = Brand<string, 'WonderId'>
 export type LootboxId = Brand<string, 'LootboxId'>
 export type TradeRouteId = Brand<string, 'TradeRouteId'>
-export type CampId = Brand<string, 'CampId'>
 
 // =============================================================================
 // Hex Coordinates
@@ -436,21 +435,10 @@ export interface GoldenAgeState {
   readonly active: boolean
   readonly turnsRemaining: number
   readonly currentEffect?: GoldenAgeEffectType
+  readonly currentTrigger?: GoldenAgeTrigger  // Which trigger caused the current golden age
   readonly triggersUsed: readonly GoldenAgeTrigger[]
   // Track techs researched in last 5 turns for the "3 techs in 5 turns" trigger
   readonly recentTechTurns: readonly number[]
-}
-
-// =============================================================================
-// Barbarians
-// =============================================================================
-
-export interface BarbarianCamp {
-  readonly id: CampId
-  readonly position: HexCoord
-  readonly spawnCooldown: number
-  readonly unitsSpawned: readonly UnitId[]
-  readonly destroyed: boolean
 }
 
 // =============================================================================
@@ -585,7 +573,6 @@ export interface GameState {
   readonly fog: ReadonlyMap<TribeId, ReadonlySet<string>> // visible hex coords as `${q},${r}`
   readonly diplomacy: DiplomacyState
   readonly tradeRoutes: readonly TradeRoute[]
-  readonly barbarianCamps: readonly BarbarianCamp[]
   readonly greatPersons: ReadonlyMap<UnitId, GreatPerson>
   readonly lootboxes: readonly Lootbox[]
   readonly wonders: readonly Wonder[]

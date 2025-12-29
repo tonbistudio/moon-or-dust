@@ -11,6 +11,8 @@ import { TechTreePanel } from './tech'
 import { CultureTreePanel } from './cultures'
 import { PolicyPanel, PolicySelectionPopup } from './policies'
 import { LootboxRewardPopup } from './LootboxRewardPopup'
+import { TechCompletedPopup } from './TechCompletedPopup'
+import { GoldenAgePopup } from './GoldenAgePopup'
 import { YieldIcon } from './YieldIcon'
 import { CombatPreviewPanel } from './CombatPreviewPanel'
 import { EventLog } from './EventLog'
@@ -28,6 +30,10 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
   const {
     pendingLootboxReward,
     dismissLootboxReward,
+    pendingTechCompletion,
+    dismissTechCompletion,
+    pendingGoldenAge,
+    dismissGoldenAge,
     pendingWarAttack,
     confirmWarAttack,
     cancelWarAttack,
@@ -41,16 +47,22 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
   const [showCulturePanel, setShowCulturePanel] = useState(false)
   const [showPolicyPanel, setShowPolicyPanel] = useState(false)
 
+  // Memoize valid attack targets based only on selectedUnit (not full state)
+  // This prevents recalculating targets on every state change
+  const validTargets = useMemo(() => {
+    if (!state || !selectedUnit) return []
+    if (selectedUnit.owner !== state.currentPlayer) return []
+    return getValidTargets(state, selectedUnit)
+    // Only recompute when unit selection changes or unit position changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUnit?.id, selectedUnit?.position.q, selectedUnit?.position.r, state?.currentPlayer])
+
   // Find enemy unit on hovered tile for combat preview
   const hoveredEnemy: Unit | null = useMemo(() => {
-    if (!state || !hoveredTile || !selectedUnit) return null
-    if (selectedUnit.owner !== state.currentPlayer) return null
-
-    // Check if hovered tile has valid attack target
-    const targets = getValidTargets(state, selectedUnit)
+    if (!hoveredTile || validTargets.length === 0) return null
     const hoveredKey = hexKey(hoveredTile)
-    return targets.find(t => hexKey(t.position) === hoveredKey) ?? null
-  }, [state, hoveredTile, selectedUnit])
+    return validTargets.find(t => hexKey(t.position) === hoveredKey) ?? null
+  }, [hoveredTile, validTargets])
 
   // Find first settlement owned by current player with pending milestones
   const settlementWithPendingMilestone = useMemo(() => {
@@ -127,6 +139,9 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
   const canInteractWithUnit =
     selectedUnit && selectedUnit.owner === state.currentPlayer
 
+  // Check if golden age is active
+  const isGoldenAgeActive = currentPlayer.goldenAge.active
+
   return (
     <div
       style={{
@@ -140,6 +155,36 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
         flexDirection: 'column',
       }}
     >
+      {/* Golden Age border glow effect */}
+      {isGoldenAgeActive && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            pointerEvents: 'none',
+            border: '4px solid transparent',
+            borderImage: 'linear-gradient(135deg, #ffd700, #ffb347, #ffd700, #ff8c00, #ffd700) 1',
+            boxShadow: 'inset 0 0 30px rgba(255, 215, 0, 0.3), inset 0 0 60px rgba(255, 215, 0, 0.15)',
+            animation: 'goldenAgeBorderPulse 3s ease-in-out infinite',
+            zIndex: 999,
+          }}
+        />
+      )}
+      {isGoldenAgeActive && (
+        <style>{`
+          @keyframes goldenAgeBorderPulse {
+            0%, 100% {
+              box-shadow: inset 0 0 30px rgba(255, 215, 0, 0.3), inset 0 0 60px rgba(255, 215, 0, 0.15);
+            }
+            50% {
+              box-shadow: inset 0 0 50px rgba(255, 215, 0, 0.5), inset 0 0 80px rgba(255, 215, 0, 0.25);
+            }
+          }
+        `}</style>
+      )}
       {/* Top Bar - Turn info, yields, floor price */}
       <div
         style={{
@@ -154,8 +199,8 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
         <div style={{ display: 'flex', gap: '20px', color: '#fff', alignItems: 'center' }}>
           <span>Turn {state.turn}/{state.maxTurns}</span>
           <YieldIcon type="gold" value={currentPlayer.treasury} />
-          <YieldIcon type="alpha" value={currentPlayer.yields.alpha} />
-          <YieldIcon type="vibes" value={currentPlayer.cultureProgress} />
+          <YieldIcon type="alpha" value={currentPlayer.yields.alpha} label="/turn" />
+          <YieldIcon type="vibes" value={currentPlayer.yields.vibes} label="/turn" />
 
           {/* Research Button with Progress */}
           <button
@@ -181,7 +226,7 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
                 </span>
               </>
             ) : (
-              <span>Research</span>
+              <span>Tech</span>
             )}
           </button>
 
@@ -323,6 +368,32 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
           <LootboxRewardPopup
             reward={pendingLootboxReward}
             onDismiss={dismissLootboxReward}
+          />
+        </div>
+      )}
+
+      {/* Tech Completed Popup */}
+      {pendingTechCompletion && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <TechCompletedPopup
+            techId={pendingTechCompletion}
+            onDismiss={dismissTechCompletion}
+            onViewTechTree={() => {
+              dismissTechCompletion()
+              setShowTechTree(true)
+            }}
+          />
+        </div>
+      )}
+
+      {/* Golden Age Popup */}
+      {pendingGoldenAge && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <GoldenAgePopup
+            trigger={pendingGoldenAge.trigger}
+            effect={pendingGoldenAge.effect}
+            turnsRemaining={pendingGoldenAge.turnsRemaining}
+            onDismiss={dismissGoldenAge}
           />
         </div>
       )}

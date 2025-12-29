@@ -74,7 +74,6 @@ function createTestState(
       reputationModifiers: new Map(),
     },
     tradeRoutes: [],
-    barbarianCamps: [],
     lootboxes: [],
     wonders: [],
   }
