@@ -5,6 +5,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import type { Player, PolicyId, PolicySlotType, PolicyCard as PolicyCardType } from '@tribes/game-core'
 import { getPolicy } from '@tribes/game-core'
 import { PolicyCard } from './PolicyCard'
+import { Tooltip } from '../Tooltip'
 
 interface PolicyPanelProps {
   player: Player
@@ -14,11 +15,11 @@ interface PolicyPanelProps {
 }
 
 // Slot type display order and info
-const SLOT_TYPES: { type: PolicySlotType; name: string; color: string; icon: string }[] = [
-  { type: 'military', name: 'Military', color: '#ef4444', icon: '⚔️' },
-  { type: 'economy', name: 'Economy', color: '#eab308', icon: '💰' },
-  { type: 'progress', name: 'Progress', color: '#3b82f6', icon: '🔬' },
-  { type: 'wildcard', name: 'Wildcard', color: '#a855f7', icon: '⭐' },
+const SLOT_TYPES: { type: PolicySlotType; name: string; color: string; icon: string; description: string }[] = [
+  { type: 'military', name: 'Military', color: '#ef4444', icon: '⚔️', description: 'Policies focused on combat, unit production, and defense. Only military policies can be placed here.' },
+  { type: 'economy', name: 'Economy', color: '#eab308', icon: '💰', description: 'Policies focused on gold income, trade routes, and production. Only economy policies can be placed here.' },
+  { type: 'progress', name: 'Progress', color: '#3b82f6', icon: '🔬', description: 'Policies focused on research, expansion, and development. Only progress policies can be placed here.' },
+  { type: 'wildcard', name: 'Wildcard', color: '#a855f7', icon: '⭐', description: 'Flexible slots that accept ANY policy type. Useful for stacking effects.' },
 ]
 
 // Check if a policy can be placed in a slot type
@@ -451,41 +452,57 @@ export function PolicyPanel({
                 flexWrap: 'wrap',
               }}
             >
-              {SLOT_TYPES.map(({ type, name, color, icon }) => {
+              {SLOT_TYPES.map(({ type, name, color, icon, description }) => {
                 const slotCount = player.policies.slots[type]
                 const usedCount = assignments.filter(a => a.slotType === type).length
 
                 return (
                   <div key={type} style={{ minWidth: '200px' }}>
                     {/* Slot Type Header */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        marginBottom: '12px',
-                      }}
+                    <Tooltip
+                      content={
+                        <div>
+                          <div style={{ fontWeight: 600, marginBottom: '4px', color }}>
+                            {icon} {name} Slot
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#aaa' }}>
+                            {description}
+                          </div>
+                        </div>
+                      }
+                      position="above"
+                      maxWidth={240}
                     >
-                      <span style={{ fontSize: '18px' }}>{icon}</span>
-                      <span
+                      <div
                         style={{
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          color: color,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginBottom: '12px',
+                          cursor: 'help',
                         }}
                       >
-                        {name}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          color: '#666',
-                          marginLeft: 'auto',
-                        }}
-                      >
-                        {usedCount}/{slotCount}
-                      </span>
-                    </div>
+                        <span style={{ fontSize: '18px' }}>{icon}</span>
+                        <span
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: color,
+                          }}
+                        >
+                          {name}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: '#666',
+                            marginLeft: 'auto',
+                          }}
+                        >
+                          {usedCount}/{slotCount}
+                        </span>
+                      </div>
+                    </Tooltip>
 
                     {/* Slots */}
                     <div

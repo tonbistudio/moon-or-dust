@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Tribes is a turn-based 4X strategy game (Civilization-style) with Solana NFT community themes. Players lead one of six tribes to victory. Web-first PWA, mobile-optimized.
 
-**Game Length:** 50-100 turns (full game), 20 turns (demo mode)
+**Game Length:** 50-100 turns (full game), 50 turns (demo mode)
 
 ## Tech Stack
 
@@ -688,18 +688,18 @@ When settlements level up, player chooses between two rewards.
 ### Remaining Work
 
 **Phase 12: UI & Polish**
-- Main menu and tribe selection
+- ✅ Main menu and tribe selection
 - ✅ Tech Tree UI (Civ 4 style horizontal layout, path highlighting, custom tooltips)
 - ✅ Culture Tree UI (similar to Tech Tree)
 - ✅ Policy System UI (Civ 6-style drag-and-drop cards, A/B selection popup, slot management)
 - ✅ Milestone Selection UI (A/B choice popup on settlement level-up)
 - ✅ Trade Panel UI (route management, formation tracking, gold income display)
 - ✅ All policy effects implemented (47 effects across yield, combat, trade, production, GP)
-- Tooltips and info panels (other panels)
-- End game screen with Floor Price breakdown
+- ✅ Tooltips system (reusable component, hex tooltips, combat preview, diplomacy, policies, items, milestones, popups)
 - ✅ Turn notifications (golden age popup, border glow effect)
+- ✅ Promotion selection UI (level up popup, XP progress bar, promotion badges in unit panel/tooltips)
+- End game screen with Floor Price breakdown
 - Turn notifications (great person, wonder) - remaining
-- Promotion selection UI
 - Unit minting animation (rarity reveal)
 
 **Phase 13: Blockchain Integration**

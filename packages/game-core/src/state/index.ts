@@ -26,6 +26,7 @@ import type {
   TradeRouteId,
   DiplomaticRelation,
   PolicyId,
+  BuildingId,
 } from '../types'
 import { hexKey } from '../hex'
 import { startWonderConstruction, canBuildWonder, completeWonder } from '../wonders'
@@ -59,7 +60,7 @@ import {
   healUnit,
 } from '../combat'
 import { getSettlementMaxHealth } from '../settlements'
-import { canResearchTech, TECH_DEFINITIONS, addResearchProgress } from '../tech'
+import { canResearchTech, TECH_DEFINITIONS, addResearchProgress, completeResearch } from '../tech'
 import {
   canUnlockCulture,
   CULTURE_DEFINITIONS,
@@ -93,6 +94,7 @@ import {
   getInitialGreatPeopleState,
   checkAndSpawnGreatPeople,
   useGreatPersonAction,
+  GREAT_PERSON_DEFINITIONS,
 } from '../greatpeople'
 import {
   checkAllTriggers,
@@ -109,7 +111,7 @@ import { claimLootbox, hasLootboxAt } from '../lootbox'
 // =============================================================================
 
 export const GAME_VERSION = '0.1.0'
-export const MAX_TURNS = 20
+export const MAX_TURNS = 50
 export const MAP_WIDTH = 20
 export const MAP_HEIGHT = 20
 export const BASE_UNIT_VISION = 2
@@ -432,6 +434,9 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
     case 'CANCEL_PRODUCTION':
       return applyCancelProduction(state, action.settlementId, action.queueIndex)
 
+    case 'PURCHASE':
+      return applyPurchase(state, action.settlementId, action.itemType, action.itemId)
+
     case 'START_RESEARCH':
       return applyStartResearch(state, action.techId)
 
@@ -522,6 +527,9 @@ function applyEndTurn(state: GameState): ActionResult {
 
   // Update player yields for UI display (so turns remaining calculations work)
   newState = updatePlayerYields(newState, currentPlayer)
+
+  // Update floor prices for all players (for real-time display)
+  newState = updateAllFloorPrices(newState)
 
   // Move to next player
   const nextPlayer = getNextPlayer(newState)
@@ -1180,6 +1188,106 @@ function applyCancelProduction(
   return { success: true, state: { ...state, settlements: newSettlements } }
 }
 
+// Gold purchase multiplier (4x production cost)
+const PURCHASE_GOLD_MULTIPLIER = 4
+
+/**
+ * Calculates the gold cost to purchase an item
+ */
+export function calculatePurchaseCost(productionCost: number): number {
+  return productionCost * PURCHASE_GOLD_MULTIPLIER
+}
+
+/**
+ * Purchases a building or unit instantly with gold
+ */
+function applyPurchase(
+  state: GameState,
+  settlementId: SettlementId,
+  itemType: 'unit' | 'building',
+  itemId: string
+): ActionResult {
+  // Get settlement
+  const settlement = state.settlements.get(settlementId)
+  if (!settlement) {
+    return { success: false, error: 'Settlement not found' }
+  }
+
+  // Validate ownership
+  if (settlement.owner !== state.currentPlayer) {
+    return { success: false, error: 'Settlement not owned by current player' }
+  }
+
+  // Get player
+  const playerIndex = state.players.findIndex(p => p.tribeId === state.currentPlayer)
+  if (playerIndex === -1) {
+    return { success: false, error: 'Player not found' }
+  }
+  const player = state.players[playerIndex]!
+
+  let productionCost = 0
+
+  if (itemType === 'building') {
+    const building = BUILDING_DEFINITIONS[itemId as keyof typeof BUILDING_DEFINITIONS]
+    if (!building) {
+      return { success: false, error: 'Building not found' }
+    }
+    productionCost = building.productionCost
+
+    // Check if settlement already has this building
+    if (settlement.buildings.includes(itemId as BuildingId)) {
+      return { success: false, error: 'Settlement already has this building' }
+    }
+  } else {
+    // Unit
+    const unit = UNIT_DEFINITIONS[itemId as keyof typeof UNIT_DEFINITIONS]
+    if (!unit) {
+      return { success: false, error: 'Unit not found' }
+    }
+    productionCost = unit.productionCost
+  }
+
+  // Calculate gold cost
+  const goldCost = calculatePurchaseCost(productionCost)
+
+  // Check if player has enough gold
+  if (player.treasury < goldCost) {
+    return { success: false, error: `Not enough gold (need ${goldCost}, have ${player.treasury})` }
+  }
+
+  // Deduct gold
+  const updatedPlayer: Player = {
+    ...player,
+    treasury: player.treasury - goldCost,
+  }
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+  let newState: GameState = { ...state, players: newPlayers }
+
+  if (itemType === 'building') {
+    // Add building to settlement
+    const newSettlements = new Map(newState.settlements)
+    const updatedSettlement: Settlement = {
+      ...settlement,
+      buildings: [...settlement.buildings, itemId as BuildingId],
+    }
+    newSettlements.set(settlementId, updatedSettlement)
+    newState = { ...newState, settlements: newSettlements }
+  } else {
+    // Create and add unit at settlement position
+    const rng = createRng(state.seed + state.turn + itemId.charCodeAt(0))
+    const newUnit = createUnit({
+      type: itemId as UnitType,
+      owner: state.currentPlayer,
+      position: settlement.position,
+      rng,
+    })
+    newState = addUnit(newState, newUnit)
+  }
+
+  return { success: true, state: newState }
+}
+
 // =============================================================================
 // Floor Price Calculation
 // =============================================================================
@@ -1255,6 +1363,120 @@ export function calculateFloorPrice(state: GameState, tribeId: TribeId): number 
   }
 
   return score
+}
+
+export interface FloorPriceBreakdown {
+  settlements: number
+  population: number
+  tiles: number
+  technologies: number
+  cultures: number
+  gold: number
+  kills: number
+  units: number
+  rarityBonus: number
+  wonders: number
+  policyBonus: number
+  total: number
+}
+
+export function calculateFloorPriceBreakdown(state: GameState, tribeId: TribeId): FloorPriceBreakdown {
+  const breakdown: FloorPriceBreakdown = {
+    settlements: 0,
+    population: 0,
+    tiles: 0,
+    technologies: 0,
+    cultures: 0,
+    gold: 0,
+    kills: 0,
+    units: 0,
+    rarityBonus: 0,
+    wonders: 0,
+    policyBonus: 0,
+    total: 0,
+  }
+
+  let totalPopulation = 0
+  let tilesControlled = 0
+
+  // Settlements: 10 pts each
+  // Population: 5 pts per level
+  for (const settlement of state.settlements.values()) {
+    if (settlement.owner === tribeId) {
+      breakdown.settlements += 10
+      breakdown.population += settlement.level * 5
+      totalPopulation += settlement.level
+    }
+  }
+
+  // Controlled tiles: 1 pt each
+  for (const tile of state.map.tiles.values()) {
+    if (tile.owner === tribeId) {
+      breakdown.tiles += 1
+      tilesControlled += 1
+    }
+  }
+
+  // Find player
+  const player = getPlayer(state, tribeId)
+  if (player) {
+    // Technologies: 5 pts each
+    breakdown.technologies = player.researchedTechs.length * 5
+
+    // Cultures: 5 pts each
+    breakdown.cultures = player.unlockedCultures.length * 5
+
+    // Gold: 1 pt per 10 gold
+    breakdown.gold = Math.floor(player.treasury / 10)
+
+    // Kill count: 3 pts each
+    breakdown.kills = player.killCount * 3
+
+    // Policy bonuses
+    breakdown.policyBonus = calculatePolicyFloorPriceBonus(player, totalPopulation, tilesControlled)
+  }
+
+  // Units: 2 pts each + rarity bonus
+  for (const unit of state.units.values()) {
+    if (unit.owner === tribeId) {
+      breakdown.units += 2
+
+      // Rarity bonuses
+      switch (unit.rarity) {
+        case 'rare':
+          breakdown.rarityBonus += 2
+          break
+        case 'epic':
+          breakdown.rarityBonus += 5
+          break
+        case 'legendary':
+          breakdown.rarityBonus += 10
+          break
+      }
+    }
+  }
+
+  // Wonders
+  for (const wonder of state.wonders) {
+    if (wonder.builtBy === tribeId) {
+      breakdown.wonders += wonder.floorPriceBonus
+    }
+  }
+
+  breakdown.total =
+    breakdown.settlements +
+    breakdown.population +
+    breakdown.tiles +
+    breakdown.technologies +
+    breakdown.cultures +
+    breakdown.gold +
+    breakdown.kills +
+    breakdown.units +
+    breakdown.rarityBonus +
+    breakdown.wonders +
+    breakdown.policyBonus
+
+  return breakdown
 }
 
 export function updateAllFloorPrices(state: GameState): GameState {
@@ -2188,13 +2410,88 @@ function applyUseGreatPerson(
     return { success: false, error: 'This great person has already used their action' }
   }
 
+  // Get the great person definition to check for special effects
+  const definition = GREAT_PERSON_DEFINITIONS[greatPerson.greatPersonId]
+  if (!definition) {
+    return { success: false, error: 'Great person definition not found' }
+  }
+
   // Create RNG based on state
   const rng = createRng(state.seed + state.turn + unitId.charCodeAt(0))
 
-  // Use the great person action
-  const newState = useGreatPersonAction(state, unitId, rng)
+  // Use the great person action (handles most effects)
+  let newState = useGreatPersonAction(state, unitId, rng)
   if (!newState) {
     return { success: false, error: 'Failed to use great person action' }
+  }
+
+  // Handle special effects that require state-level access (due to circular dependencies)
+  const effect = definition.effect
+  const tribeId = state.currentPlayer
+
+  if (effect.type === 'instant_research') {
+    // Complete current research instantly (Raj)
+    const player = state.players.find(p => p.tribeId === tribeId)
+    if (player?.currentResearch) {
+      newState = completeResearch(newState, tribeId, player.currentResearch)
+    }
+  } else if (effect.type === 'instant_culture') {
+    // Complete current culture instantly (John Le)
+    // Add enough culture progress to complete it - policy selection will trigger normally
+    const playerIndex = newState.players.findIndex(p => p.tribeId === tribeId)
+    if (playerIndex !== -1) {
+      const player = newState.players[playerIndex]!
+      if (player.currentCulture) {
+        const culture = CULTURE_DEFINITIONS[player.currentCulture]
+        if (culture) {
+          const remaining = culture.cost - player.cultureProgress
+          if (remaining > 0) {
+            newState = addCultureProgress(newState, tribeId, remaining)
+          }
+        }
+      }
+    }
+  } else if (effect.type === 'instant_building') {
+    // Instantly complete a building of the specified category (Mert)
+    // Find a settlement with a matching building in production queue
+    const buildingCategory = 'buildingCategory' in effect ? effect.buildingCategory : 'tech'
+    let buildingCompleted = false
+
+    for (const settlement of newState.settlements.values()) {
+      if (settlement.owner !== tribeId) continue
+      if (buildingCompleted) break
+
+      // Check production queue for a building of the matching category
+      for (let i = 0; i < settlement.productionQueue.length; i++) {
+        const item = settlement.productionQueue[i]
+        if (!item || item.type !== 'building') continue
+
+        const building = BUILDING_DEFINITIONS[item.id as keyof typeof BUILDING_DEFINITIONS]
+        if (!building) continue
+
+        // Check if building matches category (tech buildings provide alpha)
+        const isTechBuilding = building.category === 'tech' ||
+          (building.baseYields && building.baseYields.alpha > 0) ||
+          item.id === 'library' || item.id === 'alpha_hunter_hideout'
+
+        if (buildingCategory === 'tech' && isTechBuilding) {
+          // Complete this building instantly
+          const updatedSettlements: Map<SettlementId, Settlement> = new Map(newState.settlements)
+          const newQueue = [...settlement.productionQueue]
+          const completedBuilding = newQueue.splice(i, 1)[0]!
+
+          const updatedSettlement: Settlement = {
+            ...settlement,
+            buildings: [...settlement.buildings, completedBuilding.id as BuildingId],
+            productionQueue: newQueue,
+          }
+          updatedSettlements.set(settlement.id, updatedSettlement)
+          newState = { ...newState, settlements: updatedSettlements }
+          buildingCompleted = true
+          break
+        }
+      }
+    }
   }
 
   return { success: true, state: newState }

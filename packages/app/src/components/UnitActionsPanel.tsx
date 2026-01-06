@@ -1,11 +1,20 @@
 // Panel for showing actions available for the selected unit
 
-import type { Unit, ImprovementType } from '@tribes/game-core'
-import { getValidImprovements, IMPROVEMENT_DEFINITIONS, hexKey, canBuildImprovement, getGreatPersonDefinition } from '@tribes/game-core'
+import type { Unit, ImprovementType, PromotionId } from '@tribes/game-core'
+import { getValidImprovements, IMPROVEMENT_DEFINITIONS, hexKey, canBuildImprovement, getGreatPersonDefinition, canLevelUp, getXpForNextLevel, getPromotion } from '@tribes/game-core'
 import { useGame } from '../hooks/useGame'
+import { Tooltip } from './Tooltip'
 
 interface UnitActionsPanelProps {
   unit: Unit
+  onLevelUp?: (() => void) | undefined
+}
+
+// Path colors for promotions
+const PROMOTION_PATH_COLORS: Record<string, string> = {
+  combat: '#ef4444',
+  mobility: '#3b82f6',
+  survival: '#22c55e',
 }
 
 // Format improvement name for display
@@ -23,7 +32,7 @@ function getResourceForImprovement(type: ImprovementType): string | null {
   return null
 }
 
-export function UnitActionsPanel({ unit }: UnitActionsPanelProps): JSX.Element {
+export function UnitActionsPanel({ unit, onLevelUp }: UnitActionsPanelProps): JSX.Element {
   const { dispatch, state } = useGame()
 
   const handleFoundSettlement = () => {
@@ -110,12 +119,115 @@ export function UnitActionsPanel({ unit }: UnitActionsPanelProps): JSX.Element {
           )}
         </div>
 
-        {/* XP and Level */}
-        {unit.level > 0 && (
-          <div style={{ fontSize: '11px', color: '#a855f7', marginTop: '4px' }}>
-            Level {unit.level} | XP: {unit.experience}
+        {/* XP and Level - show for combat units */}
+        {unit.combatStrength > 0 && (
+          <div style={{ marginTop: '8px' }}>
+            {/* Level and XP Progress */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Tooltip
+                content={`Units gain XP from combat. Earn ${getXpForNextLevel(unit) - unit.experience} more XP to level up.`}
+                position="right"
+                width={180}
+              >
+                <span style={{ fontSize: '11px', color: '#a855f7', cursor: 'help' }}>
+                  Level {unit.level}
+                </span>
+              </Tooltip>
+
+              {/* XP Progress bar */}
+              <div
+                style={{
+                  flex: 1,
+                  height: '6px',
+                  background: 'rgba(168, 85, 247, 0.2)',
+                  borderRadius: '3px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.min(100, (unit.experience / getXpForNextLevel(unit)) * 100)}%`,
+                    height: '100%',
+                    background: canLevelUp(unit)
+                      ? 'linear-gradient(90deg, #a855f7 0%, #c084fc 100%)'
+                      : '#7c3aed',
+                    transition: 'width 0.3s',
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: '10px', color: '#666' }}>
+                {unit.experience}/{getXpForNextLevel(unit)}
+              </span>
+            </div>
+
+            {/* Level Up button */}
+            {canLevelUp(unit) && onLevelUp && (
+              <button
+                onClick={onLevelUp}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '12px',
+                  marginBottom: '8px',
+                  animation: 'levelUpPulse 2s ease-in-out infinite',
+                }}
+              >
+                ⬆️ Level Up! Choose Promotion
+              </button>
+            )}
+
+            {/* Current Promotions */}
+            {unit.promotions.length > 0 && (
+              <div style={{ marginTop: '6px' }}>
+                <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>
+                  Promotions:
+                </div>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {unit.promotions.map((promoId: PromotionId) => {
+                    const promo = getPromotion(promoId)
+                    if (!promo) return null
+                    const color = PROMOTION_PATH_COLORS[promo.path] ?? '#888'
+                    return (
+                      <Tooltip key={promoId} content={promo.description} position="above" width={160}>
+                        <div
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            background: `${color}20`,
+                            border: `1px solid ${color}40`,
+                            borderRadius: '3px',
+                            color,
+                            cursor: 'help',
+                          }}
+                        >
+                          {promo.name}
+                        </div>
+                      </Tooltip>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
+
+        {/* CSS for level up animation */}
+        <style>{`
+          @keyframes levelUpPulse {
+            0%, 100% {
+              box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
+            }
+            50% {
+              box-shadow: 0 0 20px rgba(168, 85, 247, 0.7);
+            }
+          }
+        `}</style>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

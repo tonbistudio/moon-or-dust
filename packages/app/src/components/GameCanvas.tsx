@@ -11,6 +11,7 @@ interface GameCanvasProps {
   height: number
   hexSize?: number
   onTileHover?: (coord: HexCoord | null) => void
+  onRendererReady?: (controls: { zoomIn: () => void; zoomOut: () => void }) => void
 }
 
 export function GameCanvas({
@@ -18,6 +19,7 @@ export function GameCanvas({
   height,
   hexSize = 40,
   onTileHover,
+  onRendererReady,
 }: GameCanvasProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<GameRenderer | null>(null)
@@ -81,6 +83,12 @@ export function GameCanvas({
       if (renderer.isDestroyed()) return
       rendererRef.current = renderer
       setIsInitialized(true)
+
+      // Expose zoom controls to parent
+      onRendererReady?.({
+        zoomIn: () => renderer.zoomIn(),
+        zoomOut: () => renderer.zoomOut(),
+      })
 
       // Apply any pending state that arrived during init
       const pending = pendingStateRef.current

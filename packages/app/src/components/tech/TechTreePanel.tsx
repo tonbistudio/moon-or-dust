@@ -56,11 +56,11 @@ const TECH_POSITIONS: Record<string, { x: number; y: number }> = {
 
   // Era 2 - Column 4
   iron_working:      { x: COL_WIDTH * 3, y: TOP_OFFSET + ROW_HEIGHT * 0 },
+  lending:           { x: COL_WIDTH * 3, y: TOP_OFFSET + ROW_HEIGHT * 2 },
   staking:           { x: COL_WIDTH * 3, y: TOP_OFFSET + ROW_HEIGHT * 3 },
   discord:           { x: COL_WIDTH * 3, y: TOP_OFFSET + ROW_HEIGHT * 4 },
   currency:          { x: COL_WIDTH * 3, y: TOP_OFFSET + ROW_HEIGHT * 5 },
   onchain_gaming:    { x: COL_WIDTH * 3, y: TOP_OFFSET + ROW_HEIGHT * 6 },
-  lending:           { x: COL_WIDTH * 3, y: TOP_OFFSET + ROW_HEIGHT * 7 },
 
   // Era 2 - Column 5
   botting:           { x: COL_WIDTH * 4, y: TOP_OFFSET + ROW_HEIGHT * 0 },

@@ -2,6 +2,7 @@
 
 import type { GoldenAgeTrigger, GoldenAgeEffectType } from '@tribes/game-core'
 import { getTriggerDefinition, getEffectDefinition } from '@tribes/game-core'
+import { Tooltip } from './Tooltip'
 
 interface GoldenAgePopupProps {
   trigger: GoldenAgeTrigger
@@ -103,28 +104,42 @@ export function GoldenAgePopup({
           </div>
 
           {/* Title */}
-          <div
-            style={{
-              fontSize: '24px',
-              fontWeight: 700,
-              color: '#c084fc',
-              marginBottom: '8px',
-              textShadow: '0 0 20px rgba(168, 85, 247, 0.5)',
-            }}
+          <Tooltip
+            content="Golden Ages are periods of extraordinary prosperity triggered by major achievements. All yields are boosted and units move faster."
+            position="below"
+            width={240}
           >
-            Golden Age Begins!
-          </div>
+            <div
+              style={{
+                fontSize: '24px',
+                fontWeight: 700,
+                color: '#c084fc',
+                marginBottom: '8px',
+                textShadow: '0 0 20px rgba(168, 85, 247, 0.5)',
+                cursor: 'help',
+              }}
+            >
+              Golden Age Begins!
+            </div>
+          </Tooltip>
 
           {/* Duration */}
-          <div
-            style={{
-              fontSize: '14px',
-              color: '#a855f7',
-              fontWeight: 500,
-            }}
+          <Tooltip
+            content="Golden Age effects last for the specified number of turns. Use this time to expand and build!"
+            position="below"
+            width={200}
           >
-            {turnsRemaining} turns of prosperity
-          </div>
+            <div
+              style={{
+                fontSize: '14px',
+                color: '#a855f7',
+                fontWeight: 500,
+                cursor: 'help',
+              }}
+            >
+              {turnsRemaining} turns of prosperity
+            </div>
+          </Tooltip>
         </div>
 
         {/* Content */}

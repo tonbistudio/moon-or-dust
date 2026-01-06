@@ -593,6 +593,7 @@ export type GameAction =
   | { type: 'BUILD_IMPROVEMENT'; builderId: UnitId; improvement: ImprovementType }
   | { type: 'START_PRODUCTION'; settlementId: SettlementId; item: ProductionItem }
   | { type: 'CANCEL_PRODUCTION'; settlementId: SettlementId; queueIndex: number }
+  | { type: 'PURCHASE'; settlementId: SettlementId; itemType: 'unit' | 'building'; itemId: string }
   | { type: 'START_RESEARCH'; techId: TechId }
   | { type: 'START_CULTURE'; cultureId: CultureId }
   | { type: 'SELECT_POLICY'; choice: 'a' | 'b' }

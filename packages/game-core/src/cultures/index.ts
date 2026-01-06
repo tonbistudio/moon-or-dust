@@ -230,7 +230,7 @@ export const CULTURE_DEFINITIONS: Record<string, Culture> = {
     cost: 60,
     prerequisites: { cultures: ['fudding' as CultureId], techs: [] },
     policyChoices: [
-      createPolicy('diamond_formation', 'Diamond Formation', '+100% production for walls', 'defensive_tactics', 'a', 'wildcard', 'wall_production', { percent: 100 }),
+      createPolicy('diamond_formation', 'Diamond Formation', '+100% production for wall buildings', 'defensive_tactics', 'a', 'wildcard', 'wall_production', { percent: 100 }),
       createPolicy('fortify', 'Fortify', '+25% defense in owned territory', 'defensive_tactics', 'b', 'military', 'territory_defense', { percent: 25 }),
     ],
     slotUnlocks: { military: 1 },

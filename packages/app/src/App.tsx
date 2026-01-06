@@ -5,7 +5,13 @@ import { GameProvider, useGameContext } from './context/GameContext'
 import { GameCanvas } from './components/GameCanvas'
 import { GameUI } from './components/GameUI'
 import { MainMenu } from './components/MainMenu'
+import { EndGameScreen } from './components/EndGameScreen'
 import type { TribeName } from '@tribes/game-core'
+
+interface ZoomControls {
+  zoomIn: () => void
+  zoomOut: () => void
+}
 
 function GameView(): JSX.Element {
   const [dimensions, setDimensions] = useState({
@@ -13,6 +19,8 @@ function GameView(): JSX.Element {
     height: window.innerHeight,
   })
   const [hoveredTile, setHoveredTile] = useState<{ q: number; r: number } | null>(null)
+  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [zoomControls, setZoomControls] = useState<ZoomControls | null>(null)
 
   useEffect(() => {
     const handleResize = () => {
@@ -22,8 +30,20 @@ function GameView(): JSX.Element {
       })
     }
 
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY })
+    }
+
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('mousemove', handleMouseMove)
+    }
+  }, [])
+
+  const handleRendererReady = useCallback((controls: ZoomControls) => {
+    setZoomControls(controls)
   }, [])
 
   return (
@@ -33,8 +53,14 @@ function GameView(): JSX.Element {
         height={dimensions.height}
         hexSize={40}
         onTileHover={setHoveredTile}
+        onRendererReady={handleRendererReady}
       />
-      <GameUI hoveredTile={hoveredTile} />
+      <GameUI
+        hoveredTile={hoveredTile}
+        mousePosition={mousePosition}
+        onZoomIn={zoomControls?.zoomIn}
+        onZoomOut={zoomControls?.zoomOut}
+      />
     </div>
   )
 }
@@ -57,11 +83,24 @@ function GameApp(): JSX.Element {
     [startGame]
   )
 
+  const handlePlayAgain = useCallback(() => {
+    // Simple reset - reload the page to return to main menu
+    window.location.reload()
+  }, [])
+
   if (!state) {
     return <MainMenu onStartGame={handleStartGame} />
   }
 
-  return <GameView />
+  // Check if game is over (turn exceeds maxTurns)
+  const isGameOver = state.turn > state.maxTurns
+
+  return (
+    <>
+      <GameView />
+      {isGameOver && <EndGameScreen state={state} onPlayAgain={handlePlayAgain} />}
+    </>
+  )
 }
 
 export function App(): JSX.Element {

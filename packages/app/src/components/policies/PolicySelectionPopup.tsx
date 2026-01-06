@@ -1,11 +1,14 @@
 // Policy selection popup - shown when a culture completes and player must choose A or B policy
 
+import { useState } from 'react'
 import type { Player, PolicyCard as PolicyCardType, PolicySlotType } from '@tribes/game-core'
 import { getCulture } from '@tribes/game-core'
 
+export type PolicyConfirmDestination = 'cultures' | 'policies'
+
 interface PolicySelectionPopupProps {
   player: Player
-  onSelect: (choice: 'a' | 'b') => void
+  onConfirm: (choice: 'a' | 'b', navigateTo: PolicyConfirmDestination) => void
 }
 
 // Slot type colors (matching PolicyCard)
@@ -26,10 +29,12 @@ const SLOT_LABELS: Record<PolicySlotType, string> = {
 function PolicyOption({
   policy,
   label,
+  selected,
   onClick,
 }: {
   policy: PolicyCardType
   label: string
+  selected: boolean
   onClick: () => void
 }): JSX.Element {
   const colors = SLOT_COLORS[policy.slotType]
@@ -40,7 +45,7 @@ function PolicyOption({
       style={{
         flex: 1,
         background: colors.bg,
-        border: `2px solid ${colors.primary}`,
+        border: `3px solid ${selected ? '#4ade80' : colors.primary}`,
         borderRadius: '12px',
         padding: '20px',
         cursor: 'pointer',
@@ -49,14 +54,20 @@ function PolicyOption({
         textAlign: 'left',
         position: 'relative',
         overflow: 'hidden',
+        boxShadow: selected ? '0 0 20px rgba(74, 222, 128, 0.5)' : 'none',
+        transform: selected ? 'scale(1.02)' : 'scale(1)',
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.boxShadow = `0 0 20px ${colors.glow}`
-        e.currentTarget.style.transform = 'scale(1.02)'
+        if (!selected) {
+          e.currentTarget.style.boxShadow = `0 0 20px ${colors.glow}`
+          e.currentTarget.style.transform = 'scale(1.02)'
+        }
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.boxShadow = 'none'
-        e.currentTarget.style.transform = 'scale(1)'
+        if (!selected) {
+          e.currentTarget.style.boxShadow = 'none'
+          e.currentTarget.style.transform = 'scale(1)'
+        }
       }}
     >
       {/* Option label (A or B) */}
@@ -122,8 +133,10 @@ function PolicyOption({
 
 export function PolicySelectionPopup({
   player,
-  onSelect,
+  onConfirm,
 }: PolicySelectionPopupProps): JSX.Element | null {
+  const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null)
+
   // Get current culture info
   const currentCulture = player.currentCulture ? getCulture(player.currentCulture) : null
 
@@ -137,6 +150,12 @@ export function PolicySelectionPopup({
   // Check if culture provides slot unlocks
   const slotUnlocks = currentCulture.slotUnlocks
   const hasSlotUnlocks = slotUnlocks && Object.values(slotUnlocks).some(v => v > 0)
+
+  const handleConfirm = (destination: PolicyConfirmDestination) => {
+    if (selectedChoice) {
+      onConfirm(selectedChoice, destination)
+    }
+  }
 
   return (
     <div
@@ -238,24 +257,97 @@ export function PolicySelectionPopup({
           <PolicyOption
             policy={policyA}
             label="A"
-            onClick={() => onSelect('a')}
+            selected={selectedChoice === 'a'}
+            onClick={() => setSelectedChoice('a')}
           />
           <PolicyOption
             policy={policyB}
             label="B"
-            onClick={() => onSelect('b')}
+            selected={selectedChoice === 'b'}
+            onClick={() => setSelectedChoice('b')}
           />
+        </div>
+
+        {/* Confirmation Buttons */}
+        <div
+          style={{
+            marginTop: '24px',
+            display: 'flex',
+            gap: '12px',
+            justifyContent: 'center',
+          }}
+        >
+          <button
+            onClick={() => handleConfirm('cultures')}
+            disabled={!selectedChoice}
+            style={{
+              padding: '12px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: selectedChoice
+                ? 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)'
+                : '#374151',
+              color: selectedChoice ? '#fff' : '#6b7280',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: selectedChoice ? 'pointer' : 'not-allowed',
+              transition: 'all 0.2s',
+              opacity: selectedChoice ? 1 : 0.6,
+            }}
+            onMouseOver={(e) => {
+              if (selectedChoice) {
+                e.currentTarget.style.transform = 'scale(1.02)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(124, 58, 237, 0.4)'
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
+          >
+            Confirm & View Culture Tree
+          </button>
+          <button
+            onClick={() => handleConfirm('policies')}
+            disabled={!selectedChoice}
+            style={{
+              padding: '12px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: selectedChoice
+                ? 'linear-gradient(135deg, #059669 0%, #047857 100%)'
+                : '#374151',
+              color: selectedChoice ? '#fff' : '#6b7280',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: selectedChoice ? 'pointer' : 'not-allowed',
+              transition: 'all 0.2s',
+              opacity: selectedChoice ? 1 : 0.6,
+            }}
+            onMouseOver={(e) => {
+              if (selectedChoice) {
+                e.currentTarget.style.transform = 'scale(1.02)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(5, 150, 105, 0.4)'
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
+          >
+            Confirm & View Policies
+          </button>
         </div>
 
         {/* Note about slotting */}
         <div
           style={{
-            marginTop: '20px',
+            marginTop: '16px',
             fontSize: '11px',
             color: '#6b7280',
           }}
         >
-          You can slot this policy in the Policies panel after selection
+          Select a policy above, then confirm to add it to your pool
         </div>
       </div>
 

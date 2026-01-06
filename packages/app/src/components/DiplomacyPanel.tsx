@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Player, DiplomaticStance, TribeId } from '@tribes/game-core'
 import { getStance, canDeclareWar, canProposePeace, canProposeAlliance } from '@tribes/game-core'
 import { useGame } from '../hooks/useGame'
+import { Tooltip } from './Tooltip'
 
 interface DiplomacyPanelProps {
   currentPlayer: Player
@@ -24,6 +25,15 @@ const STANCE_LABELS: Record<DiplomaticStance, string> = {
   neutral: 'Neutral',
   friendly: 'Friendly',
   allied: 'Allied',
+}
+
+// Descriptions for each stance
+const STANCE_DESCRIPTIONS: Record<DiplomaticStance, string> = {
+  war: 'Open conflict. Units can attack freely. Declaring war on allies damages reputation.',
+  hostile: 'Tense relations. Cannot enter territory. Can improve with time and no conflict.',
+  neutral: 'Default relations. Open borders with cost. Can form friendships through diplomacy.',
+  friendly: 'Positive relations. Free open borders. Can propose alliance.',
+  allied: 'Full partnership. Shared capital vision. +10% yields when trading.',
 }
 
 // Tribe display colors (matching their theme colors)
@@ -487,16 +497,32 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
               }}
             >
               {(Object.entries(STANCE_COLORS) as [DiplomaticStance, string][]).map(([stance, color]) => (
-                <span key={stance} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{
-                    width: '16px',
-                    height: '3px',
-                    background: color,
-                    borderRadius: '1px',
-                    opacity: stance === 'neutral' ? 0.5 : 1,
-                  }} />
-                  <span style={{ color: '#666', textTransform: 'capitalize' }}>{stance}</span>
-                </span>
+                <Tooltip
+                  key={stance}
+                  content={
+                    <div>
+                      <div style={{ fontWeight: 600, marginBottom: '4px', color, textTransform: 'capitalize' }}>
+                        {stance}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#aaa' }}>
+                        {STANCE_DESCRIPTIONS[stance]}
+                      </div>
+                    </div>
+                  }
+                  position="above"
+                  maxWidth={220}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'help' }}>
+                    <span style={{
+                      width: '16px',
+                      height: '3px',
+                      background: color,
+                      borderRadius: '1px',
+                      opacity: stance === 'neutral' ? 0.5 : 1,
+                    }} />
+                    <span style={{ color: '#666', textTransform: 'capitalize' }}>{stance}</span>
+                  </span>
+                </Tooltip>
               ))}
             </div>
           </div>

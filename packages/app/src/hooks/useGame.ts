@@ -290,13 +290,26 @@ export function useGameActions() {
     [dispatch]
   )
 
+  const purchase = useCallback(
+    (settlementId: SettlementId, itemType: 'unit' | 'building', itemId: string) => {
+      return dispatch({
+        type: 'PURCHASE',
+        settlementId,
+        itemType,
+        itemId,
+      })
+    },
+    [dispatch]
+  )
+
   return useMemo(
     () => ({
       dispatch,
       endTurn,
       startProduction,
       cancelProduction,
+      purchase,
     }),
-    [dispatch, endTurn, startProduction, cancelProduction]
+    [dispatch, endTurn, startProduction, cancelProduction, purchase]
   )
 }

@@ -8,8 +8,7 @@
       "Bash(pnpm list:*)",
       "Bash(grep:*)",
       "Bash(xargs:*)",
-      "Bash(cd:*)",
-      "Bash(dir:*)"
+      "Bash(pnpm typecheck:*)"
     ]
   }
 }

@@ -2,6 +2,7 @@
 
 import type { Settlement } from '@tribes/game-core'
 import { getMilestoneForLevel, getPendingMilestones } from '@tribes/game-core'
+import { Tooltip } from './Tooltip'
 
 interface MilestonePanelProps {
   settlement: Settlement
@@ -66,15 +67,22 @@ export function MilestonePanel({
           <div style={{ fontSize: '40px', marginBottom: '8px' }}>
             {'\u2B50'}
           </div>
-          <div
-            style={{
-              fontSize: '18px',
-              fontWeight: 600,
-              color: '#4ade80',
-            }}
+          <Tooltip
+            content="Settlements gain levels through population growth. Each milestone grants a permanent reward choice."
+            position="below"
+            width={200}
           >
-            Level {level} Milestone!
-          </div>
+            <div
+              style={{
+                fontSize: '18px',
+                fontWeight: 600,
+                color: '#4ade80',
+                cursor: 'help',
+              }}
+            >
+              Level {level} Milestone!
+            </div>
+          </Tooltip>
           <div
             style={{
               fontSize: '13px',
@@ -88,17 +96,24 @@ export function MilestonePanel({
 
         {/* Content */}
         <div style={{ padding: '24px' }}>
-          <div
-            style={{
-              fontSize: '13px',
-              color: '#888',
-              marginBottom: '16px',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-            }}
+          <Tooltip
+            content="This choice is permanent. The unchosen reward is lost forever for this settlement."
+            position="below"
+            width={200}
           >
-            Choose Your Reward
-          </div>
+            <div
+              style={{
+                fontSize: '13px',
+                color: '#888',
+                marginBottom: '16px',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                cursor: 'help',
+              }}
+            >
+              Choose Your Reward
+            </div>
+          </Tooltip>
 
           {/* Options */}
           <div

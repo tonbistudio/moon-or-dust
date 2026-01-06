@@ -1023,8 +1023,8 @@ export function processProduction(
       if (policyMods.buildingProductionPercent > 0) {
         effectiveProduction = Math.floor(effectiveProduction * (1 + policyMods.buildingProductionPercent / 100))
       }
-      // Special bonus for walls
-      if (currentItem.id === 'walls' && policyMods.wallProductionPercent > 0) {
+      // Special bonus for wall buildings (Walls and Firewall)
+      if ((currentItem.id === 'walls' || currentItem.id === 'firewall') && policyMods.wallProductionPercent > 0) {
         effectiveProduction = Math.floor(effectiveProduction * (1 + policyMods.wallProductionPercent / 100))
       }
     }
@@ -1041,7 +1041,7 @@ export function processProduction(
         if (policyMods.buildingProductionPercent > 0) {
           divisor *= (1 + policyMods.buildingProductionPercent / 100)
         }
-        if (currentItem.id === 'walls' && policyMods.wallProductionPercent > 0) {
+        if ((currentItem.id === 'walls' || currentItem.id === 'firewall') && policyMods.wallProductionPercent > 0) {
           divisor *= (1 + policyMods.wallProductionPercent / 100)
         }
         productionUsed = Math.ceil(remaining / divisor)

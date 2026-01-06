@@ -1,15 +1,15 @@
 // HUD overlay container for game UI elements
 
 import { useState, useMemo } from 'react'
-import type { TechId, CultureId, HexCoord, Unit, SettlementId, PolicyId } from '@tribes/game-core'
-import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion } from '@tribes/game-core'
+import type { TechId, CultureId, HexCoord, Unit, SettlementId, PolicyId, PromotionId, UnitId } from '@tribes/game-core'
+import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion, canLevelUp, calculateFloorPriceBreakdown } from '@tribes/game-core'
 import { useGame, useCurrentPlayer, useSelectedSettlement, useSelectedUnit } from '../hooks/useGame'
 import { useGameContext } from '../context/GameContext'
 import { SettlementPanel } from './SettlementPanel'
 import { UnitActionsPanel } from './UnitActionsPanel'
 import { TechTreePanel } from './tech'
 import { CultureTreePanel } from './cultures'
-import { PolicyPanel, PolicySelectionPopup } from './policies'
+import { PolicyPanel, PolicySelectionPopup, type PolicyConfirmDestination } from './policies'
 import { LootboxRewardPopup } from './LootboxRewardPopup'
 import { TechCompletedPopup } from './TechCompletedPopup'
 import { GoldenAgePopup } from './GoldenAgePopup'
@@ -20,12 +20,18 @@ import { DiplomacyPanel } from './DiplomacyPanel'
 import { TradePanel } from './TradePanel'
 import { WarConfirmationPopup } from './WarConfirmationPopup'
 import { MilestonePanel } from './MilestonePanel'
+import { HexTooltip } from './HexTooltip'
+import { PromotionSelectionPopup } from './PromotionSelectionPopup'
+import { Tooltip, TooltipHeader, TooltipSection, TooltipRow, TooltipDivider } from './Tooltip'
 
 interface GameUIProps {
   hoveredTile?: HexCoord | null
+  mousePosition?: { x: number; y: number }
+  onZoomIn?: (() => void) | undefined
+  onZoomOut?: (() => void) | undefined
 }
 
-export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
+export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: GameUIProps): JSX.Element | null {
   const { state, dispatch } = useGame()
   const {
     pendingLootboxReward,
@@ -46,6 +52,7 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
   const [showTechTree, setShowTechTree] = useState(false)
   const [showCulturePanel, setShowCulturePanel] = useState(false)
   const [showPolicyPanel, setShowPolicyPanel] = useState(false)
+  const [unitPendingPromotion, setUnitPendingPromotion] = useState<Unit | null>(null)
 
   // Memoize valid attack targets based only on selectedUnit (not full state)
   // This prevents recalculating targets on every state change
@@ -109,11 +116,37 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
     })
   }
 
-  const handleSelectPolicy = (choice: 'a' | 'b') => {
+  const handleOpenPromotionPopup = (unit: Unit) => {
+    setUnitPendingPromotion(unit)
+  }
+
+  const handleSelectPromotion = (promotionId: PromotionId) => {
+    if (!unitPendingPromotion) return
+    dispatch({
+      type: 'SELECT_PROMOTION',
+      unitId: unitPendingPromotion.id as UnitId,
+      promotionId,
+    })
+    setUnitPendingPromotion(null)
+  }
+
+  const handleDismissPromotionPopup = () => {
+    setUnitPendingPromotion(null)
+  }
+
+  const handleSelectPolicy = (choice: 'a' | 'b', navigateTo: PolicyConfirmDestination) => {
     dispatch({
       type: 'SELECT_POLICY',
       choice,
     })
+    // Navigate to the appropriate panel after selection
+    if (navigateTo === 'cultures') {
+      setShowCulturePanel(true)
+      setShowPolicyPanel(false)
+    } else {
+      setShowPolicyPanel(true)
+      setShowCulturePanel(false)
+    }
   }
 
   // Check if culture is ready for policy selection
@@ -288,9 +321,60 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
           <TradePanel currentPlayer={currentPlayer} />
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <span style={{ color: '#4caf50', fontWeight: 'bold' }}>
-            Floor Price: {state.floorPrices.get(state.currentPlayer) ?? 0}
-          </span>
+          <Tooltip
+            content={(() => {
+              const breakdown = calculateFloorPriceBreakdown(state, state.currentPlayer)
+              return (
+                <div>
+                  <TooltipHeader title="Floor Price" subtitle="Victory Score" />
+                  <TooltipDivider />
+                  <TooltipSection label="Score Breakdown">
+                    {breakdown.settlements > 0 && (
+                      <TooltipRow label="Settlements" value={`+${breakdown.settlements}`} valueColor="#4caf50" />
+                    )}
+                    {breakdown.population > 0 && (
+                      <TooltipRow label="Population" value={`+${breakdown.population}`} valueColor="#81c784" />
+                    )}
+                    {breakdown.tiles > 0 && (
+                      <TooltipRow label="Territory" value={`+${breakdown.tiles}`} valueColor="#66bb6a" />
+                    )}
+                    {breakdown.technologies > 0 && (
+                      <TooltipRow label="Technologies" value={`+${breakdown.technologies}`} valueColor="#64b5f6" />
+                    )}
+                    {breakdown.cultures > 0 && (
+                      <TooltipRow label="Cultures" value={`+${breakdown.cultures}`} valueColor="#ba68c8" />
+                    )}
+                    {breakdown.gold > 0 && (
+                      <TooltipRow label="Treasury" value={`+${breakdown.gold}`} valueColor="#ffd54f" />
+                    )}
+                    {breakdown.kills > 0 && (
+                      <TooltipRow label="Kills" value={`+${breakdown.kills}`} valueColor="#ef5350" />
+                    )}
+                    {breakdown.units > 0 && (
+                      <TooltipRow label="Units" value={`+${breakdown.units}`} valueColor="#90a4ae" />
+                    )}
+                    {breakdown.rarityBonus > 0 && (
+                      <TooltipRow label="Rarity Bonus" value={`+${breakdown.rarityBonus}`} valueColor="#ce93d8" />
+                    )}
+                    {breakdown.wonders > 0 && (
+                      <TooltipRow label="Wonders" value={`+${breakdown.wonders}`} valueColor="#ffc107" />
+                    )}
+                    {breakdown.policyBonus > 0 && (
+                      <TooltipRow label="Policy Bonus" value={`+${breakdown.policyBonus}`} valueColor="#4dd0e1" />
+                    )}
+                  </TooltipSection>
+                  <TooltipDivider />
+                  <TooltipRow label="Total" value={String(breakdown.total)} valueColor="#4caf50" />
+                </div>
+              )
+            })()}
+            position="below"
+            maxWidth={220}
+          >
+            <span style={{ color: '#4caf50', fontWeight: 'bold', cursor: 'help' }}>
+              Floor Price: {state.floorPrices.get(state.currentPlayer) ?? 0}
+            </span>
+          </Tooltip>
           <button
             onClick={handleEndTurn}
             style={{
@@ -320,7 +404,10 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
         {/* Unit Actions Panel (only if owned by current player and no settlement selected) */}
         {canInteractWithUnit && !canInteractWithSettlement && (
           <div style={{ pointerEvents: 'auto' }}>
-            <UnitActionsPanel unit={selectedUnit} />
+            <UnitActionsPanel
+              unit={selectedUnit}
+              onLevelUp={canLevelUp(selectedUnit) ? () => handleOpenPromotionPopup(selectedUnit) : undefined}
+            />
           </div>
         )}
 
@@ -426,7 +513,18 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
         <div style={{ pointerEvents: 'auto' }}>
           <PolicySelectionPopup
             player={currentPlayer}
-            onSelect={handleSelectPolicy}
+            onConfirm={handleSelectPolicy}
+          />
+        </div>
+      )}
+
+      {/* Promotion Selection Popup - shows when clicking level up on a unit */}
+      {unitPendingPromotion && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <PromotionSelectionPopup
+            unit={unitPendingPromotion}
+            onSelect={handleSelectPromotion}
+            onDismiss={handleDismissPromotionPopup}
           />
         </div>
       )}
@@ -441,8 +539,74 @@ export function GameUI({ hoveredTile }: GameUIProps): JSX.Element | null {
         </div>
       )}
 
+      {/* Zoom Controls - bottom right */}
+      {(onZoomIn || onZoomOut) && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '120px',
+            right: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            pointerEvents: 'auto',
+          }}
+        >
+          <button
+            onClick={onZoomIn}
+            disabled={!onZoomIn}
+            style={{
+              width: '36px',
+              height: '36px',
+              background: '#2a2a4a',
+              border: '1px solid #4a4a6a',
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '20px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Zoom In"
+          >
+            +
+          </button>
+          <button
+            onClick={onZoomOut}
+            disabled={!onZoomOut}
+            style={{
+              width: '36px',
+              height: '36px',
+              background: '#2a2a4a',
+              border: '1px solid #4a4a6a',
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '20px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Zoom Out"
+          >
+            -
+          </button>
+        </div>
+      )}
+
       {/* Event Log - bottom right */}
       <EventLog events={events} />
+
+      {/* Hex Tooltip - shows on hover over tiles */}
+      {hoveredTile && state && !hoveredEnemy && !selectedSettlement && (
+        <HexTooltip
+          coord={hoveredTile}
+          state={state}
+          currentPlayer={state.currentPlayer}
+          mousePosition={mousePosition}
+        />
+      )}
     </div>
   )
 }

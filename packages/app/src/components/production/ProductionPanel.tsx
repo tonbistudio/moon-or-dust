@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import type { Settlement } from '@tribes/game-core'
 import { getAvailableProduction, type AvailableProductionItem } from '@tribes/game-core'
-import { useGame, useGameActions } from '../../hooks/useGame'
+import { useGame, useGameActions, useCurrentPlayer } from '../../hooks/useGame'
 import { ProductionQueue } from './ProductionQueue'
 import { AvailableItems } from './AvailableItems'
 
@@ -14,7 +14,8 @@ interface ProductionPanelProps {
 
 export function ProductionPanel({ settlement, onClose }: ProductionPanelProps): JSX.Element {
   const { state } = useGame()
-  const { startProduction, cancelProduction } = useGameActions()
+  const { startProduction, cancelProduction, purchase } = useGameActions()
+  const currentPlayer = useCurrentPlayer()
 
   // Get available production items for this settlement
   const availableItems = useMemo(() => {
@@ -29,6 +30,14 @@ export function ProductionPanel({ settlement, onClose }: ProductionPanelProps): 
   const handleCancelItem = (queueIndex: number) => {
     cancelProduction(settlement.id, queueIndex)
   }
+
+  const handlePurchaseItem = (item: AvailableProductionItem) => {
+    if (item.type !== 'wonder') {
+      purchase(settlement.id, item.type, item.id)
+    }
+  }
+
+  const treasury = currentPlayer?.treasury ?? 0
 
   return (
     <div
@@ -110,8 +119,13 @@ export function ProductionPanel({ settlement, onClose }: ProductionPanelProps): 
         <h3 style={{ margin: '0 0 12px 0', color: '#aaa', fontSize: '14px' }}>
           Available Production
         </h3>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <AvailableItems items={availableItems} onSelectItem={handleSelectItem} />
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+          <AvailableItems
+            items={availableItems}
+            onSelectItem={handleSelectItem}
+            onPurchaseItem={handlePurchaseItem}
+            treasury={treasury}
+          />
         </div>
       </div>
 

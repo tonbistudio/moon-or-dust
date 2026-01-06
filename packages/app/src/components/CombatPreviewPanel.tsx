@@ -3,6 +3,7 @@
 import type { Unit } from '@tribes/game-core'
 import { getCombatPreview, areAtWar } from '@tribes/game-core'
 import { useGame } from '../hooks/useGame'
+import { Tooltip } from './Tooltip'
 
 interface CombatPreviewPanelProps {
   attacker: Unit
@@ -57,12 +58,57 @@ export function CombatPreviewPanel({ attacker, defender }: CombatPreviewPanelPro
         <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
           HP: {attacker.health}/{attacker.maxHealth}
         </div>
-        <div style={{ fontSize: '12px', marginTop: '2px' }}>
-          Strength: <span style={{ color: '#fbbf24' }}>{preview.attackerStrength.total}</span>
+        <div style={{ fontSize: '12px', marginTop: '2px', pointerEvents: 'auto' }}>
+          <Tooltip
+            content={
+              <div style={{ fontSize: '11px' }}>
+                <div style={{ marginBottom: '4px' }}>Base: {preview.attackerStrength.base}</div>
+                {preview.attackerStrength.rarityBonus !== 0 && (
+                  <div style={{ color: '#a855f7' }}>
+                    Rarity: +{preview.attackerStrength.rarityBonus}
+                  </div>
+                )}
+                {preview.attackerStrength.healthPenalty !== 0 && (
+                  <div style={{ color: '#ef4444' }}>
+                    Health: {preview.attackerStrength.healthPenalty}
+                  </div>
+                )}
+                {preview.attackerStrength.terrainBonus !== 0 && (
+                  <div style={{ color: preview.attackerStrength.terrainBonus > 0 ? '#4ade80' : '#ef4444' }}>
+                    Terrain: {preview.attackerStrength.terrainBonus > 0 ? '+' : ''}{preview.attackerStrength.terrainBonus}
+                  </div>
+                )}
+                {preview.attackerStrength.promotionBonus !== 0 && (
+                  <div style={{ color: '#4ade80' }}>
+                    Promotions: +{preview.attackerStrength.promotionBonus}
+                  </div>
+                )}
+                {preview.attackerStrength.policyBonus !== 0 && (
+                  <div style={{ color: '#60a5fa' }}>
+                    Policies: +{preview.attackerStrength.policyBonus}
+                  </div>
+                )}
+              </div>
+            }
+            position="left"
+            width="auto"
+          >
+            <span style={{ cursor: 'help', borderBottom: '1px dotted #666' }}>
+              Strength: <span style={{ color: '#fbbf24' }}>{preview.attackerStrength.total}</span>
+            </span>
+          </Tooltip>
         </div>
         {preview.estimatedAttackerDamage > 0 && (
-          <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '2px' }}>
-            Est. Damage Taken: -{preview.estimatedAttackerDamage} HP
+          <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '2px', pointerEvents: 'auto' }}>
+            <Tooltip
+              content="Counter-attack damage based on defender's combat strength. Ranged units take less counter damage."
+              position="left"
+              width={180}
+            >
+              <span style={{ cursor: 'help', borderBottom: '1px dotted #7f1d1d' }}>
+                Est. Damage Taken: -{preview.estimatedAttackerDamage} HP
+              </span>
+            </Tooltip>
           </div>
         )}
       </div>
@@ -91,11 +137,61 @@ export function CombatPreviewPanel({ attacker, defender }: CombatPreviewPanelPro
         <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
           HP: {defender.health}/{defender.maxHealth}
         </div>
-        <div style={{ fontSize: '12px', marginTop: '2px' }}>
-          Strength: <span style={{ color: '#fbbf24' }}>{preview.defenderStrength.total}</span>
+        <div style={{ fontSize: '12px', marginTop: '2px', pointerEvents: 'auto' }}>
+          <Tooltip
+            content={
+              <div style={{ fontSize: '11px' }}>
+                <div style={{ marginBottom: '4px' }}>Base: {preview.defenderStrength.base}</div>
+                {preview.defenderStrength.rarityBonus !== 0 && (
+                  <div style={{ color: '#a855f7' }}>
+                    Rarity: +{preview.defenderStrength.rarityBonus}
+                  </div>
+                )}
+                {preview.defenderStrength.healthPenalty !== 0 && (
+                  <div style={{ color: '#ef4444' }}>
+                    Health: {preview.defenderStrength.healthPenalty}
+                  </div>
+                )}
+                {preview.defenderStrength.terrainBonus !== 0 && (
+                  <div style={{ color: preview.defenderStrength.terrainBonus > 0 ? '#4ade80' : '#ef4444' }}>
+                    Terrain: {preview.defenderStrength.terrainBonus > 0 ? '+' : ''}{preview.defenderStrength.terrainBonus}
+                  </div>
+                )}
+                {preview.defenderStrength.promotionBonus !== 0 && (
+                  <div style={{ color: '#4ade80' }}>
+                    Promotions: +{preview.defenderStrength.promotionBonus}
+                  </div>
+                )}
+                {preview.defenderStrength.fortificationBonus !== 0 && (
+                  <div style={{ color: '#60a5fa' }}>
+                    Fortification: +{preview.defenderStrength.fortificationBonus}
+                  </div>
+                )}
+                {preview.defenderStrength.policyBonus !== 0 && (
+                  <div style={{ color: '#60a5fa' }}>
+                    Policies: +{preview.defenderStrength.policyBonus}
+                  </div>
+                )}
+              </div>
+            }
+            position="left"
+            width="auto"
+          >
+            <span style={{ cursor: 'help', borderBottom: '1px dotted #666' }}>
+              Strength: <span style={{ color: '#fbbf24' }}>{preview.defenderStrength.total}</span>
+            </span>
+          </Tooltip>
         </div>
-        <div style={{ fontSize: '12px', color: '#22c55e', marginTop: '2px' }}>
-          Est. Damage Dealt: -{preview.estimatedDefenderDamage} HP
+        <div style={{ fontSize: '12px', color: '#22c55e', marginTop: '2px', pointerEvents: 'auto' }}>
+          <Tooltip
+            content="Damage is based on the difference in combat strength. Higher strength = more damage dealt."
+            position="left"
+            width={180}
+          >
+            <span style={{ cursor: 'help', borderBottom: '1px dotted #166534' }}>
+              Est. Damage Dealt: -{preview.estimatedDefenderDamage} HP
+            </span>
+          </Tooltip>
         </div>
       </div>
 

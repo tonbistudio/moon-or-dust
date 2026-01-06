@@ -1,6 +1,7 @@
 // Popup for showing lootbox rewards when claimed
 
 import type { LootboxRewardInfo } from '../context/GameContext'
+import { Tooltip } from './Tooltip'
 
 interface LootboxRewardPopupProps {
   reward: LootboxRewardInfo
@@ -25,12 +26,22 @@ const REWARD_ICONS: Record<string, string> = {
   scout: '\u{1F5FA}', // map
 }
 
+// Detailed descriptions for tooltips
+const REWARD_DESCRIPTIONS: Record<string, string> = {
+  airdrop: 'Instant injection of gold into your treasury. Can be used immediately for purchasing or maintenance.',
+  alpha_leak: 'Gain knowledge of a random technology you haven\'t researched yet. Saves multiple turns of research.',
+  og_holder: 'A loyal supporter appears! A free military unit spawns at your nearest settlement.',
+  community_growth: 'Your capital gains +3 population, unlocking more tiles and production capacity.',
+  scout: 'Intel gathered! Reveals a large 5-hex radius area of the map, exposing terrain and enemies.',
+}
+
 export function LootboxRewardPopup({
   reward,
   onDismiss,
 }: LootboxRewardPopupProps): JSX.Element {
   const rewardName = REWARD_NAMES[reward.reward] ?? 'Mystery Reward'
   const rewardIcon = REWARD_ICONS[reward.reward] ?? '\u{1F381}' // gift box
+  const rewardDescription = REWARD_DESCRIPTIONS[reward.reward] ?? 'A mysterious reward from the lootbox.'
 
   return (
     <div
@@ -88,20 +99,27 @@ export function LootboxRewardPopup({
         {/* Content */}
         <div style={{ padding: '24px' }}>
           {/* Reward type */}
-          <div
-            style={{
-              fontSize: '22px',
-              fontWeight: 'bold',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-            }}
+          <Tooltip
+            content={rewardDescription}
+            position="below"
+            width={220}
           >
-            <span style={{ fontSize: '28px' }}>{rewardIcon}</span>
-            <span>{rewardName}</span>
-          </div>
+            <div
+              style={{
+                fontSize: '22px',
+                fontWeight: 'bold',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                cursor: 'help',
+              }}
+            >
+              <span style={{ fontSize: '28px' }}>{rewardIcon}</span>
+              <span style={{ borderBottom: '1px dotted #666' }}>{rewardName}</span>
+            </div>
+          </Tooltip>
 
           {/* Reward details */}
           <div

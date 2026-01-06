@@ -3,15 +3,18 @@
 import { useState } from 'react'
 import { ItemCard } from './ItemCard'
 import type { AvailableProductionItem } from '@tribes/game-core'
+import { calculatePurchaseCost } from '@tribes/game-core'
 
 type FilterType = 'all' | 'unit' | 'building' | 'wonder'
 
 interface AvailableItemsProps {
   items: AvailableProductionItem[]
   onSelectItem: (item: AvailableProductionItem) => void
+  onPurchaseItem: (item: AvailableProductionItem) => void
+  treasury: number
 }
 
-export function AvailableItems({ items, onSelectItem }: AvailableItemsProps): JSX.Element {
+export function AvailableItems({ items, onSelectItem, onPurchaseItem, treasury }: AvailableItemsProps): JSX.Element {
   const [filter, setFilter] = useState<FilterType>('all')
 
   const filteredItems =
@@ -69,23 +72,28 @@ export function AvailableItems({ items, onSelectItem }: AvailableItemsProps): JS
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
             gap: '12px',
-            maxHeight: '300px',
-            overflowY: 'auto',
             padding: '4px',
           }}
         >
-          {filteredItems.map((item) => (
-            <ItemCard
-              key={`${item.type}-${item.id}`}
-              type={item.type}
-              id={item.id}
-              name={item.name}
-              cost={item.cost}
-              turnsRemaining={item.turnsRemaining}
-              description={item.description}
-              onClick={() => onSelectItem(item)}
-            />
-          ))}
+          {filteredItems.map((item) => {
+            const goldCost = item.type !== 'wonder' ? calculatePurchaseCost(item.cost) : null
+            const canPurchase = goldCost !== null && treasury >= goldCost
+            return (
+              <ItemCard
+                key={`${item.type}-${item.id}`}
+                type={item.type}
+                id={item.id}
+                name={item.name}
+                cost={item.cost}
+                turnsRemaining={item.turnsRemaining}
+                description={item.description}
+                onClick={() => onSelectItem(item)}
+                goldCost={goldCost}
+                canPurchase={canPurchase}
+                onPurchase={() => onPurchaseItem(item)}
+              />
+            )
+          })}
         </div>
       )}
     </div>

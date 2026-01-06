@@ -35,6 +35,7 @@ import {
   getPolicy,
   getMilestoneForLevel,
   getGreatPersonDefinition,
+  getEffectDefinition,
   type GameConfig,
   type ActionResult,
 } from '@tribes/game-core'
@@ -755,9 +756,13 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
             goldenAgeInfo = { trigger, effect, turnsRemaining: turns }
           }
 
+          // Get the actual effect description
+          const effectDef = effect ? getEffectDefinition(effect) : null
+          const effectText = effectDef?.description ?? 'bonus yields'
+
           internalDispatch({
             type: 'ADD_EVENT',
-            message: `Golden Era begins! (+25% yields for ${turns} turns)`,
+            message: `Golden Era begins! (${effectText} for ${turns} turns)`,
             eventType: 'golden',
             turn: currentState.turn,
           })

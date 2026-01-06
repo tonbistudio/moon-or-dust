@@ -21,6 +21,7 @@ import {
   removeUnit,
 } from '../units'
 import { damageSettlement } from '../settlements'
+import { BUILDING_DEFINITIONS } from '../buildings'
 import { pillageSettlementTradeRoutes } from '../economy'
 import { areAtWar } from '../diplomacy'
 import { getPolicy } from '../cultures'
@@ -39,7 +40,7 @@ const XP_TO_LEVEL = 10 // XP needed for promotion
 const SETTLEMENT_DEFENSE_STRENGTH = 20 // Base defense strength of settlements
 
 /**
- * Calculates effective settlement defense including policy bonuses
+ * Calculates effective settlement defense including policy and building bonuses
  */
 export function calculateSettlementDefense(state: GameState, settlement: Settlement): number {
   let defense = SETTLEMENT_DEFENSE_STRENGTH
@@ -55,6 +56,14 @@ export function calculateSettlementDefense(state: GameState, settlement: Settlem
         // +X% settlement defense
         defense = Math.floor(defense * (1 + ((policy.effect.percent as number) ?? 0) / 100))
       }
+    }
+  }
+
+  // Apply building defense bonuses (e.g., Walls)
+  for (const buildingId of settlement.buildings) {
+    const building = BUILDING_DEFINITIONS[buildingId]
+    if (building?.defenseBonus) {
+      defense = Math.floor(defense * (1 + building.defenseBonus / 100))
     }
   }
 

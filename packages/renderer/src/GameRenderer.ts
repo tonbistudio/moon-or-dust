@@ -172,7 +172,8 @@ export class GameRenderer {
 
     this.eventHandlers.wheel = (e: WheelEvent) => {
       e.preventDefault()
-      const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1
+      // Reduced zoom sensitivity: 5% per wheel notch instead of 10%
+      const zoomDelta = e.deltaY > 0 ? 0.95 : 1.05
       const rect = canvas.getBoundingClientRect()
       const mouseX = e.clientX - rect.left
       const mouseY = e.clientY - rect.top
@@ -391,5 +392,21 @@ export class GameRenderer {
 
   setZoom(level: number): void {
     this.camera.setZoom(level)
+  }
+
+  getZoom(): number {
+    return this.camera.getZoom()
+  }
+
+  zoomIn(): void {
+    const centerX = this.config.width / 2
+    const centerY = this.config.height / 2
+    this.camera.zoom(1.2, centerX, centerY)
+  }
+
+  zoomOut(): void {
+    const centerX = this.config.width / 2
+    const centerY = this.config.height / 2
+    this.camera.zoom(0.8, centerX, centerY)
   }
 }

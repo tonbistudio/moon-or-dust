@@ -26,6 +26,7 @@ export interface BuildingDefinition {
   readonly adjacencyBonus?: AdjacencyBonus
   readonly prerequisiteTech?: string
   readonly isUnique?: boolean // Tribe-specific building
+  readonly defenseBonus?: number // Percent bonus to settlement defense (e.g., 25 = +25%)
 }
 
 const ZERO_YIELDS: Yields = {
@@ -120,12 +121,8 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     productionCost: 60,
     maintenanceCost: 1,
     baseYields: ZERO_YIELDS,
-    adjacencyBonus: {
-      yield: 'production',
-      amount: 1,
-      condition: { type: 'terrain', terrain: 'hills' },
-    },
-    prerequisiteTech: 'masonry',
+    prerequisiteTech: 'smart_contracts',
+    defenseBonus: 50, // +50% settlement defense
   },
 
   // ==========================================================================
@@ -250,6 +247,18 @@ export const BUILDING_DEFINITIONS: Record<string, BuildingDefinition> = {
     maintenanceCost: 3,
     baseYields: { ...ZERO_YIELDS, vibes: 6 },
     prerequisiteTech: 'ohm',
+  },
+
+  // Defense (Era 3)
+  firewall: {
+    id: 'firewall' as BuildingId,
+    name: 'Firewall',
+    category: 'military',
+    productionCost: 120,
+    maintenanceCost: 2,
+    baseYields: ZERO_YIELDS,
+    prerequisiteTech: 'firedancer',
+    defenseBonus: 100, // +100% settlement defense
   },
 
   // ==========================================================================
