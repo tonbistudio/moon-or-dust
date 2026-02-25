@@ -152,11 +152,36 @@ export function HexTooltip({
         <>
           <TooltipDivider />
           <div style={{ marginBottom: '8px' }}>
-            <div style={{ fontWeight: 600, color: '#22c55e', marginBottom: '2px' }}>
+            <div style={{ fontWeight: 600, color: settlementOnTile.owner === currentPlayer ? '#22c55e' : '#ef4444', marginBottom: '2px' }}>
               {settlementOnTile.name}
             </div>
-            <div style={{ fontSize: '10px', color: '#888' }}>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>
               Level {settlementOnTile.level} Settlement
+              {settlementOnTile.owner !== currentPlayer && ' (Enemy)'}
+            </div>
+            {/* Settlement HP */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#888' }}>HP:</span>
+              <div style={{ flex: 1, height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${(settlementOnTile.health / settlementOnTile.maxHealth) * 100}%`,
+                    height: '100%',
+                    background: settlementOnTile.health < settlementOnTile.maxHealth * 0.5 ? '#ef4444' : '#4ade80',
+                    transition: 'width 0.2s',
+                  }}
+                />
+              </div>
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: settlementOnTile.health < settlementOnTile.maxHealth * 0.5 ? '#ef4444' : '#4ade80',
+                  minWidth: '45px',
+                  textAlign: 'right',
+                }}
+              >
+                {settlementOnTile.health}/{settlementOnTile.maxHealth}
+              </span>
             </div>
           </div>
         </>

@@ -49,7 +49,25 @@ const RESOURCE_SPRITE_FILES: Record<string, string> = {
  * Load all terrain sprite textures
  */
 export async function loadTerrainTextures(): Promise<void> {
-  if (texturesLoaded) return
+  // Check if textures are actually loaded and valid (not just the flag)
+  // This handles the case where the app is destroyed and recreated
+  const hasValidTextures = texturesLoaded &&
+    TERRAIN_TEXTURES.size === Object.keys(TERRAIN_SPRITE_FILES).length &&
+    settlementTexture !== null
+
+  if (hasValidTextures) {
+    console.log('[HexTileRenderer] Textures already loaded, skipping')
+    return
+  }
+
+  console.log('[HexTileRenderer] Loading terrain textures...')
+
+  // Clear any stale textures
+  TERRAIN_TEXTURES.clear()
+  RESOURCE_TEXTURES.clear()
+  settlementTexture = null
+  settlementCastleTexture = null
+  texturesLoaded = false
 
   const basePath = '/assets/sprites/terrain/'
 
@@ -87,6 +105,7 @@ export async function loadTerrainTextures(): Promise<void> {
     }
   }
 
+  console.log(`[HexTileRenderer] Loaded ${TERRAIN_TEXTURES.size} terrain textures`)
   texturesLoaded = true
 }
 
@@ -151,6 +170,7 @@ export class HexTileRenderer {
   private readonly rangeContainer: Container
   private readonly uiContainer: Container // hover, selection, arrows
   private readonly yieldContainer: Container // settlement yields (separate for caching)
+  private readonly settlementHealthContainer: Container // settlement health bars
 
   private hoveredTile: HexCoord | null = null
 
@@ -171,6 +191,7 @@ export class HexTileRenderer {
   private lastReachableHexes: Set<string> = new Set()
   private lastAttackTargetHexes: Set<string> = new Set()
   private lastSelectedSettlementId: string | null = null
+  private lastSettlementHealthMap: Map<string, number> = new Map()
 
   // Memoization cache for tile yield calculations
   private yieldCache: Map<string, { gold: number; alpha: number; vibes: number; production: number; growth: number }> = new Map()
@@ -194,32 +215,42 @@ export class HexTileRenderer {
     this.fogContainer = new Container()
     this.rangeContainer = new Container()
     this.yieldContainer = new Container() // Settlement yields
+    this.settlementHealthContainer = new Container() // Settlement health bars
     this.uiContainer = new Container()
 
-    // Add in order: fog (bottom), range overlays, yields, ui highlights (top)
+    // Add in order: fog (bottom), range overlays, yields, health bars, ui highlights (top)
     this.overlayContainer.addChild(this.fogContainer)
     this.overlayContainer.addChild(this.rangeContainer)
     this.overlayContainer.addChild(this.yieldContainer)
+    this.overlayContainer.addChild(this.settlementHealthContainer)
     this.overlayContainer.addChild(this.uiContainer)
   }
 
   update(state: GameState, parent: Container): void {
     const needsFullRebuild = !this.lastState || this.mapChanged(state, this.lastState)
 
-    // Debug: log when tiles should change
-    if (this.lastState && state.map.tiles !== this.lastState.map.tiles) {
+    // Debug: log state changes
+    if (!this.lastState) {
+      console.log('[HexTileRenderer] First update - no previous state')
+    } else if (state.map.tiles !== this.lastState.map.tiles) {
       console.log('[HexTileRenderer] Tiles Map changed, needsFullRebuild:', needsFullRebuild)
     }
 
     if (needsFullRebuild) {
-      console.log('[HexTileRenderer] Rebuilding tiles')
+      console.log('[HexTileRenderer] Rebuilding tiles, map size:', state.map.width, 'x', state.map.height)
       this.rebuildTiles(state)
+      console.log('[HexTileRenderer] Rebuilt', this.tileContainer.children.length, 'tile containers')
     }
 
     // Add tile container to parent if not already added
     // Note: overlayContainer is added separately via getOverlayContainer()
     // to allow other renderers to be inserted between tiles and overlays
     if (!this.tileContainer.parent) {
+      console.log('[HexTileRenderer] Adding tileContainer to parent')
+      parent.addChild(this.tileContainer)
+    } else if (this.tileContainer.parent !== parent) {
+      // Re-add if parent changed (e.g., app recreated)
+      console.log('[HexTileRenderer] Re-parenting tileContainer')
       parent.addChild(this.tileContainer)
     }
 
@@ -722,6 +753,9 @@ export class HexTileRenderer {
       this.lastSelectedSettlementId = currentSettlementId
       this.updateYieldLayer(state)
     }
+
+    // === SETTLEMENT HEALTH LAYER (only rebuild when health changes) ===
+    this.updateSettlementHealthBars(state)
   }
 
   /**
@@ -778,6 +812,104 @@ export class HexTileRenderer {
     if (this.selectedSettlement && this.selectedSettlement.owner === state.currentPlayer) {
       this.drawSettlementYields(state)
     }
+  }
+
+  /**
+   * Update settlement health bars - only shows for damaged settlements
+   */
+  private updateSettlementHealthBars(state: GameState): void {
+    // Check if any settlement health changed
+    let healthChanged = false
+    const currentHealthMap = new Map<string, number>()
+
+    for (const settlement of state.settlements.values()) {
+      currentHealthMap.set(settlement.id, settlement.health)
+      const lastHealth = this.lastSettlementHealthMap.get(settlement.id)
+      if (lastHealth !== settlement.health) {
+        healthChanged = true
+      }
+    }
+
+    // Also check if settlements were added/removed
+    if (currentHealthMap.size !== this.lastSettlementHealthMap.size) {
+      healthChanged = true
+    }
+
+    if (!healthChanged) return
+
+    // Update tracking
+    this.lastSettlementHealthMap = currentHealthMap
+
+    // Rebuild health bars
+    this.settlementHealthContainer.removeChildren()
+
+    const currentPlayerFog = state.fog.get(state.currentPlayer)
+
+    for (const settlement of state.settlements.values()) {
+      // Only show health bar for damaged settlements
+      if (settlement.health >= settlement.maxHealth) continue
+
+      // Check if visible (in fog of war)
+      const key = hexKey(settlement.position)
+      if (currentPlayerFog && !currentPlayerFog.has(key)) continue
+
+      // Draw health bar
+      const { x, y } = hexToPixel(settlement.position, this.layout)
+      const healthBar = this.createSettlementHealthBar(
+        settlement.health,
+        settlement.maxHealth
+      )
+      healthBar.x = x
+      healthBar.y = y - this.hexSize * 0.6 // Position above settlement
+      this.settlementHealthContainer.addChild(healthBar)
+    }
+  }
+
+  /**
+   * Create a health bar graphics for a settlement
+   */
+  private createSettlementHealthBar(health: number, maxHealth: number): Container {
+    const container = new Container()
+    const barWidth = this.hexSize * 1.2
+    const barHeight = 6
+    const healthPercent = health / maxHealth
+
+    // Background (dark)
+    const bg = new Graphics()
+    bg.roundRect(-barWidth / 2, 0, barWidth, barHeight, 2)
+    bg.fill({ color: 0x000000, alpha: 0.7 })
+    container.addChild(bg)
+
+    // Health fill
+    const fill = new Graphics()
+    const fillWidth = barWidth * healthPercent
+    const fillColor = healthPercent > 0.5 ? 0x4ade80 : healthPercent > 0.25 ? 0xfbbf24 : 0xef4444
+    fill.roundRect(-barWidth / 2, 0, fillWidth, barHeight, 2)
+    fill.fill({ color: fillColor })
+    container.addChild(fill)
+
+    // Border
+    const border = new Graphics()
+    border.roundRect(-barWidth / 2, 0, barWidth, barHeight, 2)
+    border.stroke({ color: 0xffffff, width: 1, alpha: 0.5 })
+    container.addChild(border)
+
+    // Health text
+    const style = new TextStyle({
+      fontSize: 10,
+      fill: 0xffffff,
+      fontWeight: 'bold',
+      stroke: {
+        color: 0x000000,
+        width: 2,
+      },
+    })
+    const text = new Text({ text: `${health}/${maxHealth}`, style })
+    text.anchor.set(0.5, 0)
+    text.y = barHeight + 2
+    container.addChild(text)
+
+    return container
   }
 
   /**

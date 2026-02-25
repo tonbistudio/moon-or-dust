@@ -16,7 +16,8 @@ Tribes is a turn-based 4X strategy game (Civilization-style) with Solana NFT com
 - **Package Manager:** pnpm with workspaces
 - **State:** Pure functions with immutable state (for determinism)
 - **Testing:** Vitest for unit/integration, Playwright for E2E
-- **Wallet:** @solana/wallet-adapter
+- **Wallet:** @solana/wallet-adapter (connected, devnet)
+- **On-chain:** Anchor 0.32.1, ephemeral-vrf-sdk 0.2.x, deployed to Solana devnet
 - **Storage:** IndexedDB (idb library), localStorage for preferences
 - **Deployment:** Vercel (frontend)
 
@@ -24,19 +25,32 @@ Tribes is a turn-based 4X strategy game (Civilization-style) with Solana NFT com
 
 Integrating with [MagicBlock](https://docs.magicblock.gg) for on-chain features:
 
-### Tier 1 - Planned (Hackathon)
+### Tier 1 - In Progress (Hackathon)
 
-**VRF (Verifiable Randomness)**
-- Provably fair unit rarity rolls (replaces `Math.random()` in `rollRarity()`)
-- Verifiable lootbox rewards
-- SDK: `@magicblock-labs/bolt-sdk`
-- Integration: `packages/app/src/magicblock/vrf.ts`
+**VRF (Verifiable Randomness) — Steps 1-3 Complete**
+- ✅ Solana wallet connection (`packages/app/src/wallet/`)
+- ✅ On-chain Anchor program deployed to devnet (`programs/vrf-rarity/`)
+  - Program ID: `8U41n8DFkJUiyrxzCLpNQyvAAbHfnoD2GvRpCxQxiMaQ`
+  - `roll_rarity` instruction: creates PDA, CPIs into MagicBlock VRF oracle
+  - `callback_roll_rarity`: oracle callback, maps random byte → rarity tier
+  - PDA `RarityResult`: `{player, nonce, rarity, fulfilled, roll_value, bump}`
+  - SDK: `ephemeral-vrf-sdk` v0.2.x with `anchor-lang` v0.32.1
+- ✅ TypeScript client (`packages/app/src/magicblock/vrf.ts`)
+  - `OnChainVRFService`: sends real transactions, polls for VRF callback
+  - `LocalVRFService`: falls back to `Math.random()` when no wallet
+  - `createVRFService(provider?)` factory
+- ✅ Config (`packages/app/src/magicblock/config.ts`)
+- Remaining VRF work:
+  - Wire `VRFService` into `GameContext` / unit minting flow
+  - Add minting animation (rarity reveal) in UI
+  - Extend VRF to lootbox rewards
+  - Generated IDL at `target/idl/vrf_rarity.json`, types at `target/types/vrf_rarity.ts`
 
-**SOAR (On-Chain Achievements & Leaderboards)**
+**SOAR (On-Chain Achievements & Leaderboards) — Not Started**
 - Global Floor Price leaderboards
 - On-chain achievements ("First Wonder", "10 Kills", etc.)
 - Player profiles with game history
-- SDK: TypeScript client via `@magicblock-labs/bolt-sdk`
+- SDK: `@magicblock-labs/soar-sdk` (already installed)
 - Integration: `packages/app/src/magicblock/soar.ts`
 
 ### Tier 2 - Planned (Post-Hackathon)
@@ -49,6 +63,12 @@ Integrating with [MagicBlock](https://docs.magicblock.gg) for on-chain features:
 
 **BOLT Framework** - ECS for fully on-chain game state (requires Rust/Anchor rewrite)
 **Ephemeral Rollups** - 50ms latency, zero-fee transactions (requires BOLT first)
+
+### Anchor Build Notes
+
+- Anchor CLI: 0.30.0, `anchor-lang` crate: 0.32.1 (required by `ephemeral-vrf-sdk`)
+- **After any `cargo update`, must re-pin**: `cargo update -p blake3 --precise 1.5.5`
+  (BPF platform-tools v1.51 / Cargo 1.84 cannot handle Rust edition 2024 crates)
 
 ## Graphics System (Badge + Glow)
 
@@ -137,39 +157,45 @@ sprite.scale.set(baseScale, baseScale * 1.15)
 ## Monorepo Structure
 
 ```
+programs/
+  vrf-rarity/        # Anchor program for MagicBlock VRF rarity rolls (deployed to devnet)
+    src/lib.rs       # roll_rarity + callback_roll_rarity instructions
 packages/
-  game-core/       # Pure game logic, no rendering dependencies
+  game-core/         # Pure game logic, no rendering dependencies
     src/
-      types/       # All interfaces and type definitions
-      hex/         # Hex grid math, coordinates, pathfinding
-      state/       # Game state management, turn flow
-      units/       # Unit definitions, movement, combat, promotions, rarity
-      settlements/ # Settlement logic, yields, buildings, adjacency, milestones
-      tribes/      # Tribe definitions, bonuses, unique content
-      tech/        # Tech tree, research
-      cultures/    # Cultures tree, policy cards
-      diplomacy/   # Diplomatic states, reputation, alliances
-      economy/     # Trade routes, yields calculation
-      greatpeople/ # Great person accumulation, actions
-      goldenage/   # Triggers, effects, tracking
-      wonders/     # Wonder definitions, construction, effects
-      lootbox/     # Lootbox placement, rewards, claiming
-      scoring/     # Floor Price calculation
-      ai/          # AI decision-making (expansion, military, diplomacy)
-  renderer/        # Pixi.js rendering layer
+      types/         # All interfaces and type definitions
+      hex/           # Hex grid math, coordinates, pathfinding
+      state/         # Game state management, turn flow
+      units/         # Unit definitions, movement, combat, promotions, rarity
+      settlements/   # Settlement logic, yields, buildings, adjacency, milestones
+      tribes/        # Tribe definitions, bonuses, unique content
+      tech/          # Tech tree, research
+      cultures/      # Cultures tree, policy cards
+      diplomacy/     # Diplomatic states, reputation, alliances
+      economy/       # Trade routes, yields calculation
+      greatpeople/   # Great person accumulation, actions
+      goldenage/     # Triggers, effects, tracking
+      wonders/       # Wonder definitions, construction, effects
+      lootbox/       # Lootbox placement, rewards, claiming
+      scoring/       # Floor Price calculation
+      ai/            # AI decision-making (expansion, military, diplomacy)
+  renderer/          # Pixi.js rendering layer
     src/
-      scenes/      # Game scene, menu scene
-      sprites/     # Sprite management, atlases, rarity borders
-      hex/         # Hex tile rendering, fog of war, lootbox icons
-      ui/          # In-game HUD components
-  app/             # Vite PWA entry point
+      scenes/        # Game scene, menu scene
+      sprites/       # Sprite management, atlases, rarity borders
+      hex/           # Hex tile rendering, fog of war, lootbox icons
+      ui/            # In-game HUD components
+  app/               # Vite PWA entry point
     src/
-      context/     # GameContext for state management
-      hooks/       # useGame, useCurrentPlayer, useSelectedSettlement
-      components/  # React components for menus/UI chrome
+      context/       # GameContext for state management
+      hooks/         # useGame, useCurrentPlayer, useSelectedSettlement
+      components/    # React components for menus/UI chrome
         production/  # ProductionPanel, ProductionQueue, ItemCard, AvailableItems
-      wallet/      # Solana wallet integration (not yet implemented)
-      storage/     # IndexedDB save/load (not yet implemented)
+      magicblock/    # MagicBlock integration (VRF client, config, SOAR)
+      wallet/        # Solana wallet integration (SolanaProvider, WalletButton)
+      storage/       # IndexedDB save/load (not yet implemented)
+Anchor.toml          # Anchor config (devnet, program IDs)
+Cargo.toml           # Rust workspace for programs/
 ```
 
 ## Commands
@@ -198,6 +224,12 @@ pnpm typecheck        # Check all packages
 # Linting
 pnpm lint             # ESLint all packages
 pnpm lint:fix         # Fix auto-fixable issues
+
+# Anchor (on-chain programs)
+anchor build          # Build Solana programs (then re-pin: cargo update -p blake3 --precise 1.5.5)
+anchor deploy         # Deploy to devnet
+anchor keys list      # Show program IDs
+anchor test           # Build + deploy + run tests
 ```
 
 ## Architecture Principles
@@ -703,8 +735,13 @@ When settlements level up, player chooses between two rewards.
 - Unit minting animation (rarity reveal)
 
 **Phase 13: Blockchain Integration**
-- Solana wallet connection (@solana/wallet-adapter)
-- MagicBlock VRF for provably fair rarity rolls
+- ✅ Solana wallet connection (`packages/app/src/wallet/`)
+- ✅ VRF on-chain program deployed to devnet (`programs/vrf-rarity/`)
+- ✅ VRF TypeScript client with fallback (`packages/app/src/magicblock/vrf.ts`)
+- ✅ MagicBlock config and constants (`packages/app/src/magicblock/config.ts`)
+- Wire VRF into game: connect `VRFService` to `GameContext` unit minting flow
+- Unit minting animation: rarity reveal popup using VRF result
+- Extend VRF to lootbox rewards
 - MagicBlock SOAR for leaderboards and achievements
 - Player identity from wallet
 
@@ -762,6 +799,20 @@ Requires Smart Contracts tech. Routes managed in `TradePanel.tsx`, logic in `eco
 ### Policy Effects
 47 effects implemented across: yields (`cultures/index.ts`), combat (`combat/index.ts`), production, trade (`economy/index.ts`), unit creation (`state/index.ts`), great people (`greatpeople/index.ts`).
 
+### VRF Rarity System
+On-chain provably fair rarity rolls via MagicBlock VRF. Two-phase async pattern:
+1. Client calls `roll_rarity(nonce)` → creates PDA, CPIs into VRF oracle
+2. Oracle callback fills `rarity_result` PDA with verified randomness → rarity tier
+- Anchor program: `programs/vrf-rarity/src/lib.rs`
+- TS service: `packages/app/src/magicblock/vrf.ts` (`OnChainVRFService` / `LocalVRFService`)
+- Config: `packages/app/src/magicblock/config.ts`
+- PDA seeds: `[b"rarity", player_pubkey, nonce_u64_le]`
+- `createVRFService(provider?)` picks on-chain vs local based on wallet state
+- Current `rollRarity()` in `units/index.ts` uses deterministic RNG; VRF replaces this for on-chain verification
+
 ## TODO
 
 - **Rivers:** Currently per-tile, needs edge-based river system. See `HexTileRenderer.drawRiver()`.
+- **VRF wiring:** Connect `VRFService` into `GameContext` / `applyMintUnit()` flow in `state/index.ts`
+- **Lootbox VRF:** Extend VRF to lootbox reward rolls
+- **SOAR integration:** Leaderboards and achievements via `@magicblock-labs/soar-sdk`

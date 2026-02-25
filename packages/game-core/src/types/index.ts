@@ -534,6 +534,17 @@ export interface PlayerPolicies {
 }
 
 // =============================================================================
+// Pending Mints (units awaiting rarity reveal)
+// =============================================================================
+
+export interface PendingMint {
+  readonly settlementId: SettlementId
+  readonly unitType: UnitType
+  readonly position: HexCoord
+  readonly owner: TribeId
+}
+
+// =============================================================================
 // Player State
 // =============================================================================
 
@@ -554,6 +565,7 @@ export interface Player {
   readonly greatPeople: GreatPeopleState
   readonly goldenAge: GoldenAgeState
   readonly killCount: number
+  readonly pendingMints: readonly PendingMint[]
 }
 
 // =============================================================================
@@ -594,6 +606,7 @@ export type GameAction =
   | { type: 'START_PRODUCTION'; settlementId: SettlementId; item: ProductionItem }
   | { type: 'CANCEL_PRODUCTION'; settlementId: SettlementId; queueIndex: number }
   | { type: 'PURCHASE'; settlementId: SettlementId; itemType: 'unit' | 'building'; itemId: string }
+  | { type: 'MINT_UNIT'; settlementId: SettlementId; index: number; rarity?: UnitRarity }
   | { type: 'START_RESEARCH'; techId: TechId }
   | { type: 'START_CULTURE'; cultureId: CultureId }
   | { type: 'SELECT_POLICY'; choice: 'a' | 'b' }

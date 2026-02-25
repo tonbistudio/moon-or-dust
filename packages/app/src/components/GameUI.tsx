@@ -1,10 +1,12 @@
 // HUD overlay container for game UI elements
 
-import { useState, useMemo } from 'react'
-import type { TechId, CultureId, HexCoord, Unit, SettlementId, PolicyId, PromotionId, UnitId } from '@tribes/game-core'
-import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion, canLevelUp, calculateFloorPriceBreakdown } from '@tribes/game-core'
+import { useState, useMemo, useCallback } from 'react'
+import type { TechId, CultureId, HexCoord, Unit, SettlementId, PolicyId, PromotionId, UnitId, PendingMint } from '@tribes/game-core'
+import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion, canLevelUp, calculateFloorPriceBreakdown, getPendingMints } from '@tribes/game-core'
 import { useGame, useCurrentPlayer, useSelectedSettlement, useSelectedUnit } from '../hooks/useGame'
 import { useGameContext } from '../context/GameContext'
+import { OnChainVRFService } from '../magicblock/vrf'
+import { WalletButton } from '../wallet/WalletButton'
 import { SettlementPanel } from './SettlementPanel'
 import { UnitActionsPanel } from './UnitActionsPanel'
 import { TechTreePanel } from './tech'
@@ -22,6 +24,7 @@ import { WarConfirmationPopup } from './WarConfirmationPopup'
 import { MilestonePanel } from './MilestonePanel'
 import { HexTooltip } from './HexTooltip'
 import { PromotionSelectionPopup } from './PromotionSelectionPopup'
+import { MintPopup } from './MintPopup'
 import { Tooltip, TooltipHeader, TooltipSection, TooltipRow, TooltipDivider } from './Tooltip'
 
 interface GameUIProps {
@@ -45,6 +48,8 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
     cancelWarAttack,
     canSwapPolicies,
     events,
+    vrfService,
+    nextVRFNonce,
   } = useGameContext()
   const currentPlayer = useCurrentPlayer()
   const selectedSettlement = useSelectedSettlement()
@@ -53,6 +58,11 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
   const [showCulturePanel, setShowCulturePanel] = useState(false)
   const [showPolicyPanel, setShowPolicyPanel] = useState(false)
   const [unitPendingPromotion, setUnitPendingPromotion] = useState<Unit | null>(null)
+  // Track ongoing mint animations so popup persists until Continue is clicked
+  const [activeMint, setActiveMint] = useState<{
+    pendingMint: PendingMint
+    total: number
+  } | null>(null)
 
   // Memoize valid attack targets based only on selectedUnit (not full state)
   // This prevents recalculating targets on every state change
@@ -81,6 +91,29 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
     }
     return null
   }, [state])
+
+  // Find pending mints for current player
+  // If activeMint is set, use that (animation in progress)
+  // Otherwise check for new pending mints in state
+  const pendingMintInfo = useMemo(() => {
+    // If there's an active mint animation, show that
+    if (activeMint) {
+      return {
+        mint: activeMint.pendingMint,
+        total: activeMint.total,
+        isAnimating: true,
+      }
+    }
+    // Otherwise check for pending mints in game state
+    if (!state) return null
+    const mints = getPendingMints(state)
+    if (mints.length === 0) return null
+    return {
+      mint: mints[0]!,
+      total: mints.length,
+      isAnimating: false,
+    }
+  }, [state, activeMint])
 
   if (!state || !currentPlayer) return null
 
@@ -147,6 +180,61 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
       setShowPolicyPanel(true)
       setShowCulturePanel(false)
     }
+  }
+
+  // Whether VRF is using on-chain verification (wallet connected)
+  const isOnChainVRF = vrfService instanceof OnChainVRFService
+
+  // Handle minting a pending unit — async to support VRF polling
+  const handleMintUnit = useCallback(async (): Promise<Unit | null> => {
+    if (!pendingMintInfo) return null
+    // Capture mint info BEFORE dispatching so popup persists during animation
+    setActiveMint({
+      pendingMint: pendingMintInfo.mint,
+      total: pendingMintInfo.total,
+    })
+
+    // Request VRF rarity roll (on-chain or local fallback)
+    const nonce = nextVRFNonce()
+    const { resultPDA } = await vrfService.requestRarityRoll(nonce)
+
+    // Wait for VRF result — LocalVRFService resolves immediately,
+    // OnChainVRFService polls until oracle callback fulfills
+    const deadline = Date.now() + 30_000
+    let vrfResult = await vrfService.getRarityResult(resultPDA)
+    while (!vrfResult?.fulfilled && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2000))
+      vrfResult = await vrfService.getRarityResult(resultPDA)
+    }
+
+    if (!vrfResult?.fulfilled) {
+      throw new Error('VRF rarity result not fulfilled within timeout')
+    }
+
+    // Dispatch MINT_UNIT with VRF-determined rarity
+    const result = dispatch({
+      type: 'MINT_UNIT',
+      settlementId: pendingMintInfo.mint.settlementId,
+      index: 0,
+      rarity: vrfResult.rarity,
+    })
+    if (result.success && result.state) {
+      // Find the newly created unit
+      const newUnits = Array.from(result.state.units.values())
+        .filter(u => u.owner === state.currentPlayer)
+      const newUnit = newUnits.find(u =>
+        u.position.q === pendingMintInfo.mint.position.q &&
+        u.position.r === pendingMintInfo.mint.position.r &&
+        u.type === pendingMintInfo.mint.unitType
+      )
+      return newUnit ?? null
+    }
+    return null
+  }, [pendingMintInfo, vrfService, nextVRFNonce, dispatch, state?.currentPlayer])
+
+  // Handle completing a mint animation (Continue button clicked)
+  const handleMintComplete = () => {
+    setActiveMint(null)
   }
 
   // Check if culture is ready for policy selection
@@ -321,6 +409,10 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
           <TradePanel currentPlayer={currentPlayer} />
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          {/* Wallet status */}
+          <WalletButton
+            style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }}
+          />
           <Tooltip
             content={(() => {
               const breakdown = calculateFloorPriceBreakdown(state, state.currentPlayer)
@@ -377,14 +469,17 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
           </Tooltip>
           <button
             onClick={handleEndTurn}
+            disabled={!!pendingMintInfo}
+            title={pendingMintInfo ? 'Mint all pending units first' : undefined}
             style={{
               padding: '8px 16px',
-              background: '#4caf50',
+              background: pendingMintInfo ? '#666' : '#4caf50',
               border: 'none',
               borderRadius: '4px',
               color: '#fff',
-              cursor: 'pointer',
+              cursor: pendingMintInfo ? 'not-allowed' : 'pointer',
               fontWeight: 'bold',
+              opacity: pendingMintInfo ? 0.7 : 1,
             }}
           >
             End Turn
@@ -449,18 +544,41 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* Lootbox Reward Popup */}
-      {pendingLootboxReward && (
+      {/*
+        === TURN-START POPUP PRIORITY ORDER ===
+        1. Minting (highest) - must complete to create units
+        2. Milestone - required choice
+        3. Policy Selection - required choice
+        4. Tech Completed - informational
+        5. Golden Age - informational
+        6. Lootbox (lowest) - informational
+
+        Each popup waits for all higher-priority popups to be resolved.
+      */}
+
+      {/* Priority 2: Milestone Selection - waits for minting */}
+      {!pendingMintInfo && settlementWithPendingMilestone && (
         <div style={{ pointerEvents: 'auto' }}>
-          <LootboxRewardPopup
-            reward={pendingLootboxReward}
-            onDismiss={dismissLootboxReward}
+          <MilestonePanel
+            settlement={settlementWithPendingMilestone}
+            onSelect={handleSelectMilestone}
+            onDismiss={() => {}}
           />
         </div>
       )}
 
-      {/* Tech Completed Popup */}
-      {pendingTechCompletion && (
+      {/* Priority 3: Policy Selection - waits for minting, milestone */}
+      {!pendingMintInfo && !settlementWithPendingMilestone && cultureReadyForSelection && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <PolicySelectionPopup
+            player={currentPlayer}
+            onConfirm={handleSelectPolicy}
+          />
+        </div>
+      )}
+
+      {/* Priority 4: Tech Completed - waits for minting, milestone, policy */}
+      {!pendingMintInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && pendingTechCompletion && (
         <div style={{ pointerEvents: 'auto' }}>
           <TechCompletedPopup
             techId={pendingTechCompletion}
@@ -473,8 +591,8 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* Golden Age Popup */}
-      {pendingGoldenAge && (
+      {/* Priority 5: Golden Age - waits for minting, milestone, policy, tech */}
+      {!pendingMintInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && !pendingTechCompletion && pendingGoldenAge && (
         <div style={{ pointerEvents: 'auto' }}>
           <GoldenAgePopup
             trigger={pendingGoldenAge.trigger}
@@ -485,7 +603,17 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* War Confirmation Popup */}
+      {/* Priority 6: Lootbox Reward - waits for all above */}
+      {!pendingMintInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && !pendingTechCompletion && !pendingGoldenAge && pendingLootboxReward && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <LootboxRewardPopup
+            reward={pendingLootboxReward}
+            onDismiss={dismissLootboxReward}
+          />
+        </div>
+      )}
+
+      {/* War Confirmation Popup - user-initiated, always shows immediately */}
       {pendingWarAttack && (
         <div style={{ pointerEvents: 'auto' }}>
           <WarConfirmationPopup
@@ -497,27 +625,6 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* Milestone Selection Panel */}
-      {settlementWithPendingMilestone && (
-        <div style={{ pointerEvents: 'auto' }}>
-          <MilestonePanel
-            settlement={settlementWithPendingMilestone}
-            onSelect={handleSelectMilestone}
-            onDismiss={() => {}}
-          />
-        </div>
-      )}
-
-      {/* Policy Selection Popup - shows when culture completes */}
-      {cultureReadyForSelection && (
-        <div style={{ pointerEvents: 'auto' }}>
-          <PolicySelectionPopup
-            player={currentPlayer}
-            onConfirm={handleSelectPolicy}
-          />
-        </div>
-      )}
-
       {/* Promotion Selection Popup - shows when clicking level up on a unit */}
       {unitPendingPromotion && (
         <div style={{ pointerEvents: 'auto' }}>
@@ -525,6 +632,22 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
             unit={unitPendingPromotion}
             onSelect={handleSelectPromotion}
             onDismiss={handleDismissPromotionPopup}
+          />
+        </div>
+      )}
+
+      {/* Mint Popup - shows when military units complete production */}
+      {/* Priority 1 (highest): Minting - must complete to create units */}
+      {pendingMintInfo && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <MintPopup
+            key={`${pendingMintInfo.mint.settlementId}-${pendingMintInfo.mint.unitType}-${pendingMintInfo.mint.position.q}-${pendingMintInfo.mint.position.r}`}
+            pendingMint={pendingMintInfo.mint}
+            index={0}
+            totalPending={pendingMintInfo.total}
+            onMint={handleMintUnit}
+            onComplete={handleMintComplete}
+            isOnChainVRF={isOnChainVRF}
           />
         </div>
       )}

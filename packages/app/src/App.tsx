@@ -6,6 +6,7 @@ import { GameCanvas } from './components/GameCanvas'
 import { GameUI } from './components/GameUI'
 import { MainMenu } from './components/MainMenu'
 import { EndGameScreen } from './components/EndGameScreen'
+import { SolanaProvider } from './wallet/SolanaProvider'
 import type { TribeName } from '@tribes/game-core'
 
 interface ZoomControls {
@@ -66,7 +67,7 @@ function GameView(): JSX.Element {
 }
 
 function GameApp(): JSX.Element {
-  const { state, startGame } = useGameContext()
+  const { state, startGame, soarService } = useGameContext()
 
   const handleStartGame = useCallback(
     (tribe: TribeName) => {
@@ -89,7 +90,7 @@ function GameApp(): JSX.Element {
   }, [])
 
   if (!state) {
-    return <MainMenu onStartGame={handleStartGame} />
+    return <MainMenu onStartGame={handleStartGame} soarService={soarService} />
   }
 
   // Check if game is over (turn exceeds maxTurns)
@@ -98,24 +99,26 @@ function GameApp(): JSX.Element {
   return (
     <>
       <GameView />
-      {isGameOver && <EndGameScreen state={state} onPlayAgain={handlePlayAgain} />}
+      {isGameOver && <EndGameScreen state={state} onPlayAgain={handlePlayAgain} soarService={soarService} />}
     </>
   )
 }
 
 export function App(): JSX.Element {
   return (
-    <GameProvider>
-      <div
-        style={{
-          width: '100vw',
-          height: '100vh',
-          overflow: 'hidden',
-          background: '#1a1a2e',
-        }}
-      >
-        <GameApp />
-      </div>
-    </GameProvider>
+    <SolanaProvider>
+      <GameProvider>
+        <div
+          style={{
+            width: '100vw',
+            height: '100vh',
+            overflow: 'hidden',
+            background: '#1a1a2e',
+          }}
+        >
+          <GameApp />
+        </div>
+      </GameProvider>
+    </SolanaProvider>
   )
 }

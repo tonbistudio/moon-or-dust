@@ -7,8 +7,11 @@ import {
   useCallback,
   useRef,
   useEffect,
+  useMemo,
   type ReactNode,
 } from 'react'
+import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react'
+import { AnchorProvider } from '@coral-xyz/anchor'
 import type {
   GameState,
   GameAction,
@@ -40,6 +43,9 @@ import {
   type ActionResult,
 } from '@tribes/game-core'
 import type { GameEvent } from '../components/EventLog'
+import { createVRFService, type VRFService } from '../magicblock/vrf'
+import { createSOARService, type SOARService } from '../magicblock/soar'
+import { AchievementTracker } from '../magicblock/achievements'
 
 // =============================================================================
 // Types
@@ -94,6 +100,14 @@ export interface GameContextValue {
 
   // Event log
   events: GameEvent[]
+
+  // VRF service (on-chain when wallet connected, local fallback otherwise)
+  vrfService: VRFService
+  /** Returns an incrementing nonce for VRF rolls */
+  nextVRFNonce: () => number
+
+  // SOAR service (on-chain when wallet connected + game registered, local fallback otherwise)
+  soarService: SOARService
 
   // Actions
   startGame: (config: GameConfig) => void
@@ -589,6 +603,26 @@ function detectGreatPersonSpawn(
 export function GameProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, internalDispatch] = useReducer(internalReducer, initialState)
 
+  // VRF service — uses on-chain VRF when wallet connected, local fallback otherwise
+  const { connection } = useConnection()
+  const anchorWallet = useAnchorWallet()
+  const anchorProvider = useMemo(() => {
+    if (!anchorWallet || !connection) return null
+    return new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' })
+  }, [anchorWallet, connection])
+  const vrfService = useMemo(() => createVRFService(anchorProvider), [anchorProvider])
+  const vrfNonceRef = useRef(Date.now())
+  const nextVRFNonce = useCallback(() => vrfNonceRef.current++, [])
+
+  // SOAR service — uses on-chain SOAR when wallet connected + game registered, local fallback otherwise
+  const soarService = useMemo(() => createSOARService(anchorProvider), [anchorProvider])
+
+  // Achievement tracker — checks game state for achievement conditions
+  const achievementTrackerRef = useRef<AchievementTracker | null>(null)
+  if (!achievementTrackerRef.current) {
+    achievementTrackerRef.current = new AchievementTracker()
+  }
+
   // Keep a ref to the latest game state to avoid stale closure issues
   const latestGameStateRef = useRef<GameState | null>(null)
   useEffect(() => {
@@ -596,6 +630,7 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
   }, [state.gameState])
 
   const startGame = useCallback((config: GameConfig) => {
+    achievementTrackerRef.current?.reset()
     internalDispatch({ type: 'START_GAME', config })
   }, [])
 
@@ -797,6 +832,22 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         }
       }
 
+      // Check achievements after state transitions
+      if (achievementTrackerRef.current) {
+        const newAchievements = achievementTrackerRef.current.checkAchievements(currentState, actingPlayer)
+        for (const achievementId of newAchievements) {
+          const achievement = currentState.players.find(p => p.tribeId === actingPlayer) ? achievementId : null
+          if (achievement) {
+            internalDispatch({
+              type: 'ADD_EVENT',
+              message: `Achievement unlocked: ${achievementId.replace(/_/g, ' ')}!`,
+              eventType: 'golden', // reuse golden event type for achievements
+              turn: currentState.turn,
+            })
+          }
+        }
+      }
+
       // Update state and ref synchronously so subsequent dispatches see the new state
       latestGameStateRef.current = currentState
 
@@ -922,6 +973,9 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     pendingWarAttack: state.pendingWarAttack,
     canSwapPolicies: state.canSwapPolicies,
     events: state.events,
+    vrfService,
+    nextVRFNonce,
+    soarService,
     startGame,
     dispatch,
     selectTile,

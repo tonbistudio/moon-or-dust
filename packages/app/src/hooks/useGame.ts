@@ -8,8 +8,9 @@ import type {
   Settlement,
   Unit,
   Player,
+  UnitRarity,
 } from '@tribes/game-core'
-import { hexKey, getCurrentPlayer } from '@tribes/game-core'
+import { hexKey, getCurrentPlayer, canAttackSettlement, areAtWar } from '@tribes/game-core'
 import { useGameContext } from '../context/GameContext'
 
 /**
@@ -142,6 +143,52 @@ export function useTileClick() {
             return
           }
           // If attack failed, continue to other logic
+        }
+      }
+
+      // If clicking on enemy settlement (with no defending units) and we have a selected combat unit, try to attack it
+      if (settlementAtTile && settlementAtTile.owner !== state.currentPlayer && selectedUnit) {
+        const attacker = state.units.get(selectedUnit)
+        if (attacker && attacker.owner === state.currentPlayer && !attacker.hasActed) {
+          // Check if we're at war and can attack
+          if (areAtWar(state, attacker.owner, settlementAtTile.owner)) {
+            const canAttackResult = canAttackSettlement(state, attacker, settlementAtTile)
+            if (canAttackResult.canAttack) {
+              const settlementHealthBefore = settlementAtTile.health
+              const result = dispatch({
+                type: 'ATTACK_SETTLEMENT',
+                attackerId: selectedUnit,
+                settlementId: settlementAtTile.id,
+              })
+              if (result.success && result.state) {
+                // Calculate damage from new state
+                const newSettlement = result.state.settlements.get(settlementAtTile.id)
+                const settlementDamage = newSettlement
+                  ? settlementHealthBefore - newSettlement.health
+                  : settlementHealthBefore
+
+                // Find tribe names for the message
+                const attackerPlayer = state.players.find(p => p.tribeId === attacker.owner)
+                const defenderPlayer = state.players.find(p => p.tribeId === settlementAtTile.owner)
+                const attackerTribe = attackerPlayer?.tribeName ?? 'Unknown'
+                const defenderTribe = defenderPlayer?.tribeName ?? 'Unknown'
+
+                // Format unit type names
+                const formatType = (type: string) => type.replace(/_/g, ' ')
+
+                // Build message
+                let message = `${attackerTribe} ${formatType(attacker.type)} attacks ${defenderTribe} ${settlementAtTile.name} (-${settlementDamage} HP)`
+                if (!newSettlement || newSettlement.health <= 0) {
+                  message += ' - CONQUERED!'
+                }
+
+                addEvent(message, 'combat')
+
+                // Keep unit selected after attack
+                return
+              }
+            }
+          }
         }
       }
 
@@ -302,6 +349,21 @@ export function useGameActions() {
     [dispatch]
   )
 
+  const mintUnit = useCallback(
+    (settlementId: SettlementId, index: number, rarity?: UnitRarity) => {
+      const action: { type: 'MINT_UNIT'; settlementId: SettlementId; index: number; rarity?: UnitRarity } = {
+        type: 'MINT_UNIT',
+        settlementId,
+        index,
+      }
+      if (rarity !== undefined) {
+        action.rarity = rarity
+      }
+      return dispatch(action)
+    },
+    [dispatch]
+  )
+
   return useMemo(
     () => ({
       dispatch,
@@ -309,7 +371,8 @@ export function useGameActions() {
       startProduction,
       cancelProduction,
       purchase,
+      mintUnit,
     }),
-    [dispatch, endTurn, startProduction, cancelProduction, purchase]
+    [dispatch, endTurn, startProduction, cancelProduction, purchase, mintUnit]
   )
 }

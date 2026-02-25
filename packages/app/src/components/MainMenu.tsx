@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import type { TribeName } from '@tribes/game-core'
 import { TRIBE_DEFINITIONS, PLAYABLE_TRIBES } from '@tribes/game-core'
+import { WalletButton } from '../wallet/WalletButton'
+import { LeaderboardPanel } from './LeaderboardPanel'
+import type { SOARService } from '../magicblock/soar'
 
 interface TribeCardProps {
   tribe: typeof TRIBE_DEFINITIONS[TribeName]
@@ -231,9 +234,11 @@ function TribeCard({ tribe, available, onSelect }: TribeCardProps): JSX.Element 
 
 interface MainMenuProps {
   onStartGame: (tribe: TribeName) => void
+  soarService: SOARService
 }
 
-export function MainMenu({ onStartGame }: MainMenuProps): JSX.Element {
+export function MainMenu({ onStartGame, soarService }: MainMenuProps): JSX.Element {
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
   const tribes = Object.values(TRIBE_DEFINITIONS)
 
   const playableTribeNames = PLAYABLE_TRIBES.map(t => t.name)
@@ -253,8 +258,39 @@ export function MainMenu({ onStartGame }: MainMenuProps): JSX.Element {
         paddingBottom: '40px',
         overflowY: 'auto',
         boxSizing: 'border-box',
+        position: 'relative',
       }}
     >
+      {/* Wallet button and leaderboard */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '16px',
+          right: '16px',
+          zIndex: 10,
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center',
+        }}
+      >
+        <button
+          onClick={() => setShowLeaderboard(true)}
+          style={{
+            padding: '8px 16px',
+            background: '#2a2a4a',
+            border: '1px solid #4a4a8a',
+            borderRadius: '6px',
+            color: '#ccc',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 600,
+          }}
+        >
+          Leaderboard
+        </button>
+        <WalletButton />
+      </div>
+
       {/* Logo */}
       <img
         src="/assets/moon-or-dust-logo.svg"
@@ -308,6 +344,14 @@ export function MainMenu({ onStartGame }: MainMenuProps): JSX.Element {
           />
         ))}
       </div>
+
+      {/* Leaderboard overlay */}
+      {showLeaderboard && (
+        <LeaderboardPanel
+          soarService={soarService}
+          onClose={() => setShowLeaderboard(false)}
+        />
+      )}
     </div>
   )
 }

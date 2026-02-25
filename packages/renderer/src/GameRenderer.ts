@@ -275,6 +275,12 @@ export class GameRenderer {
     const prevState = this.currentState
     this.currentState = state
 
+    // Detect if this is a new game (different seed = new game)
+    const isNewGame = prevState && prevState.seed !== state.seed
+    if (isNewGame) {
+      console.log('[GameRenderer] New game detected, resetting state')
+    }
+
     // Update reachable hexes for movement range display
     this.hexRenderer.setReachableHexes(options?.reachableHexes ?? new Set())
     this.hexRenderer.setAttackTargetHexes(options?.attackTargetHexes ?? new Set())
@@ -297,10 +303,22 @@ export class GameRenderer {
     // Update hex tiles (adds tileContainer to worldContainer)
     this.hexRenderer.update(state, this.worldContainer)
 
-    // Set up z-order on first update: tiles -> units -> overlays
-    if (!prevState) {
-      this.worldContainer.addChild(this.unitRenderer.getContainer())
-      this.worldContainer.addChild(this.hexRenderer.getOverlayContainer())
+    // Set up z-order on first update OR on new game: tiles -> units -> overlays
+    if (!prevState || isNewGame) {
+      // Ensure proper container hierarchy
+      const unitContainer = this.unitRenderer.getContainer()
+      const overlayContainer = this.hexRenderer.getOverlayContainer()
+
+      // Remove and re-add to ensure correct z-order
+      if (unitContainer.parent === this.worldContainer) {
+        this.worldContainer.removeChild(unitContainer)
+      }
+      if (overlayContainer.parent === this.worldContainer) {
+        this.worldContainer.removeChild(overlayContainer)
+      }
+
+      this.worldContainer.addChild(unitContainer)
+      this.worldContainer.addChild(overlayContainer)
     }
 
     // Update unit selection
@@ -309,8 +327,8 @@ export class GameRenderer {
     // Update units with rarity borders
     this.unitRenderer.update(state, state.currentPlayer)
 
-    // Center camera on player's starting units if first update
-    if (!prevState) {
+    // Center camera on player's starting units if first update or new game
+    if (!prevState || isNewGame) {
       this.centerOnPlayerUnits()
     }
   }

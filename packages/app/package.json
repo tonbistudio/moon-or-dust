@@ -11,11 +11,18 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@magicblock-labs/soar-sdk": "^0.1.23",
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-wallets": "^0.19.37",
+    "@solana/web3.js": "^1.98.4",
     "@tribes/game-core": "workspace:*",
     "@tribes/renderer": "workspace:*",
+    "idb": "^8.0.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "idb": "^8.0.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",
@@ -24,6 +31,7 @@
     "@vitejs/plugin-react": "^4.2.0",
     "typescript": "^5.3.2",
     "vite": "^5.0.0",
+    "vite-plugin-node-polyfills": "^0.25.0",
     "vite-plugin-pwa": "^0.17.0"
   }
 }

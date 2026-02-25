@@ -1,11 +1,15 @@
 // End game screen showing final Floor Price rankings
 
+import { useState } from 'react'
 import type { GameState, TribeId, TribeName } from '@tribes/game-core'
 import { calculatePolicyFloorPriceBonus } from '@tribes/game-core'
+import type { SOARService } from '../magicblock/soar'
+import { LeaderboardPanel } from './LeaderboardPanel'
 
 interface EndGameScreenProps {
   state: GameState
   onPlayAgain: () => void
+  soarService: SOARService
 }
 
 // Tribe display info
@@ -132,7 +136,11 @@ const CATEGORY_INFO: Record<string, { label: string; icon: string; color: string
   policies: { label: 'Policies', icon: '📜', color: '#14b8a6' },
 }
 
-export function EndGameScreen({ state, onPlayAgain }: EndGameScreenProps): JSX.Element {
+export function EndGameScreen({ state, onPlayAgain, soarService }: EndGameScreenProps): JSX.Element {
+  const [scoreSubmitted, setScoreSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
+
   // Calculate rankings
   const rankings = state.players
     .map((player) => {
@@ -424,15 +432,79 @@ export function EndGameScreen({ state, onPlayAgain }: EndGameScreenProps): JSX.E
           </div>
         </div>
 
-        {/* Play Again button */}
+        {/* Action buttons */}
         <div
           style={{
             padding: '16px 24px 24px',
             borderTop: '1px solid #222',
             display: 'flex',
             justifyContent: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
           }}
         >
+          {/* Submit Score button */}
+          {humanPlayer && !scoreSubmitted && (
+            <button
+              onClick={async () => {
+                setSubmitting(true)
+                await soarService.submitScore(humanPlayer.total)
+                setScoreSubmitted(true)
+                setSubmitting(false)
+              }}
+              disabled={submitting}
+              style={{
+                padding: '14px 32px',
+                background: submitting
+                  ? '#555'
+                  : 'linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%)',
+                border: 'none',
+                borderRadius: '8px',
+                color: submitting ? '#999' : '#000',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: submitting ? 'wait' : 'pointer',
+              }}
+            >
+              {submitting ? 'Submitting...' : 'Submit Score'}
+            </button>
+          )}
+
+          {/* Score submitted confirmation */}
+          {scoreSubmitted && (
+            <div
+              style={{
+                padding: '14px 32px',
+                background: 'rgba(34, 197, 94, 0.15)',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                borderRadius: '8px',
+                color: '#22c55e',
+                fontSize: '14px',
+                fontWeight: 600,
+              }}
+            >
+              Score Submitted!
+            </div>
+          )}
+
+          {/* Leaderboard button */}
+          <button
+            onClick={() => setShowLeaderboard(true)}
+            style={{
+              padding: '14px 32px',
+              background: 'linear-gradient(180deg, #2a2a4a 0%, #1a1a3a 100%)',
+              border: '1px solid #4a4a8a',
+              borderRadius: '8px',
+              color: '#ccc',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Leaderboard
+          </button>
+
+          {/* Play Again button */}
           <button
             onClick={onPlayAgain}
             style={{
@@ -459,6 +531,15 @@ export function EndGameScreen({ state, onPlayAgain }: EndGameScreenProps): JSX.E
           </button>
         </div>
       </div>
+
+      {/* Leaderboard overlay */}
+      {showLeaderboard && (
+        <LeaderboardPanel
+          soarService={soarService}
+          onClose={() => setShowLeaderboard(false)}
+          {...(humanPlayer ? { currentScore: humanPlayer.total } : {})}
+        />
+      )}
 
       {/* CSS animations */}
       <style>{`

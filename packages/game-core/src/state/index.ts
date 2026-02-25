@@ -4,9 +4,11 @@ import type {
   GameState,
   GameAction,
   Player,
+  Unit,
   TribeId,
   PlayerId,
   UnitId,
+  UnitRarity,
   SettlementId,
   HexMap,
   DiplomacyState,
@@ -27,6 +29,7 @@ import type {
   DiplomaticRelation,
   PolicyId,
   BuildingId,
+  PendingMint,
 } from '../types'
 import { hexKey } from '../hex'
 import { startWonderConstruction, canBuildWonder, completeWonder } from '../wonders'
@@ -202,6 +205,7 @@ export function createPlayer(tribeId: TribeId, tribeName: TribeName, isHuman: bo
     greatPeople: getInitialGreatPeopleState(),
     goldenAge: INITIAL_GOLDEN_AGE_STATE,
     killCount: 0,
+    pendingMints: [],
   }
 }
 
@@ -437,6 +441,9 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
     case 'PURCHASE':
       return applyPurchase(state, action.settlementId, action.itemType, action.itemId)
 
+    case 'MINT_UNIT':
+      return applyMintUnit(state, action.settlementId, action.index, action.rarity)
+
     case 'START_RESEARCH':
       return applyStartResearch(state, action.techId)
 
@@ -486,6 +493,16 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
 
 function applyEndTurn(state: GameState): ActionResult {
   const currentPlayer = state.currentPlayer
+
+  // Block if human player has pending mints
+  const player = state.players.find((p) => p.tribeId === currentPlayer)
+  if (player?.isHuman && player.pendingMints.length > 0) {
+    return {
+      success: false,
+      error: `You have ${player.pendingMints.length} unit(s) awaiting minting`,
+    }
+  }
+
   let newState = state
 
   // Process production for all settlements owned by current player
@@ -638,53 +655,42 @@ function handleCompletedProduction(
 
   switch (item.type) {
     case 'unit': {
-      // Spawn unit at settlement
       const unitType = item.id as UnitType
-      let unit = createUnit({
-        type: unitType,
-        owner: settlement.owner,
-        position: settlement.position,
-      })
+      const def = UNIT_DEFINITIONS[unitType]
 
-      // Get player for policy bonuses
-      const player = state.players.find((p) => p.tribeId === settlement.owner)
-      if (player) {
-        // Apply cavalry_movement policy bonus (+movement for cavalry units)
-        const cavalryTypes: UnitType[] = ['horseman', 'knight', 'tank']
-        if (cavalryTypes.includes(unitType)) {
-          const cavalryBonus = calculatePolicyCavalryMovementBonus(player)
-          if (cavalryBonus > 0) {
-            unit = {
-              ...unit,
-              maxMovement: unit.maxMovement + cavalryBonus,
-              movementRemaining: unit.movementRemaining + cavalryBonus,
-            }
-          }
-        }
-
-        // Apply free_promotion policy bonus (military units start with a free promotion)
-        const freePromotions = getPolicyFreePromotions(player)
-        const def = UNIT_DEFINITIONS[unitType]
-        if (freePromotions > 0 && !def.isCivilian && def.canAttack) {
-          // Grant free promotions
-          for (let i = 0; i < freePromotions; i++) {
-            const available = getAvailablePromotions(unit)
-            if (available.length > 0) {
-              // Pick a random tier 1 promotion
-              const tier1Promotions = available.filter((p) => p.tier === 1)
-              if (tier1Promotions.length > 0) {
-                const randomPromotion = tier1Promotions[Math.floor(Math.random() * tier1Promotions.length)]!
-                const promoted = applyPromotion(unit, randomPromotion.id)
-                if (promoted) {
-                  unit = promoted
-                }
-              }
-            }
-          }
-        }
+      // Civilian units (settler, builder) spawn immediately with common rarity
+      if (def.isCivilian) {
+        const unit = createUnit({
+          type: unitType,
+          owner: settlement.owner,
+          position: settlement.position,
+          rarity: 'common',
+        })
+        return addUnit(state, unit)
       }
 
-      return addUnit(state, unit)
+      // Military units go to pendingMints for the minting experience
+      // Rarity will be rolled LIVE when user clicks Mint button
+      const pendingMint: PendingMint = {
+        settlementId,
+        unitType,
+        position: settlement.position,
+        owner: settlement.owner,
+      }
+
+      const playerIndex = state.players.findIndex((p) => p.tribeId === settlement.owner)
+      if (playerIndex === -1) return state
+
+      const player = state.players[playerIndex]!
+      const updatedPlayer: Player = {
+        ...player,
+        pendingMints: [...player.pendingMints, pendingMint],
+      }
+
+      const newPlayers = [...state.players]
+      newPlayers[playerIndex] = updatedPlayer
+
+      return { ...state, players: newPlayers }
     }
 
     case 'building': {
@@ -1288,6 +1294,125 @@ function applyPurchase(
   return { success: true, state: newState }
 }
 
+/**
+ * Processes a pending mint - rolls rarity LIVE and creates the unit
+ * If rarity is provided (e.g. from VRF), it is used directly instead of local RNG.
+ */
+function applyMintUnit(
+  state: GameState,
+  settlementId: SettlementId,
+  index: number,
+  rarity?: UnitRarity
+): ActionResult {
+  const currentTribe = state.currentPlayer
+  const playerIndex = state.players.findIndex((p) => p.tribeId === currentTribe)
+  if (playerIndex === -1) {
+    return { success: false, error: 'Player not found' }
+  }
+
+  const player = state.players[playerIndex]!
+
+  // Validate index
+  if (index < 0 || index >= player.pendingMints.length) {
+    return { success: false, error: 'Invalid mint index' }
+  }
+
+  const pendingMint = player.pendingMints[index]!
+
+  // Verify ownership
+  if (pendingMint.owner !== currentTribe) {
+    return { success: false, error: 'Pending mint not owned by current player' }
+  }
+
+  // Verify settlement matches
+  if (pendingMint.settlementId !== settlementId) {
+    return { success: false, error: 'Settlement ID mismatch' }
+  }
+
+  // Create unit with rarity - either VRF-provided or local RNG
+  let unit: Unit
+  if (rarity) {
+    // Use VRF-provided rarity directly
+    unit = createUnit({
+      type: pendingMint.unitType,
+      owner: pendingMint.owner,
+      position: pendingMint.position,
+      rarity, // VRF-determined rarity
+    })
+  } else {
+    // Roll rarity LIVE using deterministic RNG
+    // Seed includes: base seed + turn + settlement + index for determinism
+    const rng = createRng(
+      state.seed +
+        state.turn * 10000 +
+        settlementId.charCodeAt(0) * 100 +
+        index
+    )
+    unit = createUnit({
+      type: pendingMint.unitType,
+      owner: pendingMint.owner,
+      position: pendingMint.position,
+      rng, // This triggers live rarity roll in createUnit
+    })
+  }
+
+  // Apply policy bonuses (same as original handleCompletedProduction)
+  // Apply cavalry_movement policy bonus (+movement for cavalry units)
+  const cavalryTypes: UnitType[] = ['horseman', 'knight', 'tank']
+  if (cavalryTypes.includes(pendingMint.unitType)) {
+    const cavalryBonus = calculatePolicyCavalryMovementBonus(player)
+    if (cavalryBonus > 0) {
+      unit = {
+        ...unit,
+        maxMovement: unit.maxMovement + cavalryBonus,
+        movementRemaining: unit.movementRemaining + cavalryBonus,
+      }
+    }
+  }
+
+  // Apply free_promotion policy bonus (military units start with a free promotion)
+  const freePromotions = getPolicyFreePromotions(player)
+  const def = UNIT_DEFINITIONS[pendingMint.unitType]
+  if (freePromotions > 0 && !def.isCivilian && def.canAttack) {
+    // Grant free promotions
+    for (let i = 0; i < freePromotions; i++) {
+      const available = getAvailablePromotions(unit)
+      if (available.length > 0) {
+        // Pick a random tier 1 promotion
+        const tier1Promotions = available.filter((p) => p.tier === 1)
+        if (tier1Promotions.length > 0) {
+          const randomPromotion =
+            tier1Promotions[Math.floor(Math.random() * tier1Promotions.length)]!
+          const promoted = applyPromotion(unit, randomPromotion.id)
+          if (promoted) {
+            unit = promoted
+          }
+        }
+      }
+    }
+  }
+
+  // Add unit to game
+  let newState = addUnit(state, unit)
+
+  // Remove from pending mints
+  const newPendingMints = [...player.pendingMints]
+  newPendingMints.splice(index, 1)
+
+  const updatedPlayer: Player = {
+    ...player,
+    pendingMints: newPendingMints,
+  }
+
+  const newPlayers = [...newState.players]
+  newPlayers[playerIndex] = updatedPlayer
+
+  return {
+    success: true,
+    state: { ...newState, players: newPlayers },
+  }
+}
+
 // =============================================================================
 // Floor Price Calculation
 // =============================================================================
@@ -1490,6 +1615,26 @@ export function updateAllFloorPrices(state: GameState): GameState {
     ...state,
     floorPrices: newFloorPrices,
   }
+}
+
+// =============================================================================
+// Pending Mints Helpers
+// =============================================================================
+
+/**
+ * Checks if current player has pending mints
+ */
+export function hasPendingMints(state: GameState): boolean {
+  const player = state.players.find((p) => p.tribeId === state.currentPlayer)
+  return player ? player.pendingMints.length > 0 : false
+}
+
+/**
+ * Gets pending mints for current player
+ */
+export function getPendingMints(state: GameState): readonly PendingMint[] {
+  const player = state.players.find((p) => p.tribeId === state.currentPlayer)
+  return player?.pendingMints ?? []
 }
 
 // =============================================================================

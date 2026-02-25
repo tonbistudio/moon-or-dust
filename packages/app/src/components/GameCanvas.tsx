@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useMemo } from 'react'
 import { GameRenderer, type GameRendererConfig } from '@tribes/renderer'
 import type { HexCoord } from '@tribes/game-core'
-import { getReachableHexes, getValidTargets, hexKey } from '@tribes/game-core'
+import { getReachableHexes, getValidTargets, getAttackableSettlements, hexKey } from '@tribes/game-core'
 import { useGame, useTileClick, useTileRightClick, useSelectedSettlement } from '../hooks/useGame'
 
 interface GameCanvasProps {
@@ -43,13 +43,27 @@ export function GameCanvas({
     return new Set(getReachableHexes(state, unit).keys())
   }, [state, selectedUnit])
 
-  // Calculate attack targets for selected unit
+  // Calculate attack targets for selected unit (includes both enemy units and settlements)
   const attackTargetHexes = useMemo(() => {
     if (!state || !selectedUnit) return new Set<string>()
     const unit = state.units.get(selectedUnit)
     if (!unit || unit.owner !== state.currentPlayer) return new Set<string>()
-    const targets = getValidTargets(state, unit)
-    return new Set(targets.map((t) => hexKey(t.position)))
+
+    const hexes = new Set<string>()
+
+    // Add enemy units
+    const unitTargets = getValidTargets(state, unit)
+    for (const target of unitTargets) {
+      hexes.add(hexKey(target.position))
+    }
+
+    // Add enemy settlements
+    const settlementTargets = getAttackableSettlements(state, unit)
+    for (const settlement of settlementTargets) {
+      hexes.add(hexKey(settlement.position))
+    }
+
+    return hexes
   }, [state, selectedUnit])
 
   // Store latest state in ref so we can apply it after init
