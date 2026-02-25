@@ -1,8 +1,8 @@
 // HUD overlay container for game UI elements
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { TechId, CultureId, HexCoord, Unit, SettlementId, PolicyId, PromotionId, UnitId, PendingMint } from '@tribes/game-core'
-import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion, canLevelUp, calculateFloorPriceBreakdown, getPendingMints } from '@tribes/game-core'
+import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion, canLevelUp, calculateFloorPriceBreakdown, getPendingMints, getAvailableTechs, getAvailableCultures, getGreatPersonDefinition } from '@tribes/game-core'
 import { useGame, useCurrentPlayer, useSelectedSettlement, useSelectedUnit } from '../hooks/useGame'
 import { useGameContext } from '../context/GameContext'
 import { OnChainVRFService } from '../magicblock/vrf'
@@ -50,6 +50,8 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
     events,
     vrfService,
     nextVRFNonce,
+    selectUnit,
+    selectSettlement,
   } = useGameContext()
   const currentPlayer = useCurrentPlayer()
   const selectedSettlement = useSelectedSettlement()
@@ -242,6 +244,69 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
     return currentPlayer ? isCultureReadyForCompletion(currentPlayer) : false
   }, [currentPlayer])
 
+  // --- QOL: Tab key unit cycling ---
+  const anyModalOpen = showTechTree || showCulturePanel || showPolicyPanel ||
+    !!pendingMintInfo || !!settlementWithPendingMilestone || cultureReadyForSelection ||
+    !!pendingTechCompletion || !!pendingGoldenAge || !!pendingLootboxReward ||
+    !!pendingWarAttack || !!unitPendingPromotion
+
+  useEffect(() => {
+    if (!state || !currentPlayer) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || anyModalOpen) return
+      e.preventDefault()
+
+      const actionableUnits = Array.from(state.units.values())
+        .filter(u => u.owner === state.currentPlayer && u.movementRemaining > 0 && !u.hasActed)
+        .sort((a, b) => a.id.localeCompare(b.id))
+
+      if (actionableUnits.length === 0) return
+
+      const currentIdx = selectedUnit
+        ? actionableUnits.findIndex(u => u.id === selectedUnit.id)
+        : -1
+      const nextIdx = (currentIdx + 1) % actionableUnits.length
+      selectUnit(actionableUnits[nextIdx]!.id as UnitId)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [state, currentPlayer, selectedUnit, anyModalOpen, selectUnit])
+
+  // --- QOL: End Turn readiness issues ---
+  const readinessIssues = useMemo(() => {
+    if (!state || !currentPlayer) return []
+    const issues: string[] = []
+
+    // Units with moves left
+    const idleUnits = Array.from(state.units.values())
+      .filter(u => u.owner === state.currentPlayer && u.movementRemaining > 0 && !u.hasActed)
+    if (idleUnits.length > 0) issues.push(`${idleUnits.length} unit${idleUnits.length > 1 ? 's' : ''} with moves left`)
+
+    // Idle settlements
+    const idleSettlements = Array.from(state.settlements.values())
+      .filter(s => s.owner === state.currentPlayer && s.productionQueue.length === 0)
+    if (idleSettlements.length > 0) issues.push(`${idleSettlements.length} idle settlement${idleSettlements.length > 1 ? 's' : ''}`)
+
+    // No tech selected
+    if (!currentPlayer.currentResearch && getAvailableTechs(currentPlayer).length > 0) {
+      issues.push('No tech selected')
+    }
+
+    // No culture selected
+    if (!currentPlayer.currentCulture && getAvailableCultures(currentPlayer).length > 0) {
+      issues.push('No culture selected')
+    }
+
+    return issues
+  }, [state, currentPlayer])
+
+  // --- QOL: Idle settlements for top bar indicator ---
+  const idleSettlementsList = useMemo(() => {
+    if (!state) return []
+    return Array.from(state.settlements.values())
+      .filter(s => s.owner === state.currentPlayer && s.productionQueue.length === 0)
+  }, [state])
+
   // Current research info
   const currentResearch = currentPlayer.currentResearch ? getTech(currentPlayer.currentResearch) : null
   const progress = getResearchProgress(currentPlayer)
@@ -407,6 +472,75 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
 
           {/* Trade Panel */}
           <TradePanel currentPlayer={currentPlayer} />
+
+          {/* Idle Settlement Alert */}
+          {idleSettlementsList.length > 0 && (
+            <Tooltip
+              content={
+                <div>
+                  <TooltipHeader title="Idle Settlements" />
+                  <TooltipDivider />
+                  {idleSettlementsList.map(s => (
+                    <TooltipRow key={s.id} label={s.name} value="No production" valueColor="#ff9800" />
+                  ))}
+                </div>
+              }
+              position="below"
+              maxWidth={200}
+            >
+              <button
+                onClick={() => {
+                  if (idleSettlementsList.length > 0) {
+                    selectSettlement(idleSettlementsList[0]!.id as SettlementId)
+                  }
+                }}
+                style={{
+                  padding: '4px 10px',
+                  background: 'rgba(255, 152, 0, 0.2)',
+                  border: '1px solid #ff9800',
+                  borderRadius: '4px',
+                  color: '#ff9800',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {idleSettlementsList.length} idle
+              </button>
+            </Tooltip>
+          )}
+
+          {/* Active Buff Indicators */}
+          {currentPlayer.activeBuffs.length > 0 && currentPlayer.activeBuffs.map((buff, i) => {
+            const colorMap: Record<string, string> = {
+              gold: '#ffd54f', alpha: '#64b5f6', vibes: '#ba68c8',
+              trade: '#4caf50', production: '#ff9800',
+            }
+            const color = colorMap[buff.yield ?? buff.type] ?? '#90a4ae'
+            const gpDef = getGreatPersonDefinition(buff.source)
+            return (
+              <Tooltip
+                key={i}
+                content={gpDef ? `${gpDef.name}: +${buff.percent}% ${buff.yield ?? buff.type}` : `+${buff.percent}% ${buff.yield ?? buff.type}`}
+                position="below"
+              >
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    background: `${color}22`,
+                    border: `1px solid ${color}`,
+                    borderRadius: '4px',
+                    color,
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  +{buff.percent}% {buff.yield ?? buff.type} ({buff.turnsRemaining}t)
+                </span>
+              </Tooltip>
+            )
+          })}
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
           {/* Wallet status */}
@@ -467,23 +601,39 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
               Floor Price: {state.floorPrices.get(state.currentPlayer) ?? 0}
             </span>
           </Tooltip>
-          <button
-            onClick={handleEndTurn}
-            disabled={!!pendingMintInfo}
-            title={pendingMintInfo ? 'Mint all pending units first' : undefined}
-            style={{
-              padding: '8px 16px',
-              background: pendingMintInfo ? '#666' : '#4caf50',
-              border: 'none',
-              borderRadius: '4px',
-              color: '#fff',
-              cursor: pendingMintInfo ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              opacity: pendingMintInfo ? 0.7 : 1,
-            }}
+          <Tooltip
+            content={
+              pendingMintInfo ? 'Mint all pending units first' :
+              readinessIssues.length > 0 ? (
+                <div>
+                  <TooltipHeader title="Unfinished Business" />
+                  <TooltipDivider />
+                  {readinessIssues.map((issue, i) => (
+                    <TooltipRow key={i} label={issue} value="!" valueColor="#ff9800" />
+                  ))}
+                </div>
+              ) : 'All done — ready to end turn'
+            }
+            position="below"
+            maxWidth={220}
           >
-            End Turn
-          </button>
+            <button
+              onClick={handleEndTurn}
+              disabled={!!pendingMintInfo}
+              style={{
+                padding: '8px 16px',
+                background: pendingMintInfo ? '#666' : readinessIssues.length > 0 ? '#ff9800' : '#4caf50',
+                border: 'none',
+                borderRadius: '4px',
+                color: '#fff',
+                cursor: pendingMintInfo ? 'not-allowed' : 'pointer',
+                fontWeight: 'bold',
+                opacity: pendingMintInfo ? 0.7 : 1,
+              }}
+            >
+              {readinessIssues.length > 0 ? `End Turn (${readinessIssues.length}!)` : 'End Turn'}
+            </button>
+          </Tooltip>
         </div>
       </div>
 
