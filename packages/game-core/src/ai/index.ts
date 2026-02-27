@@ -1704,6 +1704,61 @@ function generateCultureAction(
 /**
  * Find the best location for a new settlement
  */
+/**
+ * Score a hex for settlement founding quality.
+ * Used by both immediate and distant location searches.
+ */
+function scoreSettlementLocation(
+  state: GameState,
+  coord: HexCoord,
+  existingSettlements: { position: HexCoord }[]
+): number {
+  const key = hexKey(coord)
+  const tile = state.map.tiles.get(key)
+  if (!tile) return -Infinity
+
+  let score = 0
+
+  // Base terrain scores
+  if (tile.terrain === 'grassland') score += 3
+  else if (tile.terrain === 'plains') score += 2
+  else if (tile.terrain === 'hills') score += 2
+  else if (tile.terrain === 'forest') score += 1
+
+  // River bonus
+  if (tile.feature === 'river') score += 3
+
+  // Resource bonus
+  if (tile.resource) score += 2
+
+  // Distance from other settlements (want some spread)
+  let minDistToSettlement = Infinity
+  for (const settlement of existingSettlements) {
+    const dist = hexDistance(coord, settlement.position)
+    minDistToSettlement = Math.min(minDistToSettlement, dist)
+  }
+  if (minDistToSettlement >= 3 && minDistToSettlement <= 5) {
+    score += 3
+  } else if (minDistToSettlement < 3) {
+    score -= 5
+  }
+
+  // Check neighboring tiles for resources
+  const neighbors = hexNeighbors(coord)
+  for (const neighbor of neighbors) {
+    const neighborKey = `${neighbor.q},${neighbor.r}`
+    const neighborTile = state.map.tiles.get(neighborKey)
+    if (neighborTile?.resource) score += 1
+    if (neighborTile?.feature === 'river') score += 0.5
+  }
+
+  return score
+}
+
+/**
+ * Find the best settlement location within the settler's reachable hexes this turn.
+ * Returns null if no valid founding location is reachable.
+ */
 function findBestSettlementLocation(
   state: GameState,
   settler: Unit
@@ -1720,47 +1775,7 @@ function findBestSettlementLocation(
 
     if (!canFoundSettlement(state, coord)) continue
 
-    // Score the location
-    let score = 0
-
-    // Check terrain quality
-    const tile = state.map.tiles.get(key)
-    if (!tile) continue
-
-    // Base terrain scores
-    if (tile.terrain === 'grassland') score += 3
-    else if (tile.terrain === 'plains') score += 2
-    else if (tile.terrain === 'hills') score += 2
-    else if (tile.terrain === 'forest') score += 1
-
-    // River bonus
-    if (tile.feature === 'river') score += 3
-
-    // Resource bonus
-    if (tile.resource) score += 2
-
-    // Distance from other settlements (want some spread)
-    let minDistToSettlement = Infinity
-    for (const settlement of existingSettlements) {
-      const dist = hexDistance(coord, settlement.position)
-      minDistToSettlement = Math.min(minDistToSettlement, dist)
-    }
-    // Prefer 3-5 tiles away from other settlements
-    if (minDistToSettlement >= 3 && minDistToSettlement <= 5) {
-      score += 3
-    } else if (minDistToSettlement < 3) {
-      score -= 5 // Too close
-    }
-
-    // Check neighboring tiles for resources
-    const neighbors = hexNeighbors(coord)
-    for (const neighbor of neighbors) {
-      const neighborKey = `${neighbor.q},${neighbor.r}`
-      const neighborTile = state.map.tiles.get(neighborKey)
-      if (neighborTile?.resource) score += 1
-      if (neighborTile?.feature === 'river') score += 0.5
-    }
-
+    const score = scoreSettlementLocation(state, coord, existingSettlements)
     if (score > bestScore) {
       bestScore = score
       bestLocation = coord
@@ -1771,12 +1786,68 @@ function findBestSettlementLocation(
 }
 
 /**
+ * Search a wide area (up to 12 tiles) for the best settlement location,
+ * then return the reachable hex closest to it so the settler makes progress.
+ */
+function findDistantSettlementTarget(
+  state: GameState,
+  settler: Unit
+): HexCoord | null {
+  const existingSettlements = Array.from(state.settlements.values())
+  const searchRadius = 12
+
+  // Search all tiles within radius for a good founding spot
+  let bestTarget: HexCoord | null = null
+  let bestScore = -Infinity
+
+  for (let dq = -searchRadius; dq <= searchRadius; dq++) {
+    for (let dr = -searchRadius; dr <= searchRadius; dr++) {
+      const coord: HexCoord = { q: settler.position.q + dq, r: settler.position.r + dr }
+      if (hexDistance(settler.position, coord) > searchRadius) continue
+
+      if (!canFoundSettlement(state, coord)) continue
+
+      const score = scoreSettlementLocation(state, coord, existingSettlements)
+      if (score > bestScore) {
+        bestScore = score
+        bestTarget = coord
+      }
+    }
+  }
+
+  if (!bestTarget) return null
+
+  // Now find the reachable hex this turn that gets closest to the target
+  const reachable = getReachableHexes(state, settler)
+  let bestStep: HexCoord | null = null
+  let bestDist = Infinity
+
+  for (const [key] of reachable) {
+    const [q, r] = key.split(',').map(Number)
+    const hex: HexCoord = { q: q!, r: r! }
+    const dist = hexDistance(hex, bestTarget)
+
+    // Don't stay in place
+    if (hex.q === settler.position.q && hex.r === settler.position.r) continue
+
+    if (dist < bestDist) {
+      bestDist = dist
+      bestStep = hex
+    }
+  }
+
+  return bestStep
+}
+
+/**
  * Generate action for settler units
  */
 function generateSettlerAction(
   state: GameState,
   settler: Unit
 ): GameAction | null {
+  if (settler.movementRemaining <= 0) return null
+
   // Check if we can found at current location
   if (canFoundSettlement(state, settler.position)) {
     // Good enough location? Found immediately if few settlements
@@ -1791,24 +1862,20 @@ function generateSettlerAction(
     }
   }
 
-  // Find best location
-  const bestLocation = findBestSettlementLocation(state, settler)
+  // Try to find a good location within reach this turn
+  const nearbyLocation = findBestSettlementLocation(state, settler)
 
-  if (bestLocation) {
-    // If at best location, found
-    if (bestLocation.q === settler.position.q && bestLocation.r === settler.position.r) {
-      return {
-        type: 'FOUND_SETTLEMENT',
-        settlerId: settler.id,
-      }
+  if (nearbyLocation) {
+    if (nearbyLocation.q === settler.position.q && nearbyLocation.r === settler.position.r) {
+      return { type: 'FOUND_SETTLEMENT', settlerId: settler.id }
     }
+    return { type: 'MOVE_UNIT', unitId: settler.id, to: nearbyLocation }
+  }
 
-    // Move toward best location
-    return {
-      type: 'MOVE_UNIT',
-      unitId: settler.id,
-      to: bestLocation,
-    }
+  // No good spot in reach — move toward the best distant location
+  const stepToward = findDistantSettlementTarget(state, settler)
+  if (stepToward) {
+    return { type: 'MOVE_UNIT', unitId: settler.id, to: stepToward }
   }
 
   return null
