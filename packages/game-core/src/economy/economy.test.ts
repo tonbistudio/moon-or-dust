@@ -67,26 +67,27 @@ describe('Trade Route System', () => {
   })
 
   describe('getTradeRouteCapacity', () => {
-    it('returns 0 when no trade techs researched', () => {
-      expect(getTradeRouteCapacity(state, humanTribeId)).toBe(0)
-    })
-
-    it('returns 1 when Smart Contracts researched', () => {
-      state = addTechToPlayer(state, humanTribeId, 'smart_contracts' as TechId)
+    it('returns 1 when no trade techs researched (Monkes +1 tribe bonus)', () => {
+      // Monkes have extraTradeRouteCapacity: 1 tribe bonus
       expect(getTradeRouteCapacity(state, humanTribeId)).toBe(1)
     })
 
-    it('returns 2 when Smart Contracts + Currency researched', () => {
+    it('returns 2 when Smart Contracts researched (Monkes +1 tribe bonus)', () => {
       state = addTechToPlayer(state, humanTribeId, 'smart_contracts' as TechId)
-      state = addTechToPlayer(state, humanTribeId, 'currency' as TechId)
       expect(getTradeRouteCapacity(state, humanTribeId)).toBe(2)
     })
 
-    it('returns 3 when Smart Contracts + Currency + Lending researched', () => {
+    it('returns 3 when Smart Contracts + Currency researched (Monkes +1 tribe bonus)', () => {
+      state = addTechToPlayer(state, humanTribeId, 'smart_contracts' as TechId)
+      state = addTechToPlayer(state, humanTribeId, 'currency' as TechId)
+      expect(getTradeRouteCapacity(state, humanTribeId)).toBe(3)
+    })
+
+    it('returns 4 when Smart Contracts + Currency + Lending researched (Monkes +1 tribe bonus)', () => {
       state = addTechToPlayer(state, humanTribeId, 'smart_contracts' as TechId)
       state = addTechToPlayer(state, humanTribeId, 'currency' as TechId)
       state = addTechToPlayer(state, humanTribeId, 'lending' as TechId)
-      expect(getTradeRouteCapacity(state, humanTribeId)).toBe(3)
+      expect(getTradeRouteCapacity(state, humanTribeId)).toBe(4)
     })
   })
 
@@ -191,7 +192,8 @@ describe('Trade Route System', () => {
     })
 
     it('returns null when capacity is full', () => {
-      // Create first route (fills capacity of 1)
+      // Monkes have +1 bonus capacity, so with Smart Contracts we have 2 total
+      // Create first route
       const settlement2 = createSettlement({
         owner: humanTribeId,
         position: { q: 7, r: 7 },
@@ -205,10 +207,9 @@ describe('Trade Route System', () => {
 
       const result1 = createTradeRoute(state, origin.id, settlement2.id)
       expect(result1).not.toBeNull()
-
       state = result1!.state
 
-      // Try to create second route
+      // Create second route (fills capacity of 2)
       const settlement3 = createSettlement({
         owner: humanTribeId,
         position: { q: 8, r: 8 },
@@ -217,7 +218,19 @@ describe('Trade Route System', () => {
       state = addSettlement(state, settlement3)
 
       const result2 = createTradeRoute(state, origin.id, settlement3.id)
-      expect(result2).toBeNull()
+      expect(result2).not.toBeNull()
+      state = result2!.state
+
+      // Try to create third route — should fail
+      const settlement4 = createSettlement({
+        owner: humanTribeId,
+        position: { q: 9, r: 9 },
+        isCapital: false,
+      })
+      state = addSettlement(state, settlement4)
+
+      const result3 = createTradeRoute(state, origin.id, settlement4.id)
+      expect(result3).toBeNull()
     })
   })
 
@@ -360,7 +373,8 @@ describe('Trade Route System', () => {
       const summary = getTradeRouteSummary(state, humanTribeId)
 
       expect(summary.unlocked).toBe(false)
-      expect(summary.capacity).toBe(0)
+      // Monkes have +1 trade route capacity bonus even without techs
+      expect(summary.capacity).toBe(1)
       expect(summary.active).toBe(0)
       expect(summary.forming).toBe(0)
       expect(summary.income).toBe(0)
@@ -372,7 +386,8 @@ describe('Trade Route System', () => {
       const summary = getTradeRouteSummary(state, humanTribeId)
 
       expect(summary.unlocked).toBe(true)
-      expect(summary.capacity).toBe(1)
+      // Monkes +1 bonus + Smart Contracts +1 = 2
+      expect(summary.capacity).toBe(2)
     })
   })
 })

@@ -2,7 +2,7 @@
 // Checks game state transitions for achievement conditions
 
 import type { GameState, TribeId } from '@tribes/game-core'
-import { ACHIEVEMENTS } from './soar'
+import { ACHIEVEMENTS, type SOARService } from './soar'
 
 // ---------------------------------------------------------------------------
 // Achievement condition checkers
@@ -46,6 +46,11 @@ const ACHIEVEMENT_CHECKERS: Record<string, AchievementChecker> = {
 export class AchievementTracker {
   private unlocked = new Set<string>()
 
+  /** Set the SOAR service for on-chain achievement submission (currently unused — only minting triggers wallet) */
+  setSoarService(_service: SOARService): void {
+    // No-op: on-chain submission disabled to avoid unwanted wallet popups
+  }
+
   /** Check all achievements against current state. Returns newly unlocked achievement IDs. */
   checkAchievements(state: GameState, tribeId: TribeId): string[] {
     const newlyUnlocked: string[] = []
@@ -59,10 +64,7 @@ export class AchievementTracker {
         this.unlocked.add(achievement.id)
         newlyUnlocked.push(achievement.id)
 
-        // Submit to SOAR (fire-and-forget)
         console.log(`[Achievement] Unlocked: ${achievement.title}`)
-        // TODO: Submit to SOAR after game registration
-        // this.soarService.submitAchievement(achievement.id)
       }
     }
 

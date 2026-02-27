@@ -331,6 +331,32 @@ export function UnitActionsPanel({ unit, onLevelUp }: UnitActionsPanelProps): JS
             No special actions available
           </div>
         )}
+
+        {/* Sleep/Wake toggle */}
+        {unit.type !== 'great_person' && (
+          <button
+            onClick={() => {
+              if (unit.sleeping) {
+                dispatch({ type: 'WAKE_UNIT', unitId: unit.id })
+              } else {
+                dispatch({ type: 'SLEEP_UNIT', unitId: unit.id })
+              }
+            }}
+            style={{
+              padding: '6px 12px',
+              background: unit.sleeping ? '#1e40af' : '#374151',
+              border: `1px solid ${unit.sleeping ? '#3b82f6' : '#4b5563'}`,
+              borderRadius: '4px',
+              color: unit.sleeping ? '#93c5fd' : '#9ca3af',
+              cursor: 'pointer',
+              fontSize: '12px',
+              marginTop: '4px',
+              width: '100%',
+            }}
+          >
+            {unit.sleeping ? 'Wake Unit' : 'Sleep Until Woken'}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -481,15 +507,11 @@ function GreatPersonPanel({ unit }: { unit: Unit }): JSX.Element | null {
 // Helper to get category color
 function getCategoryColor(category: string): string {
   switch (category) {
-    case 'combat': return '#ef4444'
     case 'alpha': return '#3b82f6'
     case 'gold': return '#eab308'
     case 'vibes': return '#ec4899'
     case 'trade': return '#22c55e'
     case 'production': return '#f97316'
-    case 'kills': return '#dc2626'
-    case 'captures': return '#7c3aed'
-    case 'tribal': return '#a855f7'
     default: return '#9ca3af'
   }
 }
@@ -497,15 +519,11 @@ function getCategoryColor(category: string): string {
 // Helper to format category name
 function formatCategory(category: string): string {
   switch (category) {
-    case 'combat': return 'Combat'
     case 'alpha': return 'Research'
     case 'gold': return 'Economy'
     case 'vibes': return 'Culture'
     case 'trade': return 'Trade'
     case 'production': return 'Production'
-    case 'kills': return 'Military'
-    case 'captures': return 'Conquest'
-    case 'tribal': return 'Tribal'
     default: return category
   }
 }
@@ -520,12 +538,6 @@ function getThresholdDescription(definition: ReturnType<typeof getGreatPersonDef
       return `Accumulate ${threshold.amount} ${threshold.stat}`
     case 'count':
       return `${threshold.amount} ${threshold.stat.replace(/([A-Z])/g, ' $1').toLowerCase()}`
-    case 'combo':
-      return `Build ${threshold.wonders} wonders and ${threshold.buildings} buildings`
-    case 'tribal':
-      const building = String(threshold.building).replace(/_/g, ' ')
-      const culture = String(threshold.culture).replace(/_/g, ' ')
-      return `Build ${building} + unlock ${culture}`
     default:
       return 'Special condition'
   }
@@ -535,75 +547,29 @@ function getThresholdDescription(definition: ReturnType<typeof getGreatPersonDef
 function getEffectDescription(effect: { type: string; [key: string]: unknown }): string {
   switch (effect.type) {
     case 'instant_gold':
-      const goldAmount = effect.amount as number
-      const bonusYield = effect.bonusYield as { yield: string; percent: number; turns: number } | undefined
-      if (bonusYield) {
-        return `Gain ${goldAmount} Gold and +${bonusYield.percent}% ${bonusYield.yield} for ${bonusYield.turns} turns`
-      }
-      return `Instantly gain ${goldAmount} Gold`
-
-    case 'instant_vibes':
-      return `Instantly gain ${effect.amount} Vibes`
-
-    case 'instant_research':
-      return 'Instantly complete current research'
-
-    case 'instant_culture':
-      return 'Instantly complete current culture research'
+      return `Instantly gain ${effect.amount as number} Gold`
 
     case 'instant_building':
       return 'Instantly produce next tech building'
 
-    case 'free_trade_route':
-      return 'Gain a free trade route'
-
-    case 'free_units':
-      const count = effect.count as number
-      const bonusVibes = effect.bonusVibes as number | undefined
-      if (bonusVibes) {
-        return `Spawn ${count} free combat units and gain ${bonusVibes} Vibes`
-      }
-      return `Spawn ${count} free combat units at capital`
-
-    case 'border_expansion':
+    case 'border_expansion': {
       const tiles = effect.tiles as number
       const vibesBonus = effect.bonusVibes as number | undefined
       if (vibesBonus) {
         return `Expand borders by ${tiles} tiles and gain ${vibesBonus} Vibes`
       }
       return `Expand borders by ${tiles} tiles`
-
-    case 'area_promotion':
-      return `All friendly units within ${effect.radius} tiles gain a free promotion`
-
-    case 'area_combat_buff':
-      return `All friendly units within ${effect.radius} tiles gain +${effect.percent}% combat for ${effect.turns} turns`
-
-    case 'area_defense_buff': {
-      const defEffect = effect as unknown as { radius: number; percent: number; turns: number; includePromotion?: boolean }
-      if (defEffect.includePromotion) {
-        return `All friendly units within ${defEffect.radius} tiles gain +${defEffect.percent}% defense for ${defEffect.turns} turns + free promotion`
-      }
-      return `All friendly units within ${defEffect.radius} tiles gain +${defEffect.percent}% defense for ${defEffect.turns} turns`
     }
 
     case 'yield_buff': {
-      const yieldBuff = effect as unknown as { yield?: string; yields?: Array<{ yield: string; percent: number }>; percent?: number; turns: number }
-      if (yieldBuff.yields) {
-        const parts = yieldBuff.yields.map(y => `+${y.percent}% ${y.yield}`)
-        return `${parts.join(' and ')} for ${yieldBuff.turns} turns`
-      }
+      const yieldBuff = effect as unknown as { yield: string; percent: number; turns: number }
       return `+${yieldBuff.percent}% ${yieldBuff.yield} for ${yieldBuff.turns} turns`
     }
 
     case 'production_buff': {
       const prodBuff = effect as unknown as { percent: number; turns: number; target: string }
-      const targetText = prodBuff.target === 'all' ? 'all production' : `${prodBuff.target} production`
-      return `+${prodBuff.percent}% ${targetText} for ${prodBuff.turns} turns`
+      return `+${prodBuff.percent}% ${prodBuff.target} production for ${prodBuff.turns} turns`
     }
-
-    case 'golden_age':
-      return `Trigger a ${effect.turns}-turn Golden Age`
 
     default:
       return 'Special effect'

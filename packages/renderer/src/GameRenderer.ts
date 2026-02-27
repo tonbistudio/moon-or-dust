@@ -76,7 +76,7 @@ export class GameRenderer {
       canvas: this.config.canvas,
       width: this.config.width,
       height: this.config.height,
-      backgroundColor: 0x1a1a2e,
+      backgroundColor: 0x0a1628,
       antialias: true,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,

@@ -345,6 +345,7 @@ describe('Reward Effects', () => {
         unitType: string
       }
       expect(details.type).toBe('og_holder')
+      // OG Holder always spawns warriors
       expect(details.unitType).toBe('warrior')
 
       // Check unit was added

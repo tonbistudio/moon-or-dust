@@ -31,6 +31,7 @@ import {
 } from '../wonders'
 import { TECH_DEFINITIONS } from '../tech'
 import { getGoldenAgeYieldBonus } from '../goldenage'
+import { getActiveYieldBuffPercent, getActiveTradeBuffPercent, getActiveProductionBuffPercent } from '../greatpeople'
 import { getPlayerTribeBonuses, getUnitProductionBonus } from '../tribes'
 import {
   getPolicy,
@@ -130,6 +131,12 @@ export function calculateGoldIncome(state: GameState, tribeId: TribeId): {
     const goldBonus = getGoldenAgeYieldBonus(player, 'gold')
     if (goldBonus > 0) {
       grossGold = Math.floor(grossGold * (1 + goldBonus))
+    }
+
+    // Apply great person gold buff
+    const goldBuffPercent = getActiveYieldBuffPercent(player, 'gold')
+    if (goldBuffPercent > 0) {
+      grossGold = Math.floor(grossGold * (1 + goldBuffPercent / 100))
     }
   }
 
@@ -493,6 +500,12 @@ export function calculateTradeRouteIncome(state: GameState, tribeId: TribeId): n
     const percentBonus = calculatePolicyTradeGoldPercent(player)
     if (percentBonus > 0) {
       baseIncome = Math.floor(baseIncome * (1 + percentBonus / 100))
+    }
+
+    // Apply great person trade buff (Watch King's Rolex Romp)
+    const tradeBuffPercent = getActiveTradeBuffPercent(player)
+    if (tradeBuffPercent > 0) {
+      baseIncome = Math.floor(baseIncome * (1 + tradeBuffPercent / 100))
     }
   }
 
@@ -990,6 +1003,12 @@ export function processProduction(
     if (productionBonus > 0) {
       totalProduction = Math.floor(totalProduction * (1 + productionBonus))
     }
+
+    // Apply great person production buff (Blocksmyth's Mercury Blast)
+    const prodBuffPercent = getActiveProductionBuffPercent(player)
+    if (prodBuffPercent > 0) {
+      totalProduction = Math.floor(totalProduction * (1 + prodBuffPercent / 100))
+    }
   }
 
   const completed: ProductionItem[] = []
@@ -1275,6 +1294,8 @@ function getBuildingDescription(building: BuildingDefinition): string {
   if (y.vibes > 0) parts.push(`+${y.vibes} Vibes`)
   if (y.production > 0) parts.push(`+${y.production} Prod`)
   if (y.growth > 0) parts.push(`+${y.growth} Growth`)
+
+  if (building.defenseBonus) parts.push(`+${building.defenseBonus}% settlement defense`)
 
   if (building.adjacencyBonus) {
     const adj = building.adjacencyBonus

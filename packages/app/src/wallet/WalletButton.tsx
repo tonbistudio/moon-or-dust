@@ -15,6 +15,14 @@ export function WalletButton({ style }: WalletButtonProps): JSX.Element {
       }}
       className="tribes-wallet-button"
     >
+      <style>{`
+        .tribes-wallet-button .wallet-adapter-button {
+          max-width: 160px !important;
+          overflow: hidden !important;
+          white-space: nowrap !important;
+          text-overflow: ellipsis !important;
+        }
+      `}</style>
       <WalletMultiButton
         style={{
           backgroundColor: '#2a2a4a',

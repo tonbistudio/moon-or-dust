@@ -59,7 +59,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     cost: 25,
     prerequisites: { techs: ['coding' as TechId], cultures: [] },
     // +1 trade route capacity, unlocks Candy Machine wonder
-    unlocks: {},
+    unlocks: { features: ['Trade Routes'] },
   },
   archery: {
     id: 'archery' as TechId,
@@ -146,7 +146,7 @@ export const TECH_DEFINITIONS: Record<string, Tech> = {
     cost: 60,
     prerequisites: { techs: ['smart_contracts' as TechId], cultures: [] },
     // +1 trade route capacity, Degen Mints Cabana (Monkes unique)
-    unlocks: { buildings: ['degen_mints_cabana' as BuildingId] },
+    unlocks: { buildings: ['degen_mints_cabana' as BuildingId], features: ['+1 Trade Route'] },
   },
   matrica: {
     id: 'matrica' as TechId,

@@ -10,7 +10,7 @@ import type {
 import { hexNeighbors, hexKey, hexRange } from '../hex'
 import { createUnit } from '../units'
 import { updateSettlement, calculateTileYields } from '../settlements'
-import { getTribeById } from '../tribes'
+import { getTribeForPlayer } from '../tribes'
 
 // =============================================================================
 // Milestone Definitions
@@ -302,7 +302,7 @@ function spawnFreeUnit(
 
 function spawnUniqueUnit(state: GameState, settlement: Settlement): GameState {
   // Get the tribe's unique unit type from the tribe definition
-  const tribe = getTribeById(settlement.owner)
+  const tribe = getTribeForPlayer(state, settlement.owner)
   const uniqueUnitType = tribe?.uniqueUnitType ?? 'warrior'
 
   console.log(`[Milestone] Spawning unique unit for ${settlement.owner}: ${uniqueUnitType}`)

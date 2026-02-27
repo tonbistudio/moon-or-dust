@@ -127,6 +127,9 @@ export function TechCard({
           {tech.unlocks.buildings && tech.unlocks.buildings.length > 0 && (
             <span>Buildings +{tech.unlocks.buildings.length}</span>
           )}
+          {tech.unlocks.features && tech.unlocks.features.length > 0 && (
+            <span style={{ color: '#26c6da' }}>{tech.unlocks.features.join(', ')}</span>
+          )}
         </div>
       )}
     </button>

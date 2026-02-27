@@ -27,8 +27,9 @@ import {
   canDeclareWar,
   canProposePeace,
   canProposeAlliance,
+  areAtWar,
 } from '../diplomacy'
-import { getTribeById } from '../tribes'
+import { getTribeForPlayer } from '../tribes'
 import {
   getAvailableWonders,
   canBuildWonder,
@@ -49,7 +50,13 @@ import {
   getPlayerTradeRoutes,
   getAvailableTradeDestinations,
   canCreateTradeRoute,
+  getAvailableUnits,
 } from '../economy'
+import {
+  getAvailableBuildings,
+  type BuildingDefinition,
+} from '../buildings'
+import { type UnitDefinition } from '../units'
 
 // =============================================================================
 // AI Configuration
@@ -163,10 +170,12 @@ const TRIBE_PERSONALITIES: Record<TribeName, TribePersonality> = {
 /**
  * Get the AI personality for a tribe
  */
-export function getTribePersonality(tribeId: TribeId): TribePersonality {
-  const tribe = getTribeById(tribeId)
-  if (!tribe) return DEFAULT_PERSONALITY
-  return TRIBE_PERSONALITIES[tribe.name] ?? DEFAULT_PERSONALITY
+export function getTribePersonality(tribeId: TribeId, state?: GameState): TribePersonality {
+  if (state) {
+    const tribe = getTribeForPlayer(state, tribeId)
+    if (tribe) return TRIBE_PERSONALITIES[tribe.name] ?? DEFAULT_PERSONALITY
+  }
+  return DEFAULT_PERSONALITY
 }
 
 // =============================================================================
@@ -238,11 +247,28 @@ function isCivilianUnit(type: string): boolean {
 function generateDiplomacyActions(state: GameState, tribeId: TribeId): GameAction[] {
   const actions: GameAction[] = []
   const aiStrength = calculateMilitaryStrength(state, tribeId)
-  const personality = getTribePersonality(tribeId)
+  const personality = getTribePersonality(tribeId, state)
+
+  // Process any pending peace proposals directed at this AI
+  for (const proposal of state.pendingPeaceProposals) {
+    if (proposal.target !== tribeId) continue // Only process proposals targeting us
+    const proposer = proposal.proposer
+    if (areAtWar(state, tribeId, proposer)) {
+      const targetStrength = calculateMilitaryStrength(state, proposer)
+      // Use existing peace consideration logic to decide
+      const wouldSeekPeace = considerPeace(state, tribeId, proposer, aiStrength, targetStrength, personality)
+      actions.push({
+        type: 'RESPOND_PEACE_PROPOSAL',
+        target: proposer,
+        accept: wouldSeekPeace !== null, // Accept if AI would also seek peace
+      })
+    }
+  }
 
   // Check each other player for diplomacy opportunities
   for (const player of state.players) {
     if (player.tribeId === tribeId) continue
+    if (player.eliminatedOnTurn !== undefined) continue // Skip eliminated tribes
 
     const targetId = player.tribeId
     const stance = getStance(state, tribeId, targetId)
@@ -464,7 +490,7 @@ function considerAlliance(
  */
 export function generateAIActions(state: GameState, tribeId: TribeId): GameAction[] {
   const actions: GameAction[] = []
-  const personality = getTribePersonality(tribeId)
+  const personality = getTribePersonality(tribeId, state)
 
   // =========================================================================
   // Phase 1: Strategic Decisions
@@ -496,6 +522,22 @@ export function generateAIActions(state: GameState, tribeId: TribeId): GameActio
     actions.push(wonderAction)
   }
 
+  // Building production for idle settlements
+  const buildingActions = generateBuildingProductionActions(state, tribeId)
+  actions.push(...buildingActions)
+
+  // Track which settlements got building actions so unit production fills the rest
+  const buildingActionSettlements = new Set<string>()
+  for (const action of buildingActions) {
+    if (action.type === 'START_PRODUCTION') {
+      buildingActionSettlements.add(action.settlementId)
+    }
+  }
+
+  // Unit production for remaining idle settlements
+  const unitActions = generateUnitProductionActions(state, tribeId, buildingActionSettlements)
+  actions.push(...unitActions)
+
   // =========================================================================
   // Phase 3: Unit Actions
   // =========================================================================
@@ -506,17 +548,27 @@ export function generateAIActions(state: GameState, tribeId: TribeId): GameActio
   )
 
   // Process units by priority:
+  // 0. Great People (use immediately — one-time high-value actions)
   // 1. Settlers (expansion is important)
   // 2. Military units (combat/defense)
   // 3. Scouts (exploration/lootbox hunting)
   // 4. Builders (improvements)
 
+  const greatPeople = aiUnits.filter(u => u.type === 'great_person')
   const settlers = aiUnits.filter(u => u.type === 'settler')
   const military = aiUnits.filter(u => !isCivilianUnit(u.type))
   const scouts = aiUnits.filter(u => u.type === 'scout')
   const builders = aiUnits.filter(u => u.type === 'builder')
 
-  // Process settlers first
+  // Process great people first — use their one-time action immediately
+  for (const gp of greatPeople) {
+    const gpData = state.greatPersons?.get(gp.id)
+    if (gpData && !gpData.hasActed) {
+      actions.push({ type: 'USE_GREAT_PERSON', unitId: gp.id })
+    }
+  }
+
+  // Process settlers
   for (const settler of settlers) {
     if (settler.hasActed) continue
     const action = generateSettlerAction(state, settler)
@@ -853,7 +905,7 @@ function scoreWonderForAI(
   wonder: WonderDefinition,
   personality: TribePersonality
 ): number {
-  const tribe = getTribeById(tribeId)
+  const tribe = getTribeForPlayer(state, tribeId)
   if (!tribe) return 0
 
   let score = 0
@@ -930,7 +982,7 @@ export function getAIWonderPriorities(
   state: GameState,
   tribeId: TribeId
 ): Array<{ wonder: WonderDefinition; score: number; bestSettlement: SettlementId | null }> {
-  const personality = getTribePersonality(tribeId)
+  const personality = getTribePersonality(tribeId, state)
   const availableWonders = getAvailableWonders(state)
 
   // Get AI settlements
@@ -1023,6 +1075,317 @@ export function generateWonderAction(
 }
 
 // =============================================================================
+// Building Production AI
+// =============================================================================
+
+/**
+ * Building category scoring weights per tribe (higher = AI prefers this category)
+ */
+const BUILDING_CATEGORY_PRIORITIES: Record<TribeName, Record<string, number>> = {
+  monkes: { economy: 1.3, tech: 0.9, vibes: 1.4, production: 0.9, military: 0.7 },
+  geckos: { economy: 0.9, tech: 1.4, vibes: 0.8, production: 1.0, military: 1.1 },
+  degods: { economy: 1.2, tech: 0.8, vibes: 0.7, production: 1.1, military: 1.4 },
+  cets: { economy: 1.0, tech: 0.9, vibes: 1.3, production: 1.3, military: 0.7 },
+  gregs: { economy: 1.0, tech: 1.0, vibes: 1.0, production: 1.0, military: 1.0 },
+  dragonz: { economy: 1.0, tech: 1.0, vibes: 1.0, production: 1.0, military: 1.0 },
+}
+
+/**
+ * Score a building for AI prioritization based on tribe personality and game state
+ */
+function scoreBuildingForAI(
+  state: GameState,
+  tribeId: TribeId,
+  building: BuildingDefinition
+): number {
+  const tribe = getTribeForPlayer(state, tribeId)
+  if (!tribe) return 0
+
+  let score = 0
+
+  // Base score from yields
+  const y = building.baseYields
+  score += (y.gold + y.growth) * 2 + y.alpha * 2 + y.vibes * 1.5 + y.production * 2.5
+
+  // If building has no direct yields, give a base score from cost (defensive buildings, etc.)
+  if (score === 0) {
+    score = 2
+  }
+
+  // Category priority based on tribe
+  const categoryPriorities = BUILDING_CATEGORY_PRIORITIES[tribe.name]
+  const categoryBonus = categoryPriorities[building.category] || 1.0
+  score *= categoryBonus
+
+  // Unique tribal buildings get a bonus
+  if (building.isUnique) {
+    score *= 1.5
+  }
+
+  // Military buildings get bonus when at war
+  const enemies = getEnemies(state, tribeId)
+  const isAtWar = enemies.length > 0
+  if (building.category === 'military' && isAtWar) {
+    score *= 1.5
+  }
+
+  // Defense buildings get bonus proportional to settlement count (more to protect)
+  if (building.defenseBonus && building.defenseBonus > 0) {
+    const settlementCount = getPlayerSettlements(state, tribeId).length
+    score *= 1 + settlementCount * 0.1
+  }
+
+  // Prefer cheaper buildings early game
+  const turnFactor = Math.min(state.turn / 25, 1)
+  if (building.productionCost > 80 && turnFactor < 0.5) {
+    score *= 0.7
+  }
+
+  return score
+}
+
+/**
+ * Generate building production actions for AI settlements with empty queues.
+ * During wartime, only the capital builds infrastructure — other settlements
+ * are left idle so unit production can claim them for military units.
+ */
+function generateBuildingProductionActions(
+  state: GameState,
+  tribeId: TribeId
+): GameAction[] {
+  const actions: GameAction[] = []
+  const settlements = getPlayerSettlements(state, tribeId)
+  const enemies = getEnemies(state, tribeId)
+  const isAtWar = enemies.length > 0
+
+  for (const settlement of settlements) {
+    // Only consider settlements with empty production queues
+    if (settlement.productionQueue.length > 0) continue
+
+    // During war, only the capital builds non-military buildings;
+    // other settlements should produce military units instead
+    if (isAtWar && !settlement.isCapital) continue
+
+    const availableBuildings = getAvailableBuildings(state, settlement)
+    if (availableBuildings.length === 0) continue
+
+    // Score each building
+    let bestBuilding: BuildingDefinition | null = null
+    let bestScore = 0
+
+    for (const building of availableBuildings) {
+      const score = scoreBuildingForAI(state, tribeId, building)
+      if (score > bestScore) {
+        bestScore = score
+        bestBuilding = building
+      }
+    }
+
+    if (bestBuilding) {
+      actions.push({
+        type: 'START_PRODUCTION',
+        settlementId: settlement.id,
+        item: {
+          type: 'building',
+          id: bestBuilding.id,
+          progress: 0,
+          cost: bestBuilding.productionCost,
+        },
+      })
+    }
+  }
+
+  return actions
+}
+
+// =============================================================================
+// Unit Production AI
+// =============================================================================
+
+/**
+ * Score a military unit for AI selection based on combat efficiency and tribe preference
+ */
+function scoreMilitaryUnitForAI(
+  state: GameState,
+  tribeId: TribeId,
+  unitDef: UnitDefinition
+): number {
+  const tribe = getTribeForPlayer(state, tribeId)
+  if (!tribe) return 0
+
+  // Combat effectiveness: strength / cost ratio
+  const strength = Math.max(unitDef.baseCombatStrength, unitDef.baseRangedStrength)
+  const cost = Math.max(unitDef.productionCost, 1)
+  let score = (strength / cost) * 10
+
+  // Prefer higher-era units (stronger absolute stats)
+  score += strength * 0.5
+
+  // Tribe unique units get a bonus
+  if (unitDef.type === tribe.uniqueUnitType) {
+    score *= 1.3
+  }
+
+  return score
+}
+
+/**
+ * Generate unit production actions for AI settlements with empty queues
+ * Called after building actions, so only fills remaining idle settlements
+ */
+function generateUnitProductionActions(
+  state: GameState,
+  tribeId: TribeId,
+  buildingActionSettlements: Set<string>
+): GameAction[] {
+  const actions: GameAction[] = []
+  const settlements = getPlayerSettlements(state, tribeId)
+  const player = state.players.find(p => p.tribeId === tribeId)
+  if (!player) return actions
+
+  // Count existing units
+  const allUnits = Array.from(state.units.values()).filter(u => u.owner === tribeId)
+  const militaryUnits = allUnits.filter(u => !isCivilianUnit(u.type))
+  const settlers = allUnits.filter(u => u.type === 'settler')
+  const builders = allUnits.filter(u => u.type === 'builder')
+  const scouts = allUnits.filter(u => u.type === 'scout')
+
+  // Check if settler/builder is already in production
+  const settlerInProduction = settlements.some(s =>
+    s.productionQueue.some(item => item.type === 'unit' && item.id === 'settler')
+  )
+  const builderInProduction = settlements.some(s =>
+    s.productionQueue.some(item => item.type === 'unit' && item.id === 'builder')
+  )
+
+  // Count enemies for threat assessment
+  const enemies = getEnemies(state, tribeId)
+  const isAtWar = enemies.length > 0
+  let enemyMilitaryCount = 0
+  if (isAtWar) {
+    for (const enemyId of enemies) {
+      for (const u of state.units.values()) {
+        if (u.owner === enemyId && !isCivilianUnit(u.type)) enemyMilitaryCount++
+      }
+    }
+  }
+
+  // Available units for this tribe
+  const availableUnits = getAvailableUnits(state, tribeId)
+
+  // Military unit cap: higher during wartime so AI ramps up production
+  const militaryCap = isAtWar ? settlements.length * 5 : settlements.length * 3
+
+  for (const settlement of settlements) {
+    // Skip settlements that already have production queued (including those we just queued buildings for)
+    if (settlement.productionQueue.length > 0) continue
+    if (buildingActionSettlements.has(settlement.id)) continue
+
+    let chosenUnit: UnitDefinition | null = null
+
+    if (isAtWar) {
+      // ===== WARTIME PRIORITIES: combat units first =====
+
+      // Top priority: military units when outnumbered or below cap
+      if (!chosenUnit && militaryUnits.length < militaryCap) {
+        chosenUnit = pickBestMilitaryUnit(state, tribeId, availableUnits)
+      }
+
+      // Only build settler/builder if military is already strong
+      if (!chosenUnit && settlements.length < 3 && settlers.length === 0 && !settlerInProduction) {
+        chosenUnit = availableUnits.find(u => u.type === 'settler') ?? null
+      }
+    } else {
+      // ===== PEACETIME PRIORITIES: expand & build up =====
+
+      // Priority 1: Settler for expansion (if < 3 settlements, no settler exists, and turn < 30)
+      if (
+        settlements.length < 3 &&
+        settlers.length === 0 &&
+        !settlerInProduction &&
+        state.turn < 30
+      ) {
+        chosenUnit = availableUnits.find(u => u.type === 'settler') ?? null
+      }
+
+      // Priority 2: Builder if none exist and we have resources to improve
+      if (!chosenUnit && builders.length === 0 && !builderInProduction) {
+        // Check if there are tiles that need improvement
+        let hasImprovableTiles = false
+        for (const tile of state.map.tiles.values()) {
+          if (tile.owner === tribeId && !tile.improvement && tile.resource?.revealed) {
+            hasImprovableTiles = true
+            break
+          }
+        }
+        if (hasImprovableTiles) {
+          chosenUnit = availableUnits.find(u => u.type === 'builder') ?? null
+        }
+      }
+
+      // Priority 3: Military if below minimum (2 per settlement)
+      if (!chosenUnit && militaryUnits.length < settlements.length * 2) {
+        chosenUnit = pickBestMilitaryUnit(state, tribeId, availableUnits)
+      }
+
+      // Priority 4: Scout early game for exploration
+      if (!chosenUnit && scouts.length === 0 && state.turn < 15) {
+        chosenUnit = availableUnits.find(u => u.type === 'scout') ?? null
+      }
+
+      // Priority 5: Default to military if under cap
+      if (!chosenUnit && militaryUnits.length < militaryCap) {
+        chosenUnit = pickBestMilitaryUnit(state, tribeId, availableUnits)
+      }
+    }
+
+    if (chosenUnit) {
+      actions.push({
+        type: 'START_PRODUCTION',
+        settlementId: settlement.id,
+        item: {
+          type: 'unit',
+          id: chosenUnit.type,
+          progress: 0,
+          cost: chosenUnit.productionCost,
+        },
+      })
+    }
+  }
+
+  return actions
+}
+
+/**
+ * Pick the best military unit from available units based on tribe scoring
+ */
+function pickBestMilitaryUnit(
+  state: GameState,
+  tribeId: TribeId,
+  availableUnits: UnitDefinition[]
+): UnitDefinition | null {
+  const combatUnits = availableUnits.filter(u => !u.isCivilian && u.canAttack && u.type !== 'scout')
+
+  if (combatUnits.length === 0) {
+    // Fallback to warrior if nothing else
+    return availableUnits.find(u => u.type === 'warrior') ?? null
+  }
+
+  let bestUnit: UnitDefinition | null = null
+  let bestScore = 0
+
+  for (const unit of combatUnits) {
+    const score = scoreMilitaryUnitForAI(state, tribeId, unit)
+    if (score > bestScore) {
+      bestScore = score
+      bestUnit = unit
+    }
+  }
+
+  return bestUnit
+}
+
+// =============================================================================
 // Research AI - Tech Selection
 // =============================================================================
 
@@ -1105,7 +1468,7 @@ function scoreTechForAI(
   tech: Tech,
   personality: TribePersonality
 ): number {
-  const tribe = getTribeById(player.tribeId)
+  const tribe = getTribeForPlayer(state, player.tribeId)
   if (!tribe) return 0
 
   let score = 0
@@ -1156,7 +1519,7 @@ export function getAIResearchPriorities(
   const player = state.players.find(p => p.tribeId === tribeId)
   if (!player) return []
 
-  const personality = getTribePersonality(tribeId)
+  const personality = getTribePersonality(tribeId, state)
   const availableTechs = getAvailableTechs(player)
 
   const priorities: Array<{ tech: Tech; score: number }> = []
@@ -1244,7 +1607,7 @@ function scoreCultureForAI(
   culture: Culture,
   personality: TribePersonality
 ): number {
-  const tribe = getTribeById(player.tribeId)
+  const tribe = getTribeForPlayer(state, player.tribeId)
   if (!tribe) return 0
 
   let score = 0
@@ -1295,7 +1658,7 @@ export function getAICulturePriorities(
   const player = state.players.find(p => p.tribeId === tribeId)
   if (!player) return []
 
-  const personality = getTribePersonality(tribeId)
+  const personality = getTribePersonality(tribeId, state)
   const availableCultures = getAvailableCultures(player)
 
   const priorities: Array<{ culture: Culture; score: number }> = []
@@ -1800,7 +2163,7 @@ export function getAITradeRoutePriorities(
   const capacity = getTradeRouteCapacity(state, tribeId)
   if (currentRoutes.length >= capacity) return []
 
-  const personality = getTribePersonality(tribeId)
+  const personality = getTribePersonality(tribeId, state)
   const destinations = getAvailableTradeDestinations(state, tribeId)
 
   if (destinations.length === 0) return []
@@ -1844,7 +2207,7 @@ function generateTradeRouteAction(
   tribeId: TribeId
 ): GameAction | null {
   // Check tribe's trade priority
-  const tribe = getTribeById(tribeId)
+  const tribe = getTribeForPlayer(state, tribeId)
   if (!tribe) return null
 
   const tradePriority = TRADE_ROUTE_PRIORITIES[tribe.name] || 1.0

@@ -166,7 +166,9 @@ export interface Unit {
   readonly rarity: UnitRarity
   readonly rarityBonuses: RarityBonuses
   readonly hasActed: boolean
+  readonly sleeping: boolean // Sleep until woken — skipped by auto-cycle
   readonly buildCharges: number // Remaining build charges (for builders)
+  readonly immobilizedTurns: number // Turns remaining where movement = 0 (Stuckers debuff)
 }
 
 // =============================================================================
@@ -295,6 +297,7 @@ export interface DiplomacyState {
   readonly relations: ReadonlyMap<string, DiplomaticRelation> // key is `${tribe1}-${tribe2}`
   readonly warWeariness: ReadonlyMap<TribeId, number>
   readonly reputationModifiers: ReadonlyMap<TribeId, readonly ReputationEvent[]>
+  readonly peaceRejectionTurns: ReadonlyMap<string, number> // key `${proposer}-${target}`, value = turn rejected
 }
 
 // =============================================================================
@@ -317,39 +320,21 @@ export interface TradeRoute {
 // =============================================================================
 
 export type GreatPersonId =
-  // Universal (19)
-  | 'fxnction' | 'mert' | 'big_brain' | 'scum' | 'hge' | 'solport_tom'
-  | 'the_solstice' | 'toly' | 'dingaling' | 'john_le' | 'ravi' | 'renji'
-  | 'iced_knife' | 'raj' | 'retired_chad_dev' | 'monoliff' | 'watch_king'
-  | 'blocksmyth' | 'jpeggler'
-  // Tribal (4)
-  | 'nom' | 'frank' | 'genuine_articles' | 'peblo'
+  | 'scum' | 'mert' | 'dingaling' | 'toly'
+  | 'watch_king' | 'monoliff' | 'retired_chad_dev' | 'blocksmyth'
 
-export type GreatPersonCategory =
-  | 'combat' | 'alpha' | 'gold' | 'vibes' | 'trade'
-  | 'production' | 'kills' | 'captures' | 'tribal'
+export type GreatPersonCategory = 'alpha' | 'gold' | 'vibes' | 'trade' | 'production'
 
 export type GreatPersonThreshold =
-  | { readonly type: 'accumulator'; readonly stat: 'combat' | 'alpha' | 'gold' | 'vibes'; readonly amount: number }
-  | { readonly type: 'count'; readonly stat: 'tradeRoutes' | 'wondersBuilt' | 'buildingsBuilt' | 'kills' | 'captures'; readonly amount: number }
-  | { readonly type: 'combo'; readonly wonders: number; readonly buildings: number }
-  | { readonly type: 'tribal'; readonly building: BuildingId; readonly culture: CultureId }
+  | { readonly type: 'accumulator'; readonly stat: 'alpha' | 'gold' | 'vibes'; readonly amount: number }
+  | { readonly type: 'count'; readonly stat: 'tradeRoutes' | 'wondersBuilt'; readonly amount: number }
 
 export type GreatPersonEffect =
-  | { readonly type: 'instant_gold'; readonly amount: number; readonly bonusYield?: { yield: string; percent: number; turns: number } }
-  | { readonly type: 'instant_vibes'; readonly amount: number }
-  | { readonly type: 'instant_research' }
-  | { readonly type: 'instant_culture' }
+  | { readonly type: 'instant_gold'; readonly amount: number }
   | { readonly type: 'instant_building'; readonly buildingCategory: string }
-  | { readonly type: 'free_trade_route' }
-  | { readonly type: 'free_units'; readonly count: number; readonly unitCategory: string; readonly bonusVibes?: number }
   | { readonly type: 'border_expansion'; readonly tiles: number; readonly bonusVibes?: number }
-  | { readonly type: 'area_promotion'; readonly radius: number }
-  | { readonly type: 'area_combat_buff'; readonly radius: number; readonly percent: number; readonly turns: number }
-  | { readonly type: 'area_defense_buff'; readonly radius: number; readonly percent: number; readonly turns: number; readonly includePromotion?: boolean; readonly bonusYield?: { yield: string; percent: number } }
-  | { readonly type: 'yield_buff'; readonly yield?: string; readonly yields?: ReadonlyArray<{ yield: string; percent: number }>; readonly percent?: number; readonly turns: number }
-  | { readonly type: 'production_buff'; readonly percent: number; readonly turns: number; readonly target: 'all' | 'wonder' | 'building' }
-  | { readonly type: 'golden_age'; readonly turns: number }
+  | { readonly type: 'yield_buff'; readonly yield: string; readonly percent: number; readonly turns: number }
+  | { readonly type: 'production_buff'; readonly percent: number; readonly turns: number; readonly target: 'building' }
 
 export interface GreatPersonDefinition {
   readonly id: GreatPersonId
@@ -358,7 +343,6 @@ export interface GreatPersonDefinition {
   readonly threshold: GreatPersonThreshold
   readonly actionName: string
   readonly effect: GreatPersonEffect
-  readonly tribe?: TribeName  // Only for tribal great people
 }
 
 export interface GreatPerson {
@@ -368,15 +352,11 @@ export interface GreatPerson {
 }
 
 export interface GreatPeopleAccumulator {
-  readonly combat: number       // XP from all units
   readonly alpha: number        // Total Alpha earned
   readonly gold: number         // Total Gold earned
   readonly vibes: number        // Total Vibes earned
-  readonly kills: number        // Enemy units killed
-  readonly captures: number     // Cities captured
   readonly tradeRoutes: number  // Current active trade routes
   readonly wondersBuilt: number // Total wonders built
-  readonly buildingsBuilt: number // Total buildings built
 }
 
 export interface GreatPeopleState {
@@ -472,6 +452,7 @@ export interface TechUnlocks {
   readonly buildings?: readonly BuildingId[]
   readonly improvements?: readonly ImprovementType[]
   readonly resources?: readonly ResourceType[] // reveals these
+  readonly features?: readonly string[] // Special features unlocked (e.g. "Trade Routes")
 }
 
 export interface Tech {
@@ -545,6 +526,18 @@ export interface PendingMint {
 }
 
 // =============================================================================
+// Active Buffs (from Great People)
+// =============================================================================
+
+export interface ActiveBuff {
+  readonly source: GreatPersonId
+  readonly type: 'yield' | 'production' | 'trade'
+  readonly yield?: string       // which yield: 'alpha', 'gold', 'vibes', 'trade'
+  readonly percent: number      // e.g. 15 = +15%
+  readonly turnsRemaining: number
+}
+
+// =============================================================================
 // Player State
 // =============================================================================
 
@@ -566,6 +559,8 @@ export interface Player {
   readonly goldenAge: GoldenAgeState
   readonly killCount: number
   readonly pendingMints: readonly PendingMint[]
+  readonly activeBuffs: readonly ActiveBuff[]
+  readonly eliminatedOnTurn?: number // turn when tribe lost all settlements
 }
 
 // =============================================================================
@@ -589,6 +584,7 @@ export interface GameState {
   readonly lootboxes: readonly Lootbox[]
   readonly wonders: readonly Wonder[]
   readonly floorPrices: ReadonlyMap<TribeId, number>
+  readonly pendingPeaceProposals: readonly { readonly proposer: TribeId; readonly target: TribeId }[]
 }
 
 // =============================================================================
@@ -616,7 +612,10 @@ export type GameAction =
   | { type: 'CANCEL_TRADE_ROUTE'; routeId: TradeRouteId }
   | { type: 'USE_GREAT_PERSON'; unitId: UnitId }
   | { type: 'SWAP_POLICIES'; toSlot: PolicyId[]; toUnslot: PolicyId[] }
+  | { type: 'SLEEP_UNIT'; unitId: UnitId }
+  | { type: 'WAKE_UNIT'; unitId: UnitId }
   | { type: 'DECLARE_WAR'; target: TribeId }
   | { type: 'PROPOSE_PEACE'; target: TribeId }
+  | { type: 'RESPOND_PEACE_PROPOSAL'; target: TribeId; accept: boolean }
   | { type: 'PROPOSE_ALLIANCE'; target: TribeId }
   | { type: 'END_TURN' }

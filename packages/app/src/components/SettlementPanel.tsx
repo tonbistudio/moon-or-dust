@@ -6,6 +6,7 @@ import { calculateSettlementYieldsWithPolicies, getLevelProgress, BUILDING_DEFIN
 import { useGame } from '../hooks/useGame'
 import { ProductionPanel } from './production'
 import { YieldIcon } from './YieldIcon'
+import { Tooltip, TooltipHeader, TooltipDivider, TooltipRow } from './Tooltip'
 
 interface SettlementPanelProps {
   settlement: Settlement
@@ -149,20 +150,53 @@ export function SettlementPanel({ settlement }: SettlementPanelProps): JSX.Eleme
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
               {settlement.buildings.map((buildingId) => {
                 const building = BUILDING_DEFINITIONS[buildingId]
+                if (!building) {
+                  return <span key={buildingId} style={{ fontSize: '11px', padding: '2px 6px', background: '#2196f3', borderRadius: '3px', color: '#fff' }}>{buildingId}</span>
+                }
+                const y = building.baseYields
+                const adj = building.adjacencyBonus
+                let adjText: string | null = null
+                if (adj) {
+                  const cond = adj.condition
+                  const condText = cond.type === 'terrain' ? cond.terrain
+                    : cond.type === 'resource' ? `${cond.category} resource`
+                    : cond.type === 'building' ? (cond.buildingId ?? 'building')
+                    : cond.improvement
+                  adjText = `+${adj.amount} ${adj.yield} per adj. ${condText}`
+                }
                 return (
-                  <span
+                  <Tooltip
                     key={buildingId}
-                    title={building?.name ?? buildingId}
-                    style={{
-                      fontSize: '11px',
-                      padding: '2px 6px',
-                      background: '#2196f3',
-                      borderRadius: '3px',
-                      color: '#fff',
-                    }}
+                    content={
+                      <div>
+                        <TooltipHeader title={building.name} />
+                        <TooltipDivider />
+                        {y.gold > 0 && <TooltipRow label="Gold" value={`+${y.gold}`} valueColor="#ffd54f" />}
+                        {y.alpha > 0 && <TooltipRow label="Alpha" value={`+${y.alpha}`} valueColor="#64b5f6" />}
+                        {y.vibes > 0 && <TooltipRow label="Vibes" value={`+${y.vibes}`} valueColor="#ba68c8" />}
+                        {y.production > 0 && <TooltipRow label="Production" value={`+${y.production}`} valueColor="#ff9800" />}
+                        {y.growth > 0 && <TooltipRow label="Growth" value={`+${y.growth}`} valueColor="#81c784" />}
+                        {building.defenseBonus && <TooltipRow label="Defense" value={`+${building.defenseBonus}%`} valueColor="#ef5350" />}
+                        {adjText && <TooltipRow label="Adjacency" value={adjText} valueColor="#90caf9" />}
+                        {building.maintenanceCost > 0 && <TooltipRow label="Maintenance" value={`-${building.maintenanceCost} gold/turn`} valueColor="#ef5350" />}
+                      </div>
+                    }
+                    position="right"
+                    maxWidth={240}
                   >
-                    {building?.name ?? buildingId}
-                  </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 6px',
+                        background: '#2196f3',
+                        borderRadius: '3px',
+                        color: '#fff',
+                        cursor: 'help',
+                      }}
+                    >
+                      {building.name}
+                    </span>
+                  </Tooltip>
                 )
               })}
             </div>

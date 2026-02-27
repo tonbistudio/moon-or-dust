@@ -4,6 +4,7 @@ import type {
   GameState,
   Unit,
   UnitId,
+  UnitType,
   TribeId,
   HexCoord,
   TerrainType,
@@ -26,6 +27,21 @@ import { pillageSettlementTradeRoutes } from '../economy'
 import { areAtWar } from '../diplomacy'
 import { getPolicy } from '../cultures'
 import { getWonderHealingBonus } from '../wonders'
+
+// =============================================================================
+// Unit Range Helper
+// =============================================================================
+
+/**
+ * Gets the attack range of a unit type.
+ * Banana Slinger has 3-hex range; other ranged units have 2; melee have 1.
+ */
+export function getUnitRange(unitType: UnitType): number {
+  const def = UNIT_DEFINITIONS[unitType]
+  if (def.baseRangedStrength <= 0) return 1
+  if (unitType === 'banana_slinger') return 3
+  return 2
+}
 
 // =============================================================================
 // Combat Constants
@@ -149,18 +165,10 @@ export function canAttack(
 
   // Check range
   const distance = hexDistance(attacker.position, target.position)
-  const isRanged = attackerDef.baseRangedStrength > 0
+  const maxRange = getUnitRange(attacker.type)
 
-  if (isRanged) {
-    // Ranged units can attack from 2 hexes away
-    if (distance > 2) {
-      return { canAttack: false, reason: 'Target out of range' }
-    }
-  } else {
-    // Melee units must be adjacent
-    if (distance !== 1) {
-      return { canAttack: false, reason: 'Must be adjacent to attack' }
-    }
+  if (distance > maxRange) {
+    return { canAttack: false, reason: maxRange > 1 ? 'Target out of range' : 'Must be adjacent to attack' }
   }
 
   return { canAttack: true }
@@ -179,8 +187,7 @@ export function getValidTargets(state: GameState, attacker: Unit, onlyAtWar: boo
     return targets
   }
 
-  const isRanged = attackerDef.baseRangedStrength > 0
-  const maxRange = isRanged ? 2 : 1
+  const maxRange = getUnitRange(attacker.type)
 
   for (const unit of state.units.values()) {
     if (unit.owner === attacker.owner) continue
@@ -560,12 +567,6 @@ export function applyCombatResult(
 ): GameState {
   let newState = state
 
-  // Track combat XP in Great People accumulator for both combatants
-  newState = addCombatXpToAccumulator(newState, result.attacker.owner, result.attackerXpGained)
-  if (result.defenderXpGained > 0) {
-    newState = addCombatXpToAccumulator(newState, result.defender.owner, result.defenderXpGained)
-  }
-
   // Update or remove attacker
   if (result.attackerKilled) {
     newState = removeUnit(newState, result.attacker.id)
@@ -604,32 +605,7 @@ export function applyCombatResult(
 }
 
 /**
- * Adds combat XP to the Great People accumulator
- */
-function addCombatXpToAccumulator(state: GameState, tribeId: TribeId, xp: number): GameState {
-  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
-  if (playerIndex === -1) return state
-
-  const player = state.players[playerIndex]!
-  const updatedPlayer: Player = {
-    ...player,
-    greatPeople: {
-      ...player.greatPeople,
-      accumulator: {
-        ...player.greatPeople.accumulator,
-        combat: player.greatPeople.accumulator.combat + xp,
-      },
-    },
-  }
-
-  const newPlayers = [...state.players]
-  newPlayers[playerIndex] = updatedPlayer
-
-  return { ...state, players: newPlayers }
-}
-
-/**
- * Increments kill count for a tribe (both in player.killCount and GP accumulator)
+ * Increments kill count for a tribe
  */
 function incrementKillCount(state: GameState, tribeId: TribeId): GameState {
   const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
@@ -639,13 +615,6 @@ function incrementKillCount(state: GameState, tribeId: TribeId): GameState {
   const updatedPlayer: Player = {
     ...player,
     killCount: player.killCount + 1,
-    greatPeople: {
-      ...player.greatPeople,
-      accumulator: {
-        ...player.greatPeople.accumulator,
-        kills: player.greatPeople.accumulator.kills + 1,
-      },
-    },
   }
 
   const newPlayers = [...state.players]
@@ -958,16 +927,10 @@ export function canAttackSettlement(
 
   // Check range
   const distance = hexDistance(attacker.position, settlement.position)
-  const isRanged = attackerDef.baseRangedStrength > 0
+  const maxRange = getUnitRange(attacker.type)
 
-  if (isRanged) {
-    if (distance > 2) {
-      return { canAttack: false, reason: 'Settlement out of range' }
-    }
-  } else {
-    if (distance !== 1) {
-      return { canAttack: false, reason: 'Must be adjacent to attack settlement' }
-    }
+  if (distance > maxRange) {
+    return { canAttack: false, reason: maxRange > 1 ? 'Settlement out of range' : 'Must be adjacent to attack settlement' }
   }
 
   return { canAttack: true }
@@ -985,8 +948,7 @@ export function getAttackableSettlements(state: GameState, attacker: Unit): Sett
     return settlements
   }
 
-  const isRanged = attackerDef.baseRangedStrength > 0
-  const maxRange = isRanged ? 2 : 1
+  const maxRange = getUnitRange(attacker.type)
 
   for (const settlement of state.settlements.values()) {
     if (settlement.owner === attacker.owner) continue
@@ -1077,9 +1039,6 @@ export function applySettlementCombatResult(
 
   // Update attacker
   newState = updateUnit(newState, result.attacker)
-
-  // Track combat XP
-  newState = addCombatXpToAccumulator(newState, result.attacker.owner, result.attackerXpGained)
 
   // Update settlement HP (but don't change ownership yet - that's a separate action)
   const settlements = new Map(newState.settlements)

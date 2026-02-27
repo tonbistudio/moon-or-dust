@@ -7,12 +7,14 @@ import type {
   GameState,
   HexCoord,
   TribeId,
+  TechId,
   Unit,
   TerrainType,
   ResourceType,
 } from '../types'
 import { hexKey } from '../hex'
 import { UNIT_DEFINITIONS } from '../units'
+import { getTech } from '../tech'
 import { getPolicy } from '../cultures'
 
 // =============================================================================
@@ -168,7 +170,8 @@ export function canBuildImprovement(
       const requiredTech = String(improvement.prerequisiteTech).trim()
       const researchedTechs = player.researchedTechs.map(t => String(t).trim())
       if (!researchedTechs.includes(requiredTech)) {
-        return { canBuild: false, reason: `Requires ${improvement.prerequisiteTech}` }
+        const techName = getTech(improvement.prerequisiteTech as TechId)?.name ?? improvement.prerequisiteTech
+        return { canBuild: false, reason: `Requires ${techName}` }
       }
     }
   }

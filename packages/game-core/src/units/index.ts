@@ -409,7 +409,9 @@ export function createUnit(options: CreateUnitOptions): Unit {
     rarity,
     rarityBonuses,
     hasActed: false,
+    sleeping: false,
     buildCharges: def.buildCharges,
+    immobilizedTurns: 0,
   }
 }
 
@@ -626,7 +628,6 @@ export function moveUnit(unit: Unit, path: HexCoord[], cost: number): Unit {
     ...unit,
     position: destination,
     movementRemaining: Math.max(0, unit.movementRemaining - cost),
-    hasActed: true,
   }
 }
 
@@ -641,10 +642,13 @@ export function resetUnitMovement(units: Map<UnitId, Unit>): Map<UnitId, Unit> {
   const newUnits = new Map<UnitId, Unit>()
 
   for (const [id, unit] of units) {
+    // Decrement immobilize debuff and set movement to 0 if still immobilized
+    const newImmobilized = Math.max(0, (unit.immobilizedTurns ?? 0) - 1)
     newUnits.set(id, {
       ...unit,
-      movementRemaining: unit.maxMovement,
-      hasActed: false,
+      movementRemaining: newImmobilized > 0 ? 0 : unit.maxMovement,
+      hasActed: newImmobilized > 0, // Can't act while immobilized
+      immobilizedTurns: newImmobilized,
     })
   }
 

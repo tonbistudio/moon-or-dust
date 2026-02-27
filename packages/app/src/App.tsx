@@ -7,6 +7,7 @@ import { GameUI } from './components/GameUI'
 import { MainMenu } from './components/MainMenu'
 import { EndGameScreen } from './components/EndGameScreen'
 import { SolanaProvider } from './wallet/SolanaProvider'
+import { isGameOver } from '@tribes/game-core'
 import type { TribeName } from '@tribes/game-core'
 
 interface ZoomControls {
@@ -93,13 +94,13 @@ function GameApp(): JSX.Element {
     return <MainMenu onStartGame={handleStartGame} soarService={soarService} />
   }
 
-  // Check if game is over (turn exceeds maxTurns)
-  const isGameOver = state.turn > state.maxTurns
+  // Check if game is over (turn limit or conquest victory)
+  const gameOver = isGameOver(state)
 
   return (
     <>
       <GameView />
-      {isGameOver && <EndGameScreen state={state} onPlayAgain={handlePlayAgain} soarService={soarService} />}
+      {gameOver && <EndGameScreen state={state} onPlayAgain={handlePlayAgain} soarService={soarService} />}
     </>
   )
 }

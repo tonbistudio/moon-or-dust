@@ -139,7 +139,15 @@ export function useTileClick() {
 
             addEvent(message, 'combat')
 
-            // Keep unit selected after attack (if still alive)
+            // Auto-cycle after attack if attacker has no moves left
+            const postAttacker = result.state.units.get(selectedUnit)
+            if (postAttacker && postAttacker.movementRemaining > 0 && !postAttacker.hasActed) return
+            // Find next actionable unit
+            const nextAfterAttack = Array.from(result.state.units.values())
+              .filter(u => u.owner === result.state!.currentPlayer && u.movementRemaining > 0 && !u.hasActed && !u.sleeping && u.id !== selectedUnit)
+              .sort((a, b) => a.id.localeCompare(b.id))[0]
+            if (nextAfterAttack) selectUnit(nextAfterAttack.id)
+            else selectUnit(null)
             return
           }
           // If attack failed, continue to other logic
@@ -187,7 +195,56 @@ export function useTileClick() {
                 // Keep unit selected after attack
                 return
               }
+            } else {
+              addEvent(canAttackResult.reason ?? 'Cannot attack settlement', 'warning')
+              return
             }
+          } else {
+            addEvent(`Cannot attack ${settlementAtTile.name} - not at war`, 'warning')
+            return
+          }
+        }
+      }
+
+      // If clicking on a conquered enemy settlement (0 HP) and we have a selected unit, capture it
+      if (settlementAtTile && settlementAtTile.owner !== state.currentPlayer && settlementAtTile.health <= 0 && selectedUnit) {
+        const mover = state.units.get(selectedUnit)
+        if (mover && mover.owner === state.currentPlayer && mover.movementRemaining > 0) {
+          // Move unit to the settlement tile first (if not already there)
+          if (hexKey(mover.position) !== key) {
+            const moveResult = dispatch({ type: 'MOVE_UNIT', unitId: selectedUnit, to: coord })
+            if (!moveResult.success || !moveResult.state) {
+              addEvent('Cannot reach conquered settlement', 'warning')
+              return
+            }
+          }
+          // Capture the settlement
+          const captureResult = dispatch({ type: 'CAPTURE_SETTLEMENT', settlementId: settlementAtTile.id })
+          if (captureResult.success) {
+            addEvent(`Captured ${settlementAtTile.name}!`, 'combat')
+          }
+          return
+        }
+      }
+
+      // If a unit is selected elsewhere, try to move it onto an own settlement tile
+      if (selectedUnit && settlementAtTile && settlementAtTile.owner === state.currentPlayer) {
+        const mover = state.units.get(selectedUnit)
+        if (mover && mover.owner === state.currentPlayer && mover.movementRemaining > 0) {
+          if (hexKey(mover.position) !== key) {
+            const moveResult = dispatch({ type: 'MOVE_UNIT', unitId: selectedUnit, to: coord })
+            if (moveResult.success && moveResult.state) {
+              const movedUnit = moveResult.state.units.get(selectedUnit)
+              if (movedUnit && movedUnit.movementRemaining > 0) return
+              // Auto-cycle to next actionable unit
+              const next = Array.from(moveResult.state.units.values())
+                .filter(u => u.owner === moveResult.state!.currentPlayer && u.movementRemaining > 0 && !u.hasActed && !u.sleeping && u.id !== selectedUnit)
+                .sort((a, b) => a.id.localeCompare(b.id))[0]
+              if (next) { selectUnit(next.id); selectSettlement(null) }
+              else { selectUnit(null); selectSettlement(settlementAtTile.id) }
+              return
+            }
+            // If move failed, fall through to settlement selection
           }
         }
       }
@@ -262,8 +319,15 @@ export function useTileClick() {
               unitId: selectedUnit,
               to: coord,
             })
-            if (result.success) {
-              // Keep unit selected after move
+            if (result.success && result.state) {
+              const movedUnit = result.state.units.get(selectedUnit)
+              if (movedUnit && movedUnit.movementRemaining > 0) return // Still has moves
+              // Auto-cycle to next actionable unit
+              const next = Array.from(result.state.units.values())
+                .filter(u => u.owner === result.state!.currentPlayer && u.movementRemaining > 0 && !u.hasActed && !u.sleeping && u.id !== selectedUnit)
+                .sort((a, b) => a.id.localeCompare(b.id))[0]
+              if (next) selectUnit(next.id)
+              else selectUnit(null)
               return
             }
             // If move failed, just deselect

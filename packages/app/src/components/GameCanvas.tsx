@@ -144,6 +144,13 @@ export function GameCanvas({
     })
   }, [state, isInitialized, selectedUnit, selectedSettlement, reachableHexes, attackTargetHexes])
 
+  // Auto-center camera on selected unit
+  useEffect(() => {
+    if (!isInitialized || !rendererRef.current || !state || !selectedUnit) return
+    const unit = state.units.get(selectedUnit)
+    if (unit) rendererRef.current.centerOn(unit.position)
+  }, [selectedUnit, isInitialized])
+
   // Handle resize
   useEffect(() => {
     if (!rendererRef.current) return

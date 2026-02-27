@@ -259,9 +259,10 @@ function applyOgHolderReward(
     return applyAirdropReward(state, tribeId, rng)
   }
 
-  // Create a warrior unit at the settlement
+  // Create a warrior at the settlement (OG Holder always spawns warriors)
+  const unitType = 'warrior'
   const unit = createUnit({
-    type: 'warrior',
+    type: unitType as never,
     owner: tribeId,
     position: nearestSettlement.position,
     rng, // Random rarity for the free unit
@@ -273,7 +274,7 @@ function applyOgHolderReward(
 
   return {
     state: { ...state, units: newUnits },
-    details: { type: 'og_holder', unitId: unit.id, unitType: 'warrior' },
+    details: { type: 'og_holder', unitId: unit.id, unitType },
   }
 }
 

@@ -14,7 +14,8 @@
     "test:e2e": "pnpm --filter app test:e2e",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint packages --ext .ts,.tsx",
-    "lint:fix": "eslint packages --ext .ts,.tsx --fix"
+    "lint:fix": "eslint packages --ext .ts,.tsx --fix",
+    "soar:register": "pnpm --filter app soar:register"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

@@ -74,12 +74,12 @@ export const TRIBE_DEFINITIONS: Record<TribeName, Tribe> = {
   gregs: {
     id: 'gregs' as TribeId,
     name: 'gregs',
-    displayName: 'Gregs',
+    displayName: 'Foxes',
     primaryStrength: 'economy',
     secondaryStrength: 'tech',
     uniqueUnitType: 'warrior', // Placeholder
     uniqueBuildingId: 'library' as never, // Placeholder
-    color: '#808080', // Gray
+    color: '#FF8C00', // Dark orange
     bonuses: {},
   },
   dragonz: {
@@ -127,14 +127,25 @@ export function getTribeById(id: TribeId): Tribe | undefined {
  * Gets the tribe for a player
  */
 export function getPlayerTribe(_state: GameState, player: Player): Tribe | undefined {
-  return getTribeById(player.tribeId)
+  return getTribe(player.tribeName)
+}
+
+/**
+ * Gets the tribe definition for a runtime TribeId by looking up the player's tribeName.
+ * Use this instead of getTribeById() when working with settlement.owner or unit.owner,
+ * since runtime TribeIds (e.g. "tribe_1") don't match definition IDs (e.g. "monkes").
+ */
+export function getTribeForPlayer(state: GameState, tribeId: TribeId): Tribe | undefined {
+  const player = state.players.find((p) => p.tribeId === tribeId)
+  if (!player) return undefined
+  return getTribe(player.tribeName)
 }
 
 /**
  * Gets tribe bonuses for a player
  */
-export function getPlayerTribeBonuses(_state: GameState, tribeId: TribeId): TribeBonuses {
-  const tribe = getTribeById(tribeId)
+export function getPlayerTribeBonuses(state: GameState, tribeId: TribeId): TribeBonuses {
+  const tribe = getTribeForPlayer(state, tribeId)
   return tribe?.bonuses ?? {}
 }
 

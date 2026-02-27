@@ -343,10 +343,57 @@ function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState
       break
     }
 
+    // Skip eliminated AI players — just end their turn
+    if (currentPlayer.eliminatedOnTurn !== undefined) {
+      const endResult = applyAction(currentState, { type: 'END_TURN' })
+      if (endResult.success && endResult.state) {
+        currentState = endResult.state
+      }
+      continue
+    }
+
     // Generate and execute AI actions
     const actions = generateAIActions(currentState, currentState.currentPlayer)
 
     for (const action of actions) {
+      // Track peace proposals to human player
+      if (action.type === 'PROPOSE_PEACE' && action.target === humanTribeId) {
+        const result = applyAction(currentState, action)
+        if (result.success && result.state) {
+          currentState = result.state
+          const proposerName = getTribeName(currentState.currentPlayer)
+          events.push({
+            message: `${proposerName} proposes peace!`,
+            turn: currentState.turn,
+            type: 'diplomacy',
+          })
+        }
+        continue
+      }
+
+      // Track peace responses affecting human player
+      if (action.type === 'RESPOND_PEACE_PROPOSAL' && action.target === humanTribeId) {
+        const result = applyAction(currentState, action)
+        if (result.success && result.state) {
+          currentState = result.state
+          const responderName = getTribeName(currentState.currentPlayer)
+          if (action.accept) {
+            events.push({
+              message: `${responderName} accepts your peace proposal!`,
+              turn: currentState.turn,
+              type: 'diplomacy',
+            })
+          } else {
+            events.push({
+              message: `${responderName} rejects your peace proposal!`,
+              turn: currentState.turn,
+              type: 'diplomacy',
+            })
+          }
+        }
+        continue
+      }
+
       // Track war declarations against human player
       if (action.type === 'DECLARE_WAR' && action.target === humanTribeId) {
         const result = applyAction(currentState, action)
@@ -386,8 +433,11 @@ function runAITurns(state: GameState, humanTribeId: TribeId): { state: GameState
             const attackerTribe = getTribeName(attacker.owner)
             const targetTribe = getTribeName(target.owner)
 
-            // Format unit type names
-            const formatType = (type: string) => type.replace(/_/g, ' ')
+            // Format unit type names (capitalize first letter)
+            const formatType = (type: string) => {
+              const name = type.replace(/_/g, ' ')
+              return name.charAt(0).toUpperCase() + name.slice(1)
+            }
 
             // Build message
             let message = `${attackerTribe} ${formatType(attacker.type)}`
@@ -622,6 +672,8 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
   if (!achievementTrackerRef.current) {
     achievementTrackerRef.current = new AchievementTracker()
   }
+  // Keep achievement tracker's SOAR service in sync
+  achievementTrackerRef.current.setSoarService(soarService)
 
   // Keep a ref to the latest game state to avoid stale closure issues
   const latestGameStateRef = useRef<GameState | null>(null)
@@ -686,8 +738,10 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         if (lootboxReward) {
           const unit = currentState.units.get(action.unitId)
           const player = currentState.players.find(p => p.tribeId === currentState.currentPlayer)
-          const tribeName = player?.tribeName ?? 'Unknown'
-          const unitType = unit?.type.replace(/_/g, ' ') ?? 'unit'
+          const tribeName = player?.tribeName
+            ? player.tribeName.charAt(0).toUpperCase() + player.tribeName.slice(1)
+            : 'Unknown'
+          const unitType = unit?.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) ?? 'Unit'
           const rewardName = formatRewardName(lootboxReward.reward)
           const message = `${tribeName} ${unitType} opens ${rewardName} lootbox!`
           internalDispatch({
@@ -840,7 +894,7 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
           if (achievement) {
             internalDispatch({
               type: 'ADD_EVENT',
-              message: `Achievement unlocked: ${achievementId.replace(/_/g, ' ')}!`,
+              message: `Achievement unlocked: ${achievementId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}!`,
               eventType: 'golden', // reuse golden event type for achievements
               turn: currentState.turn,
             })
@@ -866,6 +920,24 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
         setStateAction.goldenAgeInfo = goldenAgeInfo
       }
       internalDispatch(setStateAction)
+
+      // Auto-select first unit with moves remaining at the start of the human turn
+      if (action.type === 'END_TURN') {
+        const humanPlayer = currentState.players.find(p => p.isHuman)
+        if (humanPlayer && currentState.currentPlayer === humanPlayer.tribeId) {
+          let firstMovableUnit: UnitId | null = null
+          for (const [unitId, unit] of currentState.units) {
+            if (unit.owner === humanPlayer.tribeId && unit.movementRemaining > 0 && !unit.hasActed && !unit.sleeping) {
+              firstMovableUnit = unitId
+              break
+            }
+          }
+          if (firstMovableUnit) {
+            internalDispatch({ type: 'SELECT_UNIT', unitId: firstMovableUnit })
+          }
+        }
+      }
+
       return result
     },
     [] // No dependencies - uses refs for latest state to avoid cascading re-renders

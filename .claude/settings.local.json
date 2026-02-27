@@ -8,7 +8,22 @@
       "Bash(pnpm list:*)",
       "Bash(grep:*)",
       "Bash(xargs:*)",
-      "Bash(pnpm typecheck:*)"
+      "Bash(pnpm typecheck:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.magicblock.gg)",
+      "WebFetch(domain:solana.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:magicblock-labs.github.io)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:devnet.magicblock.app)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:www.magicblock.xyz)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(solana account:*)",
+      "Bash(pnpm build:core:*)",
+      "Bash(pnpm:*)",
+      "WebFetch(domain:solscan.io)"
     ]
   }
 }

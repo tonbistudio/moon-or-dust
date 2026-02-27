@@ -31,7 +31,7 @@ import type {
   BuildingId,
   PendingMint,
 } from '../types'
-import { hexKey } from '../hex'
+import { hexKey, hexRange } from '../hex'
 import { startWonderConstruction, canBuildWonder, completeWonder } from '../wonders'
 import { BUILDING_DEFINITIONS, canConstructBuilding, addBuildingToSettlement } from '../buildings'
 import {
@@ -61,9 +61,11 @@ import {
   calculateHealing,
   calculateAdjacentHealingReceived,
   healUnit,
+  canLevelUp,
+  getXpForNextLevel,
 } from '../combat'
 import { getSettlementMaxHealth } from '../settlements'
-import { canResearchTech, TECH_DEFINITIONS, addResearchProgress, completeResearch } from '../tech'
+import { canResearchTech, TECH_DEFINITIONS, addResearchProgress } from '../tech'
 import {
   canUnlockCulture,
   CULTURE_DEFINITIONS,
@@ -98,6 +100,8 @@ import {
   checkAndSpawnGreatPeople,
   useGreatPersonAction,
   GREAT_PERSON_DEFINITIONS,
+  tickActiveBuffs,
+  getActiveYieldBuffPercent,
 } from '../greatpeople'
 import {
   checkAllTriggers,
@@ -206,6 +210,7 @@ export function createPlayer(tribeId: TribeId, tribeName: TribeName, isHuman: bo
     goldenAge: INITIAL_GOLDEN_AGE_STATE,
     killCount: 0,
     pendingMints: [],
+    activeBuffs: [],
   }
 }
 
@@ -253,6 +258,7 @@ export function createInitialState(config: GameConfig): GameState {
     relations: new Map(),
     warWeariness: new Map(),
     reputationModifiers: new Map(),
+    peaceRejectionTurns: new Map(),
   }
 
   // Initialize diplomacy relations between all tribes (start neutral)
@@ -297,6 +303,7 @@ export function createInitialState(config: GameConfig): GameState {
     lootboxes: [],
     wonders: [],
     floorPrices,
+    pendingPeaceProposals: [],
   }
 }
 
@@ -314,17 +321,46 @@ export function getCurrentPlayer(state: GameState): Player | undefined {
 
 export function getNextPlayer(state: GameState): TribeId {
   const currentIndex = state.players.findIndex((p) => p.tribeId === state.currentPlayer)
-  const nextIndex = (currentIndex + 1) % state.players.length
-  return state.players[nextIndex]!.tribeId
+  // Skip eliminated players
+  for (let i = 1; i <= state.players.length; i++) {
+    const nextIndex = (currentIndex + i) % state.players.length
+    const nextPlayer = state.players[nextIndex]!
+    if (nextPlayer.eliminatedOnTurn === undefined) {
+      return nextPlayer.tribeId
+    }
+  }
+  // Fallback (shouldn't happen — at least one player is alive)
+  return state.players[(currentIndex + 1) % state.players.length]!.tribeId
 }
 
 export function isGameOver(state: GameState): boolean {
-  return state.turn > state.maxTurns
+  // Turn limit reached
+  if (state.turn > state.maxTurns) return true
+  // Conquest victory: only one tribe has settlements
+  // Skip early turns — AI needs time to found their first settlements
+  if (state.turn > 5 && state.settlements.size > 0) {
+    const tribesWithSettlements = new Set<TribeId>()
+    for (const settlement of state.settlements.values()) {
+      tribesWithSettlements.add(settlement.owner)
+    }
+    if (tribesWithSettlements.size <= 1) return true
+  }
+  return false
 }
 
 export function getWinner(state: GameState): TribeId | undefined {
   if (!isGameOver(state)) return undefined
 
+  // Conquest victory: last tribe standing
+  const tribesWithSettlements = new Set<TribeId>()
+  for (const settlement of state.settlements.values()) {
+    tribesWithSettlements.add(settlement.owner)
+  }
+  if (tribesWithSettlements.size === 1) {
+    return Array.from(tribesWithSettlements)[0]
+  }
+
+  // Score victory: highest floor price
   let maxScore = -1
   let winner: TribeId | undefined
 
@@ -336,6 +372,56 @@ export function getWinner(state: GameState): TribeId | undefined {
   }
 
   return winner
+}
+
+/**
+ * Check if a tribe has been eliminated (no settlements remaining).
+ * Returns updated state with eliminatedOnTurn set if applicable.
+ */
+function checkTribeElimination(state: GameState, tribeId: TribeId): GameState {
+  // Skip if already eliminated
+  const player = state.players.find(p => p.tribeId === tribeId)
+  if (!player || player.eliminatedOnTurn !== undefined) return state
+
+  // Check if tribe has any settlements left
+  let hasSettlements = false
+  for (const settlement of state.settlements.values()) {
+    if (settlement.owner === tribeId) {
+      hasSettlements = true
+      break
+    }
+  }
+
+  if (hasSettlements) return state
+
+  // Tribe eliminated — mark them and clear their land
+  const players = state.players.map(p =>
+    p.tribeId === tribeId ? { ...p, eliminatedOnTurn: state.turn } : p
+  )
+
+  // Remove all tile ownership for eliminated tribe
+  const tiles = new Map(state.map.tiles)
+  for (const [key, tile] of tiles) {
+    if (tile.owner === tribeId) {
+      const { owner: _removed, ...tileWithoutOwner } = tile
+      tiles.set(key, tileWithoutOwner)
+    }
+  }
+
+  // Remove all units belonging to eliminated tribe
+  const units = new Map(state.units)
+  for (const [unitId, unit] of units) {
+    if (unit.owner === tribeId) {
+      units.delete(unitId)
+    }
+  }
+
+  return {
+    ...state,
+    players,
+    units,
+    map: { ...state.map, tiles },
+  }
 }
 
 // =============================================================================
@@ -471,11 +557,34 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
     case 'SWAP_POLICIES':
       return applySwapPolicies(state, action.toSlot, action.toUnslot)
 
+    case 'SLEEP_UNIT': {
+      const unit = state.units.get(action.unitId)
+      if (!unit || unit.owner !== state.currentPlayer) {
+        return { success: false, error: 'Invalid unit' }
+      }
+      const newUnits = new Map(state.units)
+      newUnits.set(action.unitId, { ...unit, sleeping: true, hasActed: true })
+      return { success: true, state: { ...state, units: newUnits } }
+    }
+
+    case 'WAKE_UNIT': {
+      const unit = state.units.get(action.unitId)
+      if (!unit || unit.owner !== state.currentPlayer) {
+        return { success: false, error: 'Invalid unit' }
+      }
+      const newUnits = new Map(state.units)
+      newUnits.set(action.unitId, { ...unit, sleeping: false })
+      return { success: true, state: { ...state, units: newUnits } }
+    }
+
     case 'DECLARE_WAR':
       return applyDeclareWar(state, action.target)
 
     case 'PROPOSE_PEACE':
       return applyProposePeace(state, action.target)
+
+    case 'RESPOND_PEACE_PROPOSAL':
+      return applyRespondPeaceProposal(state, action.target, action.accept)
 
     case 'PROPOSE_ALLIANCE':
       return applyProposeAlliance(state, action.target)
@@ -508,6 +617,22 @@ function applyEndTurn(state: GameState): ActionResult {
   // Process production for all settlements owned by current player
   newState = processSettlementProduction(newState, currentPlayer)
 
+  // Auto-mint for AI players (no VRF popup needed)
+  const updatedPlayer = newState.players.find(p => p.tribeId === currentPlayer)
+  if (updatedPlayer && !updatedPlayer.isHuman && updatedPlayer.pendingMints.length > 0) {
+    // Process in reverse order so splice indices stay valid
+    for (let i = updatedPlayer.pendingMints.length - 1; i >= 0; i--) {
+      const mintResult = applyMintUnit(
+        newState,
+        updatedPlayer.pendingMints[i]!.settlementId,
+        i
+      )
+      if (mintResult.success && mintResult.state) {
+        newState = mintResult.state
+      }
+    }
+  }
+
   // Process growth for all settlements owned by current player
   newState = processSettlementGrowthForPlayer(newState, currentPlayer)
 
@@ -528,6 +653,9 @@ function applyEndTurn(state: GameState): ActionResult {
 
   // Check golden age triggers
   newState = checkGoldenAgeTriggers(newState, currentPlayer)
+
+  // Tick active buffs (decrement timers, remove expired)
+  newState = tickActiveBuffs(newState, currentPlayer)
 
   // Update diplomacy timers (increment turnsAtCurrentStance)
   newState = updateDiplomacyTimers(newState)
@@ -701,12 +829,7 @@ function handleCompletedProduction(
       )
       const newSettlements = new Map(state.settlements)
       newSettlements.set(settlementId, updatedSettlement)
-      let newState: GameState = { ...state, settlements: newSettlements }
-
-      // Increment buildingsBuilt in GP accumulator
-      newState = incrementBuildingsBuilt(newState, settlement.owner)
-
-      return newState
+      return { ...state, settlements: newSettlements }
     }
 
     case 'wonder': {
@@ -726,30 +849,6 @@ function handleCompletedProduction(
   }
 }
 
-/**
- * Increments buildingsBuilt counter in GP accumulator
- */
-function incrementBuildingsBuilt(state: GameState, tribeId: TribeId): GameState {
-  const playerIndex = state.players.findIndex((p) => p.tribeId === tribeId)
-  if (playerIndex === -1) return state
-
-  const player = state.players[playerIndex]!
-  const updatedPlayer: Player = {
-    ...player,
-    greatPeople: {
-      ...player.greatPeople,
-      accumulator: {
-        ...player.greatPeople.accumulator,
-        buildingsBuilt: player.greatPeople.accumulator.buildingsBuilt + 1,
-      },
-    },
-  }
-
-  const newPlayers = [...state.players]
-  newPlayers[playerIndex] = updatedPlayer
-
-  return { ...state, players: newPlayers }
-}
 
 /**
  * Increments wondersBuilt counter in GP accumulator
@@ -860,6 +959,16 @@ function updatePlayerYields(state: GameState, tribeId: TribeId): GameState {
     vibes = Math.floor(vibes * (1 + vibesBonus))
   }
 
+  // Apply great person yield buffs
+  const alphaBuffPercent = getActiveYieldBuffPercent(player, 'alpha')
+  if (alphaBuffPercent > 0) {
+    alpha = Math.floor(alpha * (1 + alphaBuffPercent / 100))
+  }
+  const vibesBuffPercent = getActiveYieldBuffPercent(player, 'vibes')
+  if (vibesBuffPercent > 0) {
+    vibes = Math.floor(vibes * (1 + vibesBuffPercent / 100))
+  }
+
   const updatedPlayer: Player = {
     ...player,
     yields: {
@@ -905,6 +1014,12 @@ function applyResearchProgress(state: GameState, tribeId: TribeId): GameState {
   const alphaBonus = getGoldenAgeYieldBonus(player, 'alpha')
   if (alphaBonus > 0) {
     totalAlpha = Math.floor(totalAlpha * (1 + alphaBonus))
+  }
+
+  // Apply great person yield buff
+  const alphaBuffPercent = getActiveYieldBuffPercent(player, 'alpha')
+  if (alphaBuffPercent > 0) {
+    totalAlpha = Math.floor(totalAlpha * (1 + alphaBuffPercent / 100))
   }
 
   if (totalAlpha <= 0) return state
@@ -957,6 +1072,12 @@ function applyCultureProgress(state: GameState, tribeId: TribeId): GameState {
   const vibesBonus = getGoldenAgeYieldBonus(player, 'vibes')
   if (vibesBonus > 0) {
     totalVibes = Math.floor(totalVibes * (1 + vibesBonus))
+  }
+
+  // Apply great person yield buff
+  const vibesBuffPercent = getActiveYieldBuffPercent(player, 'vibes')
+  if (vibesBuffPercent > 0) {
+    totalVibes = Math.floor(totalVibes * (1 + vibesBuffPercent / 100))
   }
 
   if (totalVibes <= 0) return state
@@ -1819,13 +1940,6 @@ function applyKillBonuses(state: GameState, killerTribeId: TribeId, killPosition
     killCount,
     treasury: player.treasury + goldBonus,
     cultureProgress: player.cultureProgress + killVibes, // Vibes add to culture progress
-    greatPeople: {
-      ...player.greatPeople,
-      accumulator: {
-        ...player.greatPeople.accumulator,
-        kills: player.greatPeople.accumulator.kills + 1,
-      },
-    },
   }
 
   const newPlayers = [...state.players]
@@ -1906,12 +2020,44 @@ function applyAttack(
     newState = removeUnit(newState, targetId)
     // Add kill to attacker's owner + apply policy bonuses
     newState = applyKillBonuses(newState, attacker.owner, target.position)
+    // Unique unit kill bonuses
+    newState = applyUniqueUnitKillBonus(newState, attacker)
   } else {
     // Update defender with combat result (health, experience)
-    newState = updateUnit(newState, combatResult.defender)
+    // Apply Stuckers immobilize debuff
+    let updatedDefender = combatResult.defender
+    if (attacker.type === 'stuckers') {
+      updatedDefender = { ...updatedDefender, immobilizedTurns: 2 }
+    }
+    newState = updateUnit(newState, updatedDefender)
   }
 
   return { success: true, state: newState }
+}
+
+/**
+ * Applies unique unit kill bonuses (Neon Geck +5 Alpha, DeadGod +20 Gold)
+ */
+function applyUniqueUnitKillBonus(state: GameState, killer: Unit): GameState {
+  if (killer.type !== 'neon_geck' && killer.type !== 'deadgod') return state
+
+  const playerIndex = state.players.findIndex((p) => p.tribeId === killer.owner)
+  if (playerIndex === -1) return state
+
+  const player = state.players[playerIndex]!
+  let updatedPlayer = player
+
+  if (killer.type === 'neon_geck') {
+    // +5 Alpha (added to research progress)
+    updatedPlayer = { ...updatedPlayer, researchProgress: player.researchProgress + 5 }
+  } else if (killer.type === 'deadgod') {
+    // +20 Gold
+    updatedPlayer = { ...updatedPlayer, treasury: player.treasury + 20 }
+  }
+
+  const newPlayers = [...state.players]
+  newPlayers[playerIndex] = updatedPlayer
+  return { ...state, players: newPlayers }
 }
 
 // =============================================================================
@@ -2005,23 +2151,33 @@ function applyCaptureSettlement(
   const settlements = new Map(state.settlements)
   settlements.set(settlementId, capturedSettlement)
 
-  // Update tile ownership in the settlement's territory
+  // Update tile ownership — transfer tiles near the captured settlement
   const tiles = new Map(state.map.tiles)
-  for (const [key, tile] of tiles) {
-    if (tile.owner === settlement.owner) {
-      // Check if this tile is closer to the captured settlement than any other settlement
-      // For simplicity, just transfer the settlement tile for now
-      if (key === hexKey(settlement.position)) {
-        tiles.set(key, { ...tile, owner: state.currentPlayer })
-      }
+  const previousOwner = settlement.owner
+  const nearbyCoords = hexRange(settlement.position, 3)
+  for (const coord of nearbyCoords) {
+    const tileKey = hexKey(coord)
+    const tile = tiles.get(tileKey)
+    if (tile && tile.owner === previousOwner) {
+      tiles.set(tileKey, { ...tile, owner: state.currentPlayer })
     }
+  }
+  // Also ensure the settlement tile itself is transferred
+  const settlementKey = hexKey(settlement.position)
+  const settlementTile = tiles.get(settlementKey)
+  if (settlementTile) {
+    tiles.set(settlementKey, { ...settlementTile, owner: state.currentPlayer })
   }
 
   const newMap: HexMap = { ...state.map, tiles }
 
+  const capturedState = { ...state, settlements, map: newMap }
+  // Check if previous owner has been eliminated
+  const finalState = checkTribeElimination(capturedState, previousOwner)
+
   return {
     success: true,
-    state: { ...state, settlements, map: newMap },
+    state: finalState,
   }
 }
 
@@ -2068,9 +2224,13 @@ function applyRazeSettlement(
 
   const newMap: HexMap = { ...state.map, tiles }
 
+  const razedState = { ...state, settlements, map: newMap }
+  // Check if the settlement's former owner has been eliminated
+  const finalState = checkTribeElimination(razedState, settlement.owner)
+
   return {
     success: true,
-    state: { ...state, settlements, map: newMap },
+    state: finalState,
   }
 }
 
@@ -2264,7 +2424,8 @@ function applyDeclareWar(state: GameState, target: TribeId): ActionResult {
 }
 
 /**
- * Proposes peace with another tribe (immediately accepted for now)
+ * Proposes peace with another tribe.
+ * Peace proposals are stored as pending — the target must accept or reject.
  */
 function applyProposePeace(state: GameState, target: TribeId): ActionResult {
   const currentTribe = state.currentPlayer
@@ -2275,13 +2436,57 @@ function applyProposePeace(state: GameState, target: TribeId): ActionResult {
     return { success: false, error: canPropose.reason || 'Cannot propose peace' }
   }
 
-  // Apply the peace treaty
-  const newState = makePeace(state, currentTribe, target)
-  if (!newState) {
-    return { success: false, error: 'Failed to make peace' }
+  // Don't duplicate proposals to same target
+  if (state.pendingPeaceProposals.some(p => p.proposer === currentTribe && p.target === target)) {
+    return { success: false, error: 'Peace already proposed' }
+  }
+
+  // Store as pending proposal with both proposer and target
+  const newState: GameState = {
+    ...state,
+    pendingPeaceProposals: [...state.pendingPeaceProposals, { proposer: currentTribe, target }],
   }
 
   return { success: true, state: newState }
+}
+
+/**
+ * Responds to a peace proposal (accept or reject)
+ */
+function applyRespondPeaceProposal(
+  state: GameState,
+  target: TribeId,
+  accept: boolean
+): ActionResult {
+  // Remove the proposal from pending list (target here is the proposer we're responding to)
+  const newPending = state.pendingPeaceProposals.filter(
+    p => !(p.proposer === target && p.target === state.currentPlayer)
+  )
+
+  if (accept) {
+    // Apply peace treaty
+    const peaceState = makePeace(state, state.currentPlayer, target)
+    if (!peaceState) {
+      return { success: false, error: 'Failed to make peace' }
+    }
+    return {
+      success: true,
+      state: { ...peaceState, pendingPeaceProposals: newPending },
+    }
+  }
+
+  // Rejected — remove proposal and record rejection turn for cooldown
+  const rejectionKey = `${target}-${state.currentPlayer}`
+  const newRejections = new Map(state.diplomacy.peaceRejectionTurns)
+  newRejections.set(rejectionKey, state.turn)
+  return {
+    success: true,
+    state: {
+      ...state,
+      pendingPeaceProposals: newPending,
+      diplomacy: { ...state.diplomacy, peaceRejectionTurns: newRejections },
+    },
+  }
 }
 
 /**
@@ -2386,6 +2591,11 @@ function applySelectPromotion(
     return { success: false, error: 'Unit not owned by current player' }
   }
 
+  // Check if unit can level up (has enough XP)
+  if (!canLevelUp(unit)) {
+    return { success: false, error: 'Unit does not have enough XP to level up' }
+  }
+
   // Check if unit can get a promotion (has pending promotion)
   const availablePromotions = getAvailablePromotions(unit)
   if (availablePromotions.length === 0) {
@@ -2398,10 +2608,18 @@ function applySelectPromotion(
     return { success: false, error: 'Promotion not available for this unit' }
   }
 
-  // Apply the promotion (returns updated unit)
-  const updatedUnit = applyPromotion(unit, promotionId)
-  if (!updatedUnit) {
+  // Apply the promotion (returns updated unit with promotion added + effects)
+  const promoted = applyPromotion(unit, promotionId)
+  if (!promoted) {
     return { success: false, error: 'Failed to apply promotion' }
+  }
+
+  // Increment level and deduct XP cost
+  const xpCost = getXpForNextLevel(unit)
+  const updatedUnit: Unit = {
+    ...promoted,
+    level: unit.level + 1,
+    experience: Math.max(0, unit.experience - xpCost),
   }
 
   // Update the unit in state
@@ -2574,53 +2792,30 @@ function applyUseGreatPerson(
   const effect = definition.effect
   const tribeId = state.currentPlayer
 
-  if (effect.type === 'instant_research') {
-    // Complete current research instantly (Raj)
-    const player = state.players.find(p => p.tribeId === tribeId)
-    if (player?.currentResearch) {
-      newState = completeResearch(newState, tribeId, player.currentResearch)
-    }
-  } else if (effect.type === 'instant_culture') {
-    // Complete current culture instantly (John Le)
-    // Add enough culture progress to complete it - policy selection will trigger normally
-    const playerIndex = newState.players.findIndex(p => p.tribeId === tribeId)
-    if (playerIndex !== -1) {
-      const player = newState.players[playerIndex]!
-      if (player.currentCulture) {
-        const culture = CULTURE_DEFINITIONS[player.currentCulture]
-        if (culture) {
-          const remaining = culture.cost - player.cultureProgress
-          if (remaining > 0) {
-            newState = addCultureProgress(newState, tribeId, remaining)
-          }
-        }
-      }
-    }
-  } else if (effect.type === 'instant_building') {
-    // Instantly complete a building of the specified category (Mert)
-    // Find a settlement with a matching building in production queue
+  if (effect.type === 'instant_building') {
+    // Instantly complete a building of the specified category (Mert's Eureka)
+    // First tries to complete a queued building, then grants the best unbuilt one
     const buildingCategory = 'buildingCategory' in effect ? effect.buildingCategory : 'tech'
     let buildingCompleted = false
 
+    const isTechBuildingId = (id: string): boolean => {
+      const building = BUILDING_DEFINITIONS[id as keyof typeof BUILDING_DEFINITIONS]
+      if (!building) return false
+      return building.category === 'tech' ||
+        (building.baseYields && building.baseYields.alpha > 0) ||
+        id === 'library' || id === 'alpha_hunter_hideout'
+    }
+
+    // Pass 1: Try to complete a matching building already in a production queue
     for (const settlement of newState.settlements.values()) {
       if (settlement.owner !== tribeId) continue
       if (buildingCompleted) break
 
-      // Check production queue for a building of the matching category
       for (let i = 0; i < settlement.productionQueue.length; i++) {
         const item = settlement.productionQueue[i]
         if (!item || item.type !== 'building') continue
 
-        const building = BUILDING_DEFINITIONS[item.id as keyof typeof BUILDING_DEFINITIONS]
-        if (!building) continue
-
-        // Check if building matches category (tech buildings provide alpha)
-        const isTechBuilding = building.category === 'tech' ||
-          (building.baseYields && building.baseYields.alpha > 0) ||
-          item.id === 'library' || item.id === 'alpha_hunter_hideout'
-
-        if (buildingCategory === 'tech' && isTechBuilding) {
-          // Complete this building instantly
+        if (buildingCategory === 'tech' && isTechBuildingId(item.id)) {
           const updatedSettlements: Map<SettlementId, Settlement> = new Map(newState.settlements)
           const newQueue = [...settlement.productionQueue]
           const completedBuilding = newQueue.splice(i, 1)[0]!
@@ -2634,6 +2829,32 @@ function applyUseGreatPerson(
           newState = { ...newState, settlements: updatedSettlements }
           buildingCompleted = true
           break
+        }
+      }
+    }
+
+    // Pass 2: If nothing was queued, grant the best unbuilt tech building to a settlement
+    if (!buildingCompleted && buildingCategory === 'tech') {
+      const techBuildings = Object.values(BUILDING_DEFINITIONS)
+        .filter(b => isTechBuildingId(b.id) && !b.isUnique)
+        .sort((a, b) => b.productionCost - a.productionCost) // best first
+
+      for (const settlement of newState.settlements.values()) {
+        if (settlement.owner !== tribeId) continue
+        if (buildingCompleted) break
+
+        for (const building of techBuildings) {
+          if (!settlement.buildings.includes(building.id)) {
+            const updatedSettlements: Map<SettlementId, Settlement> = new Map(newState.settlements)
+            const updatedSettlement: Settlement = {
+              ...settlement,
+              buildings: [...settlement.buildings, building.id],
+            }
+            updatedSettlements.set(settlement.id, updatedSettlement)
+            newState = { ...newState, settlements: updatedSettlements }
+            buildingCompleted = true
+            break
+          }
         }
       }
     }

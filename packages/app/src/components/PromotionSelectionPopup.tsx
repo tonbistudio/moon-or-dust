@@ -1,5 +1,6 @@
 // Popup for selecting a promotion when a unit levels up
 
+import { useState } from 'react'
 import type { Unit, PromotionId } from '@tribes/game-core'
 import { getAvailablePromotions, getPromotion, type PromotionDefinition } from '@tribes/game-core'
 import { Tooltip } from './Tooltip'
@@ -76,6 +77,7 @@ export function PromotionSelectionPopup({
   onSelect,
   onDismiss,
 }: PromotionSelectionPopupProps): JSX.Element {
+  const [selectedPromotion, setSelectedPromotion] = useState<PromotionId | null>(null)
   const availablePromotions = getAvailablePromotions(unit)
 
   // Group promotions by path
@@ -113,6 +115,9 @@ export function PromotionSelectionPopup({
           borderRadius: '12px',
           minWidth: '500px',
           maxWidth: '640px',
+          maxHeight: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
           textAlign: 'center',
           color: '#fff',
           boxShadow: '0 8px 32px rgba(168, 85, 247, 0.3)',
@@ -214,8 +219,8 @@ export function PromotionSelectionPopup({
           </div>
         )}
 
-        {/* Content */}
-        <div style={{ padding: '20px 24px' }}>
+        {/* Content — scrollable */}
+        <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
           <div
             style={{
               fontSize: '13px',
@@ -269,28 +274,35 @@ export function PromotionSelectionPopup({
 
                   {/* Promotion buttons */}
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {promotions.map((promo) => (
+                    {promotions.map((promo) => {
+                      const isSelected = selectedPromotion === promo.id
+                      return (
                       <button
                         key={promo.id}
-                        onClick={() => onSelect(promo.id)}
+                        onClick={() => setSelectedPromotion(promo.id)}
                         style={{
                           flex: '1 1 200px',
                           padding: '12px 16px',
-                          background: colors.bg,
-                          border: `1px solid ${colors.border}`,
+                          background: isSelected ? `${colors.primary}30` : colors.bg,
+                          border: isSelected ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
                           borderRadius: '8px',
                           color: '#fff',
                           cursor: 'pointer',
                           textAlign: 'left',
                           transition: 'all 0.2s',
+                          boxShadow: isSelected ? `0 0 12px ${colors.primary}40` : 'none',
                         }}
                         onMouseOver={(e) => {
-                          e.currentTarget.style.background = `${colors.primary}30`
-                          e.currentTarget.style.borderColor = colors.primary
+                          if (!isSelected) {
+                            e.currentTarget.style.background = `${colors.primary}30`
+                            e.currentTarget.style.borderColor = colors.primary
+                          }
                         }}
                         onMouseOut={(e) => {
-                          e.currentTarget.style.background = colors.bg
-                          e.currentTarget.style.borderColor = colors.border
+                          if (!isSelected) {
+                            e.currentTarget.style.background = colors.bg
+                            e.currentTarget.style.borderColor = colors.border
+                          }
                         }}
                       >
                         <div
@@ -342,7 +354,8 @@ export function PromotionSelectionPopup({
                           </div>
                         )}
                       </button>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )
@@ -371,6 +384,7 @@ export function PromotionSelectionPopup({
             borderTop: '1px solid #333',
             display: 'flex',
             justifyContent: 'center',
+            gap: '12px',
           }}
         >
           <button
@@ -386,6 +400,24 @@ export function PromotionSelectionPopup({
             }}
           >
             Decide Later
+          </button>
+          <button
+            onClick={() => selectedPromotion && onSelect(selectedPromotion)}
+            disabled={!selectedPromotion}
+            style={{
+              padding: '10px 24px',
+              background: selectedPromotion ? '#7c3aed' : '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              color: selectedPromotion ? '#fff' : '#666',
+              cursor: selectedPromotion ? 'pointer' : 'not-allowed',
+              fontSize: '13px',
+              fontWeight: 600,
+              opacity: selectedPromotion ? 1 : 0.5,
+              transition: 'all 0.2s',
+            }}
+          >
+            Confirm Promotion
           </button>
         </div>
       </div>

@@ -35,18 +35,20 @@ function createTestState(tiles: Tile[]): GameState {
         policySlots: { military: 1, economy: 1, progress: 0, wildcard: 0 },
         activePolicies: [],
         policyPool: [],
+        policies: {
+          slots: { military: 1, economy: 1, progress: 0, wildcard: 0 },
+          pool: [],
+          active: [],
+        },
         killCount: 0,
+        activeBuffs: [],
         greatPeople: {
           accumulator: {
-            combat: 0,
             alpha: 0,
             gold: 0,
             vibes: 0,
-            kills: 0,
-            captures: 0,
             tradeRoutes: 0,
             wondersBuilt: 0,
-            buildingsBuilt: 0,
           },
           earned: [],
           available: [],
@@ -74,18 +76,20 @@ function createTestState(tiles: Tile[]): GameState {
         policySlots: { military: 1, economy: 1, progress: 0, wildcard: 0 },
         activePolicies: [],
         policyPool: [],
+        policies: {
+          slots: { military: 1, economy: 1, progress: 0, wildcard: 0 },
+          pool: [],
+          active: [],
+        },
         killCount: 0,
+        activeBuffs: [],
         greatPeople: {
           accumulator: {
-            combat: 0,
             alpha: 0,
             gold: 0,
             vibes: 0,
-            kills: 0,
-            captures: 0,
             tradeRoutes: 0,
             wondersBuilt: 0,
-            buildingsBuilt: 0,
           },
           earned: [],
           available: [],
@@ -112,10 +116,12 @@ function createTestState(tiles: Tile[]): GameState {
       relations: new Map(),
       warWeariness: new Map(),
       reputationModifiers: new Map(),
+      peaceRejectionTurns: new Map(),
     },
     tradeRoutes: [],
     lootboxes: [],
     wonders: [],
+    pendingPeaceProposals: [],
   }
 }
 

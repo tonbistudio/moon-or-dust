@@ -121,7 +121,7 @@ export const RESOURCES: Record<ResourceType, ResourceDefinition> = {
     type: 'iron',
     category: 'strategic',
     yields: { gold: 0, alpha: 0, vibes: 0, production: 1, growth: 0 },
-    validTerrain: ['hills', 'plains'],
+    validTerrain: ['hills'],
     revealedByTech: 'iron_working',
   },
   horses: {
@@ -136,7 +136,7 @@ export const RESOURCES: Record<ResourceType, ResourceDefinition> = {
     type: 'gems',
     category: 'luxury',
     yields: { gold: 1, alpha: 0, vibes: 0, production: 0, growth: 0 },
-    validTerrain: ['hills', 'jungle'],
+    validTerrain: ['hills'],
   },
   marble: {
     type: 'marble',

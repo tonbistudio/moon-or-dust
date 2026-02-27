@@ -51,7 +51,7 @@ const TECH_DESCRIPTIONS: Record<string, string> = {
 // Get unlock items from a tech (similar to TechNode but simplified)
 interface UnlockItem {
   name: string
-  type: 'unit' | 'building' | 'improvement' | 'resource' | 'wonder'
+  type: 'unit' | 'building' | 'improvement' | 'resource' | 'wonder' | 'feature'
   color: string
   icon: string
 }
@@ -88,6 +88,12 @@ function getUnlockItems(tech: Tech): UnlockItem[] {
         color: '#66bb6a',
         icon: '\u{1F48E}' // gem
       })
+    })
+  }
+
+  if (tech.unlocks.features && tech.unlocks.features.length > 0) {
+    tech.unlocks.features.forEach(f => {
+      unlocks.push({ name: f, type: 'feature', color: '#26c6da', icon: '\u2728' }) // sparkles
     })
   }
 

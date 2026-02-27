@@ -35,17 +35,14 @@ function createTestState(
         activePolicies: [],
         policyPool: [],
         killCount: 0,
+        activeBuffs: [],
         greatPeople: {
           accumulator: {
-            combat: 0,
             alpha: 0,
             gold: 0,
             vibes: 0,
-            kills: 0,
-            captures: 0,
             tradeRoutes: 0,
             wondersBuilt: 0,
-            buildingsBuilt: 0,
           },
           earned: [],
           available: [],
@@ -72,10 +69,12 @@ function createTestState(
       relations: new Map(),
       warWeariness: new Map(),
       reputationModifiers: new Map(),
+      peaceRejectionTurns: new Map(),
     },
     tradeRoutes: [],
     lootboxes: [],
     wonders: [],
+    pendingPeaceProposals: [],
   }
 }
 
@@ -356,5 +355,157 @@ describe('Builder AI', () => {
 
     expect(buildAction).toBeDefined()
     expect(buildAction!.improvement).toBe('mine')
+  })
+})
+
+// Helper to create a settlement for testing
+function createTestSettlement(
+  id: string,
+  owner: string,
+  position: HexCoord,
+  options: {
+    buildings?: string[]
+    productionQueue?: Array<{ type: 'unit' | 'building' | 'wonder'; id: string; progress: number; cost: number }>
+    isCapital?: boolean
+  } = {}
+) {
+  return {
+    id: id as never,
+    name: 'Test City',
+    owner: owner as never,
+    position,
+    level: 1,
+    growthProgress: 0,
+    growthThreshold: 10,
+    buildings: (options.buildings ?? []) as never[],
+    productionQueue: options.productionQueue ?? [],
+    currentProduction: 0,
+    milestonesChosen: [],
+    isCapital: options.isCapital ?? true,
+    health: 200,
+    maxHealth: 200,
+  }
+}
+
+describe('AI Building Production', () => {
+  it('queues building production for idle settlement', () => {
+    const settlementPos: HexCoord = { q: 0, r: 0 }
+
+    const state = createTestState([
+      createTile(settlementPos, 'grassland', 'tribe_1'),
+    ])
+
+    // Add a settlement with an empty production queue and farming tech for granary
+    const settlement = createTestSettlement('settlement_1', 'tribe_1', settlementPos)
+    const stateWithSettlement = {
+      ...state,
+      settlements: new Map([['settlement_1', settlement]]) as never,
+    }
+
+    const actions = generateAIActions(stateWithSettlement, 'tribe_1' as TribeId)
+
+    // Should include a START_PRODUCTION action for a building or unit
+    const prodAction = actions.find(a => a.type === 'START_PRODUCTION') as
+      | { type: 'START_PRODUCTION'; settlementId: string; item: { type: string; id: string } }
+      | undefined
+
+    expect(prodAction).toBeDefined()
+    expect(prodAction!.settlementId).toBe('settlement_1')
+  })
+
+  it('does not queue production for settlement already producing', () => {
+    const settlementPos: HexCoord = { q: 0, r: 0 }
+
+    const state = createTestState([
+      createTile(settlementPos, 'grassland', 'tribe_1'),
+    ])
+
+    // Settlement already has something in queue
+    const settlement = createTestSettlement('settlement_1', 'tribe_1', settlementPos, {
+      productionQueue: [{ type: 'building', id: 'granary', progress: 10, cost: 40 }],
+    })
+    const stateWithSettlement = {
+      ...state,
+      settlements: new Map([['settlement_1', settlement]]) as never,
+    }
+
+    const actions = generateAIActions(stateWithSettlement, 'tribe_1' as TribeId)
+
+    // Should NOT include a START_PRODUCTION action (already producing)
+    const prodAction = actions.find(a => a.type === 'START_PRODUCTION')
+    expect(prodAction).toBeUndefined()
+  })
+})
+
+describe('AI Unit Production', () => {
+  it('queues military unit when settlement has no available buildings', () => {
+    const settlementPos: HexCoord = { q: 0, r: 0 }
+
+    // No techs that unlock buildings → falls through to unit production
+    const state = createTestState([
+      createTile(settlementPos, 'grassland', 'tribe_1'),
+    ])
+
+    // Override player to have no techs (so no buildings available, forcing unit production)
+    const stateNoTechs = {
+      ...state,
+      players: [
+        {
+          ...state.players[0]!,
+          researchedTechs: [] as never[],
+        },
+      ],
+    }
+
+    const settlement = createTestSettlement('settlement_1', 'tribe_1', settlementPos)
+    const stateWithSettlement = {
+      ...stateNoTechs,
+      settlements: new Map([['settlement_1', settlement]]) as never,
+    }
+
+    const actions = generateAIActions(stateWithSettlement, 'tribe_1' as TribeId)
+
+    const prodAction = actions.find(a => a.type === 'START_PRODUCTION') as
+      | { type: 'START_PRODUCTION'; item: { type: string; id: string } }
+      | undefined
+
+    expect(prodAction).toBeDefined()
+    expect(prodAction!.item.type).toBe('unit')
+  })
+
+  it('prioritizes settler when AI has fewer than 3 settlements and no settlers', () => {
+    const settlementPos: HexCoord = { q: 0, r: 0 }
+    const tiles = [
+      createTile(settlementPos, 'grassland', 'tribe_1'),
+      createTile({ q: 1, r: 0 }, 'grassland'),
+      createTile({ q: 2, r: 0 }, 'grassland'),
+    ]
+
+    // No techs → no buildings available, so AI goes straight to unit production
+    const state = createTestState(tiles)
+    const stateNoTechs = {
+      ...state,
+      players: [
+        {
+          ...state.players[0]!,
+          researchedTechs: [] as never[],
+        },
+      ],
+    }
+
+    const settlement = createTestSettlement('settlement_1', 'tribe_1', settlementPos)
+    const stateWithSettlement = {
+      ...stateNoTechs,
+      settlements: new Map([['settlement_1', settlement]]) as never,
+    }
+
+    const actions = generateAIActions(stateWithSettlement, 'tribe_1' as TribeId)
+
+    const prodAction = actions.find(
+      a => a.type === 'START_PRODUCTION' &&
+        (a as { item: { id: string } }).item.id === 'settler'
+    )
+
+    expect(prodAction).toBeDefined()
   })
 })

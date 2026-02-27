@@ -96,26 +96,28 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
     setSelectedTribe(null)
   }
 
-  // Count relationships for button badge
+  // Count relationships for button badge (exclude eliminated tribes)
   const atWar = state.players.filter(p =>
     p.tribeId !== currentPlayer.tribeId &&
+    p.eliminatedOnTurn === undefined &&
     getStance(state, currentPlayer.tribeId, p.tribeId) === 'war'
   ).length
   const allied = state.players.filter(p =>
     p.tribeId !== currentPlayer.tribeId &&
+    p.eliminatedOnTurn === undefined &&
     getStance(state, currentPlayer.tribeId, p.tribeId) === 'allied'
   ).length
 
-  // Get selected tribe info
+  // Get selected tribe info (clear selection if tribe is eliminated)
   const selectedPlayer = selectedTribe
-    ? orderedPlayers.find(p => p.tribeId === selectedTribe)
+    ? orderedPlayers.find(p => p.tribeId === selectedTribe && p.eliminatedOnTurn === undefined)
     : null
   const selectedStance = selectedTribe && selectedPlayer
     ? getStance(state, currentPlayer.tribeId, selectedTribe)
     : null
-  const canWar = selectedTribe ? canDeclareWar(state, currentPlayer.tribeId, selectedTribe).canDeclare : false
-  const canPeace = selectedTribe ? canProposePeace(state, currentPlayer.tribeId, selectedTribe).canPropose : false
-  const canAlly = selectedTribe ? canProposeAlliance(state, currentPlayer.tribeId, selectedTribe).canPropose : false
+  const canWar = selectedTribe && selectedPlayer ? canDeclareWar(state, currentPlayer.tribeId, selectedTribe).canDeclare : false
+  const canPeace = selectedTribe && selectedPlayer ? canProposePeace(state, currentPlayer.tribeId, selectedTribe).canPropose : false
+  const canAlly = selectedTribe && selectedPlayer ? canProposeAlliance(state, currentPlayer.tribeId, selectedTribe).canPropose : false
 
   return (
     <>
@@ -258,12 +260,18 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                   }}
                 >
                   {relationships.map(({ from, to, stance }, idx) => {
+                    const fromPlayer = orderedPlayers[from]!
+                    const toPlayer = orderedPlayers[to]!
+                    // Hide lines to/from eliminated tribes
+                    if (fromPlayer.eliminatedOnTurn !== undefined || toPlayer.eliminatedOnTurn !== undefined) {
+                      return null
+                    }
                     const fromPos = NODE_POSITIONS[(from + positionOffset) % 4]!
                     const toPos = NODE_POSITIONS[(to + positionOffset) % 4]!
                     const color = STANCE_COLORS[stance]
                     const isSelected = selectedTribe && (
-                      orderedPlayers[from]?.tribeId === selectedTribe ||
-                      orderedPlayers[to]?.tribeId === selectedTribe
+                      fromPlayer.tribeId === selectedTribe ||
+                      toPlayer.tribeId === selectedTribe
                     )
 
                     return (
@@ -287,10 +295,11 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                   const pos = NODE_POSITIONS[(idx + positionOffset) % 4]!
                   const isCurrentPlayer = player.tribeId === currentPlayer.tribeId
                   const isSelected = player.tribeId === selectedTribe
-                  const tribeColor = TRIBE_COLORS[player.tribeName] || '#6b7280'
+                  const isEliminated = player.eliminatedOnTurn !== undefined
+                  const tribeColor = isEliminated ? '#444' : (TRIBE_COLORS[player.tribeName] || '#6b7280')
 
                   // Get stance with current player (for non-current players)
-                  const stanceWithPlayer = !isCurrentPlayer
+                  const stanceWithPlayer = !isCurrentPlayer && !isEliminated
                     ? getStance(state, currentPlayer.tribeId, player.tribeId)
                     : null
 
@@ -298,7 +307,7 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                     <div
                       key={player.tribeId}
                       onClick={() => {
-                        if (!isCurrentPlayer) {
+                        if (!isCurrentPlayer && !isEliminated) {
                           setSelectedTribe(isSelected ? null : player.tribeId)
                         }
                       }}
@@ -307,8 +316,9 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                         left: `${pos.x}%`,
                         top: `${pos.y}%`,
                         transform: 'translate(-50%, -50%)',
-                        cursor: isCurrentPlayer ? 'default' : 'pointer',
+                        cursor: isCurrentPlayer || isEliminated ? 'default' : 'pointer',
                         zIndex: isSelected ? 10 : 1,
+                        opacity: isEliminated ? 0.4 : 1,
                       }}
                     >
                       {/* Node rectangle */}
@@ -316,7 +326,9 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                         style={{
                           padding: isCurrentPlayer ? '10px 20px' : '8px 16px',
                           borderRadius: '8px',
-                          background: `linear-gradient(135deg, ${tribeColor} 0%, ${tribeColor}cc 100%)`,
+                          background: isEliminated
+                            ? '#222'
+                            : `linear-gradient(135deg, ${tribeColor} 0%, ${tribeColor}cc 100%)`,
                           border: isSelected
                             ? '2px solid #fff'
                             : isCurrentPlayer
@@ -335,14 +347,17 @@ export function DiplomacyPanel({ currentPlayer }: DiplomacyPanelProps): JSX.Elem
                         }}
                       >
                         <div style={{
-                          color: '#000',
+                          color: isEliminated ? '#666' : '#000',
                           fontWeight: 600,
                           fontSize: isCurrentPlayer ? '14px' : '13px',
                           textTransform: 'capitalize',
+                          textDecoration: isEliminated ? 'line-through' : 'none',
                         }}>
                           {player.tribeName}
                         </div>
-                        {isCurrentPlayer ? (
+                        {isEliminated ? (
+                          <div style={{ color: '#555', fontSize: '10px', fontStyle: 'italic' }}>Destroyed</div>
+                        ) : isCurrentPlayer ? (
                           <div style={{ color: 'rgba(0,0,0,0.5)', fontSize: '10px' }}>You</div>
                         ) : stanceWithPlayer && (
                           <div style={{

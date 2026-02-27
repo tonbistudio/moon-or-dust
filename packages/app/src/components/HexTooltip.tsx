@@ -1,7 +1,7 @@
 // Tooltip for displaying hex tile information when hovering
 
 import type { HexCoord, GameState, Unit, TribeId, Tile, PromotionId } from '@tribes/game-core'
-import { hexKey, getTileYields, getPromotion, getTribeById } from '@tribes/game-core'
+import { hexKey, getTileYields, getPromotion } from '@tribes/game-core'
 import { TooltipSection, TooltipRow, TooltipDivider } from './Tooltip'
 
 interface HexTooltipProps {
@@ -243,11 +243,19 @@ export function HexTooltip({
       )}
 
       {/* Ownership */}
-      {tile.owner && (
-        <div style={{ fontSize: '10px', color: '#666', marginTop: '6px' }}>
-          Controlled by {getTribeById(tile.owner)?.displayName ?? tile.owner}
-        </div>
-      )}
+      {tile.owner && (() => {
+        const ownerPlayer = state.players.find(p => p.tribeId === tile.owner)
+        const ownerDisplay = tile.owner === currentPlayer
+          ? 'You'
+          : ownerPlayer?.tribeName
+            ? ownerPlayer.tribeName.charAt(0).toUpperCase() + ownerPlayer.tribeName.slice(1)
+            : tile.owner
+        return (
+          <div style={{ fontSize: '10px', color: '#666', marginTop: '6px' }}>
+            Controlled by {ownerDisplay}
+          </div>
+        )
+      })()}
     </div>
   )
 }

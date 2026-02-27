@@ -401,7 +401,7 @@ describe('Unit Movement', () => {
 
     expect(movedUnit.position).toEqual({ q: 6, r: 5 })
     expect(movedUnit.movementRemaining).toBe(unit.movementRemaining - 1)
-    expect(movedUnit.hasActed).toBe(true)
+    expect(movedUnit.hasActed).toBe(false)
   })
 
   it('resets unit movement at turn start', () => {

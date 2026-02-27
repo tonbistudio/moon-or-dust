@@ -54,32 +54,32 @@ const RARITY_CHANCES: Record<UnitRarity, string> = {
 function getUnitIcon(unitType: string): string {
   // Melee units
   if (['warrior', 'swordsman', 'bot_fighter', 'deadgod', 'stuckers'].includes(unitType)) {
-    return '\u2694\uFE0F' // crossed swords
+    return '⚔️'
   }
   // Ranged units
   if (['archer', 'sniper', 'rocketer', 'banana_slinger', 'neon_geck'].includes(unitType)) {
-    return '\u{1F3F9}' // bow and arrow
+    return '🏹'
   }
   // Cavalry units
   if (['horseman', 'knight', 'tank'].includes(unitType)) {
-    return '\u{1F40E}' // horse
+    return '🐎'
   }
   // Siege units
   if (['social_engineer', 'bombard'].includes(unitType)) {
-    return '\u{1F4A3}' // bomb
+    return '💣'
   }
   // Recon
   if (unitType === 'scout') {
-    return '\u{1F441}' // eye
+    return '👁'
   }
   // Civilian
   if (unitType === 'settler') {
-    return '\u{1F3E0}' // house
+    return '🏠'
   }
   if (unitType === 'builder') {
-    return '\u{1F528}' // hammer
+    return '🔨'
   }
-  return '\u2694\uFE0F' // default: crossed swords
+  return '⚔️'
 }
 
 export function MintPopup({
@@ -443,28 +443,28 @@ export function MintPopup({
                     }}
                   >
                     <StatCard
-                      icon="\u2694\uFE0F"
+                      icon="⚔️"
                       label="ATK"
                       value={mintedUnit.combatStrength}
                       bonus={rarityBonus?.combat ?? 0}
                       color="#ef4444"
                     />
                     <StatCard
-                      icon="\u{1F9E1}"
+                      icon="🧡"
                       label="HP"
                       value={mintedUnit.maxHealth}
                       bonus={0}
                       color="#3b82f6"
                     />
                     <StatCard
-                      icon="\u{1F463}"
+                      icon="👣"
                       label="MOV"
                       value={mintedUnit.maxMovement}
                       bonus={rarityBonus?.movement ?? 0}
                       color="#22c55e"
                     />
                     <StatCard
-                      icon="\u{1F441}"
+                      icon="👁"
                       label="VIS"
                       value={2 + (rarityBonus?.vision ?? 0)}
                       bonus={rarityBonus?.vision ?? 0}
@@ -484,9 +484,9 @@ export function MintPopup({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                         <span style={{ fontSize: '16px' }}>
-                          {mintedUnit.rarity === 'legendary' ? '\u{1F451}' :
-                           mintedUnit.rarity === 'epic' ? '\u{1F48E}' :
-                           mintedUnit.rarity === 'rare' ? '\u2B50' : '\u2728'}
+                          {mintedUnit.rarity === 'legendary' ? '👑' :
+                           mintedUnit.rarity === 'epic' ? '💎' :
+                           mintedUnit.rarity === 'rare' ? '⭐' : '✨'}
                         </span>
                         <span style={{ color: rarityColor, fontWeight: 700, fontSize: '13px' }}>
                           {RARITY_NAMES[mintedUnit.rarity]} Bonus!

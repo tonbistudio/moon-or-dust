@@ -3,7 +3,7 @@
 export interface GameEvent {
   id: string
   message: string
-  type: 'combat' | 'lootbox' | 'settlement' | 'info' | 'diplomacy' | 'milestone' | 'research' | 'golden' | 'culture' | 'policy' | 'great_person'
+  type: 'combat' | 'lootbox' | 'settlement' | 'info' | 'diplomacy' | 'milestone' | 'research' | 'golden' | 'culture' | 'policy' | 'great_person' | 'warning'
   turn: number
 }
 
@@ -71,6 +71,8 @@ function getEventColor(type: GameEvent['type']): string {
       return '#a855f7' // violet (for policy selections)
     case 'great_person':
       return '#f0abfc' // pink (for great people appearances)
+    case 'warning':
+      return '#fb923c' // orange (for warnings like failed attacks)
     case 'info':
     default:
       return '#ffffff' // white

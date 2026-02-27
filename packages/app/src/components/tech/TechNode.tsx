@@ -58,6 +58,12 @@ function getUnlockItems(tech: Tech): UnlockItem[] {
     })
   }
 
+  if (tech.unlocks.features && tech.unlocks.features.length > 0) {
+    tech.unlocks.features.forEach(f => {
+      unlocks.push({ name: f, color: '#26c6da' }) // Cyan/teal for features
+    })
+  }
+
   // Find wonders that have this tech as a prerequisite
   const wondersUnlocked = ALL_WONDERS.filter(w => w.techPrereq === tech.id)
   if (wondersUnlocked.length > 0) {

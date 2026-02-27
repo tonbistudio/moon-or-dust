@@ -1,16 +1,12 @@
 // SOAR leaderboard and achievement integration
 // Uses @magicblock-labs/soar-sdk for on-chain rankings
 
-import { PublicKey } from '@solana/web3.js'
-import { AnchorProvider } from '@coral-xyz/anchor'
+import { Keypair, PublicKey } from '@solana/web3.js'
+import { AnchorProvider, BN } from '@coral-xyz/anchor'
+import { SoarProgram } from '@magicblock-labs/soar-sdk'
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-// Game registered on SOAR (devnet) — set after one-time registration
-// Run `pnpm soar:register` to create and store this address
-export const SOAR_GAME_ADDRESS: PublicKey | null = null
+// Devnet config — populated by `pnpm soar:register`
+import soarConfig from './soar-devnet.json'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,7 +38,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// SOAR Service
+// SOAR Service interface
 // ---------------------------------------------------------------------------
 
 export interface SOARService {
@@ -50,64 +46,127 @@ export interface SOARService {
   submitScore(floorPrice: number): Promise<string | null>
   /** Fetch the global leaderboard */
   getLeaderboard(limit?: number): Promise<LeaderboardEntry[]>
+  /** Unlock an achievement on-chain */
+  unlockAchievement(achievementId: string): Promise<string | null>
   /** Whether SOAR is available (wallet connected + game registered) */
   isAvailable(): boolean
 }
 
 // ---------------------------------------------------------------------------
-// On-chain SOAR service (when wallet connected and game registered)
+// On-chain SOAR service (wallet connected + game registered on devnet)
 // ---------------------------------------------------------------------------
 
 export class OnChainSOARService implements SOARService {
   private provider: AnchorProvider
+  private soar: SoarProgram
+  private authority: Keypair
+  private leaderboardAddress: PublicKey
+  private topEntriesAddress: PublicKey
 
   constructor(provider: AnchorProvider) {
     this.provider = provider
+    this.soar = SoarProgram.get(provider)
+    this.authority = Keypair.fromSecretKey(Uint8Array.from(soarConfig.authoritySecretKey))
+    this.leaderboardAddress = new PublicKey(soarConfig.leaderboardAddress)
+    this.topEntriesAddress = new PublicKey(soarConfig.topEntriesAddress)
   }
 
   isAvailable(): boolean {
-    return !!SOAR_GAME_ADDRESS && !!this.provider.publicKey
+    return !!soarConfig.gameAddress && !!this.provider.publicKey
   }
 
   async submitScore(floorPrice: number): Promise<string | null> {
     if (!this.isAvailable()) return null
+    const wallet = this.provider.publicKey!
 
     try {
-      // For now, log intent — actual submission requires game + leaderboard addresses
-      // which are set up during the one-time registration step
-      console.log('[SOAR] Would submit score:', floorPrice, 'from', this.provider.publicKey?.toBase58())
+      // Step 1: Register player on leaderboard (idempotent — catches "already initialized")
+      try {
+        const regResult = await this.soar.registerPlayerEntryForLeaderBoard(
+          wallet,
+          this.leaderboardAddress,
+        )
+        await this.soar.sendAndConfirmTransaction(regResult.transaction)
+        console.log('[SOAR] Player registered on leaderboard')
+      } catch (err: unknown) {
+        // "already initialized" is expected if player already registered
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!msg.includes('already in use') && !msg.includes('already initialized')) {
+          console.warn('[SOAR] Player registration warning:', msg)
+        }
+      }
 
-      // TODO: Implement after game registration
-      // const playerAddress = soar.derivePlayerAddress(this.provider.publicKey!)
-      // const tx = await soar.submitScoreToLeaderboard({
-      //   player: playerAddress,
-      //   authWallet: this.provider.publicKey!,
-      //   leaderboard: SOAR_LEADERBOARD_ADDRESS,
-      //   score: new BN(floorPrice),
-      // })
-      // return await this.provider.sendAndConfirm(tx)
-
-      return null
+      // Step 2: Submit score with authority co-signer
+      const scoreResult = await this.soar.submitScoreToLeaderBoard(
+        wallet,
+        this.authority.publicKey,
+        this.leaderboardAddress,
+        new BN(floorPrice),
+      )
+      const txSig = await this.soar.sendAndConfirmTransaction(
+        scoreResult.transaction,
+        [this.authority],
+      )
+      console.log('[SOAR] Score submitted:', floorPrice, 'tx:', txSig)
+      return txSig
     } catch (err) {
       console.error('[SOAR] Score submission failed:', err)
       return null
     }
   }
 
-  async getLeaderboard(_limit = 10): Promise<LeaderboardEntry[]> {
+  async getLeaderboard(limit = 10): Promise<LeaderboardEntry[]> {
     if (!this.isAvailable()) return []
 
     try {
-      // TODO: Fetch from SOAR after game registration
-      // const { SoarProgram } = await import('@magicblock-labs/soar-sdk')
-      // const soar = SoarProgram.get(this.provider)
-      // const leaderboardAccount = await soar.fetchLeaderBoardAccount(SOAR_LEADERBOARD_ADDRESS)
-      // return leaderboardAccount.entries.slice(0, _limit).map((entry, i) => ({...}))
+      const topEntries = await this.soar.fetchLeaderBoardTopEntriesAccount(
+        this.topEntriesAddress,
+      )
 
-      return []
+      return topEntries.topScores
+        .filter((s) => s.entry.score.toNumber() > 0)
+        .slice(0, limit)
+        .map((s, i) => {
+          const full = s.player.toBase58()
+          return {
+            rank: i + 1,
+            player: full.slice(0, 4) + '..' + full.slice(-4),
+            playerFull: full,
+            score: s.entry.score.toNumber(),
+          }
+        })
     } catch (err) {
       console.error('[SOAR] Leaderboard fetch failed:', err)
       return []
+    }
+  }
+
+  async unlockAchievement(achievementId: string): Promise<string | null> {
+    if (!this.isAvailable()) return null
+    const wallet = this.provider.publicKey!
+
+    const achievementAddr = (soarConfig.achievementAddresses as Record<string, string>)[achievementId]
+    if (!achievementAddr) {
+      console.warn('[SOAR] Unknown achievement:', achievementId)
+      return null
+    }
+
+    try {
+      const result = await this.soar.unlockPlayerAchievement(
+        wallet,
+        this.authority.publicKey,
+        new PublicKey(achievementAddr),
+        this.leaderboardAddress,
+      )
+      const txSig = await this.soar.sendAndConfirmTransaction(
+        result.transaction,
+        [this.authority],
+      )
+      console.log('[SOAR] Achievement unlocked:', achievementId, 'tx:', txSig)
+      return txSig
+    } catch (err) {
+      console.error('[SOAR] Achievement unlock failed:', achievementId, err)
+      return null
     }
   }
 }
@@ -125,6 +184,8 @@ interface LocalScore {
 }
 
 export class LocalSOARService implements SOARService {
+  private results = new Map<string, boolean>()
+
   isAvailable(): boolean {
     return true // Always available as local fallback
   }
@@ -157,6 +218,12 @@ export class LocalSOARService implements SOARService {
     }))
   }
 
+  async unlockAchievement(achievementId: string): Promise<string | null> {
+    this.results.set(achievementId, true)
+    console.log('[SOAR-Local] Achievement unlocked:', achievementId)
+    return null
+  }
+
   private loadScores(): LocalScore[] {
     try {
       const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
@@ -172,8 +239,9 @@ export class LocalSOARService implements SOARService {
 // Factory
 // ---------------------------------------------------------------------------
 
+/** Returns an on-chain SOAR service when wallet connected + game registered, local fallback otherwise. */
 export function createSOARService(provider?: AnchorProvider | null): SOARService {
-  if (provider?.publicKey && SOAR_GAME_ADDRESS) {
+  if (provider?.publicKey && soarConfig.gameAddress) {
     return new OnChainSOARService(provider)
   }
   return new LocalSOARService()

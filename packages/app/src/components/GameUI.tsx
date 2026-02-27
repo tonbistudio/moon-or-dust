@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { TechId, CultureId, HexCoord, Unit, SettlementId, PolicyId, PromotionId, UnitId, PendingMint } from '@tribes/game-core'
-import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion, canLevelUp, calculateFloorPriceBreakdown, getPendingMints, getAvailableTechs, getAvailableCultures, getGreatPersonDefinition } from '@tribes/game-core'
+import { getTech, getResearchProgress, getTurnsToComplete, getCulture, getCultureProgress, getTurnsToCompleteCulture, hexKey, getValidTargets, hasPendingMilestone, isCultureReadyForCompletion, canLevelUp, calculateFloorPriceBreakdown, getPendingMints, getAvailableTechs, getAvailableCultures, getGreatPersonDefinition, getTribe, getReachableHexes } from '@tribes/game-core'
 import { useGame, useCurrentPlayer, useSelectedSettlement, useSelectedUnit } from '../hooks/useGame'
 import { useGameContext } from '../context/GameContext'
 import { OnChainVRFService } from '../magicblock/vrf'
@@ -21,6 +21,7 @@ import { EventLog } from './EventLog'
 import { DiplomacyPanel } from './DiplomacyPanel'
 import { TradePanel } from './TradePanel'
 import { WarConfirmationPopup } from './WarConfirmationPopup'
+import { PeaceProposalPopup } from './PeaceProposalPopup'
 import { MilestonePanel } from './MilestonePanel'
 import { HexTooltip } from './HexTooltip'
 import { PromotionSelectionPopup } from './PromotionSelectionPopup'
@@ -52,6 +53,7 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
     nextVRFNonce,
     selectUnit,
     selectSettlement,
+    addEvent,
   } = useGameContext()
   const currentPlayer = useCurrentPlayer()
   const selectedSettlement = useSelectedSettlement()
@@ -59,12 +61,30 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
   const [showTechTree, setShowTechTree] = useState(false)
   const [showCulturePanel, setShowCulturePanel] = useState(false)
   const [showPolicyPanel, setShowPolicyPanel] = useState(false)
+  const [buffsExpanded, setBuffsExpanded] = useState(false)
   const [unitPendingPromotion, setUnitPendingPromotion] = useState<Unit | null>(null)
   // Track ongoing mint animations so popup persists until Continue is clicked
   const [activeMint, setActiveMint] = useState<{
     pendingMint: PendingMint
     total: number
   } | null>(null)
+
+  // Peace proposal popup — show first pending proposal targeting the human player
+  const pendingPeaceProposal = useMemo(() => {
+    if (!state) return null
+    return state.pendingPeaceProposals.find(p => p.target === state.currentPlayer) ?? null
+  }, [state])
+  const peaceProposerInfo = useMemo(() => {
+    if (!state || !pendingPeaceProposal) return null
+    const player = state.players.find(p => p.tribeId === pendingPeaceProposal.proposer)
+    if (!player) return null
+    const tribe = getTribe(player.tribeName)
+    return {
+      tribeId: pendingPeaceProposal.proposer,
+      tribeName: tribe?.displayName ?? player.tribeName,
+      tribeColor: tribe?.color ?? '#888',
+    }
+  }, [state, pendingPeaceProposal])
 
   // Memoize valid attack targets based only on selectedUnit (not full state)
   // This prevents recalculating targets on every state change
@@ -257,7 +277,7 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
       e.preventDefault()
 
       const actionableUnits = Array.from(state.units.values())
-        .filter(u => u.owner === state.currentPlayer && u.movementRemaining > 0 && !u.hasActed)
+        .filter(u => u.owner === state.currentPlayer && u.movementRemaining > 0 && !u.hasActed && !u.sleeping)
         .sort((a, b) => a.id.localeCompare(b.id))
 
       if (actionableUnits.length === 0) return
@@ -277,9 +297,15 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
     if (!state || !currentPlayer) return []
     const issues: string[] = []
 
-    // Units with moves left
+    // Units with moves left (exclude sleeping and units that can't actually reach any new tile)
     const idleUnits = Array.from(state.units.values())
-      .filter(u => u.owner === state.currentPlayer && u.movementRemaining > 0 && !u.hasActed)
+      .filter(u => {
+        if (u.owner !== state.currentPlayer || u.movementRemaining <= 0 || u.hasActed || u.sleeping) return false
+        // Check if unit can actually move to any adjacent tile
+        const reachable = getReachableHexes(state, u)
+        // reachable always includes current position, so > 1 means it can move somewhere
+        return reachable.size > 1
+      })
     if (idleUnits.length > 0) issues.push(`${idleUnits.length} unit${idleUnits.length > 1 ? 's' : ''} with moves left`)
 
     // Idle settlements
@@ -510,37 +536,111 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
             </Tooltip>
           )}
 
-          {/* Active Buff Indicators */}
-          {currentPlayer.activeBuffs.length > 0 && currentPlayer.activeBuffs.map((buff, i) => {
-            const colorMap: Record<string, string> = {
+          {/* Active Buff Indicators — foldable when multiple */}
+          {currentPlayer.activeBuffs.length > 0 && (() => {
+            const buffColorMap: Record<string, string> = {
               gold: '#ffd54f', alpha: '#64b5f6', vibes: '#ba68c8',
               trade: '#4caf50', production: '#ff9800',
             }
-            const color = colorMap[buff.yield ?? buff.type] ?? '#90a4ae'
-            const gpDef = getGreatPersonDefinition(buff.source)
+            const buffs = currentPlayer.activeBuffs
+            if (buffs.length === 1) {
+              const buff = buffs[0]!
+              const color = buffColorMap[buff.yield ?? buff.type] ?? '#90a4ae'
+              const gpDef = getGreatPersonDefinition(buff.source)
+              return (
+                <Tooltip
+                  content={gpDef ? `${gpDef.name}: +${buff.percent}% ${buff.yield ?? buff.type}` : `+${buff.percent}% ${buff.yield ?? buff.type}`}
+                  position="below"
+                >
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      background: `${color}22`,
+                      border: `1px solid ${color}`,
+                      borderRadius: '4px',
+                      color,
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    +{buff.percent}% {buff.yield ?? buff.type} ({buff.turnsRemaining}t)
+                  </span>
+                </Tooltip>
+              )
+            }
+            // Multiple buffs — show foldable summary
             return (
-              <Tooltip
-                key={i}
-                content={gpDef ? `${gpDef.name}: +${buff.percent}% ${buff.yield ?? buff.type}` : `+${buff.percent}% ${buff.yield ?? buff.type}`}
-                position="below"
-              >
-                <span
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setBuffsExpanded(!buffsExpanded)}
                   style={{
-                    padding: '2px 8px',
-                    background: `${color}22`,
-                    border: `1px solid ${color}`,
+                    padding: '2px 10px',
+                    background: '#4caf5022',
+                    border: '1px solid #4caf50',
                     borderRadius: '4px',
-                    color,
+                    color: '#4caf50',
                     fontSize: '11px',
                     fontWeight: 'bold',
+                    cursor: 'pointer',
                     whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
                   }}
                 >
-                  +{buff.percent}% {buff.yield ?? buff.type} ({buff.turnsRemaining}t)
-                </span>
-              </Tooltip>
+                  {buffs.length} buffs active
+                  <span style={{ fontSize: '9px' }}>{buffsExpanded ? '\u25B2' : '\u25BC'}</span>
+                </button>
+                {buffsExpanded && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: '4px',
+                      background: 'rgba(0, 0, 0, 0.9)',
+                      border: '1px solid #333',
+                      borderRadius: '6px',
+                      padding: '6px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      zIndex: 50,
+                      minWidth: '180px',
+                    }}
+                  >
+                    {buffs.map((buff, i) => {
+                      const color = buffColorMap[buff.yield ?? buff.type] ?? '#90a4ae'
+                      const gpDef = getGreatPersonDefinition(buff.source)
+                      return (
+                        <Tooltip
+                          key={i}
+                          content={gpDef ? `${gpDef.name}: +${buff.percent}% ${buff.yield ?? buff.type}` : `+${buff.percent}% ${buff.yield ?? buff.type}`}
+                          position="right"
+                        >
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              background: `${color}22`,
+                              border: `1px solid ${color}`,
+                              borderRadius: '4px',
+                              color,
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            +{buff.percent}% {buff.yield ?? buff.type} ({buff.turnsRemaining}t)
+                          </span>
+                        </Tooltip>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )
-          })}
+          })()}
         </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
           {/* Wallet status */}
@@ -697,17 +797,36 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
       {/*
         === TURN-START POPUP PRIORITY ORDER ===
         1. Minting (highest) - must complete to create units
-        2. Milestone - required choice
-        3. Policy Selection - required choice
-        4. Tech Completed - informational
-        5. Golden Age - informational
-        6. Lootbox (lowest) - informational
+        2. Peace Proposal - required choice, must resolve before other popups
+        3. Milestone - required choice
+        4. Policy Selection - required choice
+        5. Tech Completed - informational
+        6. Golden Age - informational
+        7. Lootbox (lowest) - informational
 
         Each popup waits for all higher-priority popups to be resolved.
       */}
 
-      {/* Priority 2: Milestone Selection - waits for minting */}
-      {!pendingMintInfo && settlementWithPendingMilestone && (
+      {/* Priority 2: Peace Proposal - waits for minting */}
+      {!pendingMintInfo && peaceProposerInfo && !pendingWarAttack && (
+        <div style={{ pointerEvents: 'auto' }}>
+          <PeaceProposalPopup
+            tribeName={peaceProposerInfo.tribeName}
+            tribeColor={peaceProposerInfo.tribeColor}
+            onAccept={() => {
+              dispatch({ type: 'RESPOND_PEACE_PROPOSAL', target: peaceProposerInfo.tribeId, accept: true })
+              addEvent(`Peace treaty accepted with ${peaceProposerInfo.tribeName}`, 'diplomacy')
+            }}
+            onReject={() => {
+              dispatch({ type: 'RESPOND_PEACE_PROPOSAL', target: peaceProposerInfo.tribeId, accept: false })
+              addEvent(`Rejected peace proposal from ${peaceProposerInfo.tribeName}`, 'diplomacy')
+            }}
+          />
+        </div>
+      )}
+
+      {/* Priority 3: Milestone Selection - waits for minting, peace */}
+      {!pendingMintInfo && !peaceProposerInfo && settlementWithPendingMilestone && (
         <div style={{ pointerEvents: 'auto' }}>
           <MilestonePanel
             settlement={settlementWithPendingMilestone}
@@ -717,8 +836,8 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* Priority 3: Policy Selection - waits for minting, milestone */}
-      {!pendingMintInfo && !settlementWithPendingMilestone && cultureReadyForSelection && (
+      {/* Priority 4: Policy Selection - waits for minting, peace, milestone */}
+      {!pendingMintInfo && !peaceProposerInfo && !settlementWithPendingMilestone && cultureReadyForSelection && (
         <div style={{ pointerEvents: 'auto' }}>
           <PolicySelectionPopup
             player={currentPlayer}
@@ -727,8 +846,8 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* Priority 4: Tech Completed - waits for minting, milestone, policy */}
-      {!pendingMintInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && pendingTechCompletion && (
+      {/* Priority 5: Tech Completed - waits for minting, peace, milestone, policy */}
+      {!pendingMintInfo && !peaceProposerInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && pendingTechCompletion && (
         <div style={{ pointerEvents: 'auto' }}>
           <TechCompletedPopup
             techId={pendingTechCompletion}
@@ -741,8 +860,8 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* Priority 5: Golden Age - waits for minting, milestone, policy, tech */}
-      {!pendingMintInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && !pendingTechCompletion && pendingGoldenAge && (
+      {/* Priority 6: Golden Age - waits for minting, peace, milestone, policy, tech */}
+      {!pendingMintInfo && !peaceProposerInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && !pendingTechCompletion && pendingGoldenAge && (
         <div style={{ pointerEvents: 'auto' }}>
           <GoldenAgePopup
             trigger={pendingGoldenAge.trigger}
@@ -753,8 +872,8 @@ export function GameUI({ hoveredTile, mousePosition, onZoomIn, onZoomOut }: Game
         </div>
       )}
 
-      {/* Priority 6: Lootbox Reward - waits for all above */}
-      {!pendingMintInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && !pendingTechCompletion && !pendingGoldenAge && pendingLootboxReward && (
+      {/* Priority 7: Lootbox Reward - waits for all above */}
+      {!pendingMintInfo && !peaceProposerInfo && !settlementWithPendingMilestone && !cultureReadyForSelection && !pendingTechCompletion && !pendingGoldenAge && pendingLootboxReward && (
         <div style={{ pointerEvents: 'auto' }}>
           <LootboxRewardPopup
             reward={pendingLootboxReward}

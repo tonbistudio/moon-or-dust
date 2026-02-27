@@ -211,10 +211,17 @@ export function canProposePeace(
     return { canPropose: false, reason: 'Not at war' }
   }
 
-  // Check minimum war duration (at least 3 turns)
+  // Check minimum war duration (at least 5 turns)
   const relation = getRelation(state, proposer, target)
-  if (relation && relation.turnsAtCurrentStance < 3) {
-    return { canPropose: false, reason: 'War too recent (minimum 3 turns)' }
+  if (relation && relation.turnsAtCurrentStance < 5) {
+    return { canPropose: false, reason: 'War too recent (minimum 5 turns)' }
+  }
+
+  // Check peace rejection cooldown (3 turns after rejection)
+  const rejectionKey = `${proposer}-${target}`
+  const lastRejection = state.diplomacy.peaceRejectionTurns.get(rejectionKey)
+  if (lastRejection !== undefined && state.turn - lastRejection < 3) {
+    return { canPropose: false, reason: 'Peace was recently rejected (wait 3 turns)' }
   }
 
   return { canPropose: true }
@@ -858,5 +865,6 @@ export function createInitialDiplomacy(tribeIds: TribeId[]): DiplomacyState {
     relations,
     warWeariness: new Map(),
     reputationModifiers: new Map(),
+    peaceRejectionTurns: new Map(),
   }
 }

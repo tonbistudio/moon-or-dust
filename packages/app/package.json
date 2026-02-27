@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "soar:register": "npx tsx scripts/register-soar.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
