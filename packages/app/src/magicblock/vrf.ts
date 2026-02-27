@@ -10,7 +10,7 @@ import {
 
 // Anchor IDL — provides correct discriminators, account resolution, and
 // instruction serialization so we don't have to construct raw instructions.
-import vrfRarityIdl from '../../../../target/idl/vrf_rarity.json';
+import vrfRarityIdl from './vrf_rarity.json';
 
 // ---------------------------------------------------------------------------
 // Types

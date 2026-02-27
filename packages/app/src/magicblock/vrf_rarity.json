@@ -1,0 +1,196 @@
+{
+  "address": "8U41n8DFkJUiyrxzCLpNQyvAAbHfnoD2GvRpCxQxiMaQ",
+  "metadata": {
+    "name": "vrf_rarity",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "MagicBlock VRF rarity roller for Tribes game"
+  },
+  "instructions": [
+    {
+      "name": "callback_roll_rarity",
+      "docs": [
+        "Callback invoked by the MagicBlock VRF program with verified randomness.",
+        "Maps the random byte to a rarity tier and stores the result in the PDA."
+      ],
+      "discriminator": [
+        103,
+        214,
+        68,
+        69,
+        174,
+        78,
+        126,
+        3
+      ],
+      "accounts": [
+        {
+          "name": "vrf_program_identity",
+          "docs": [
+            "The VRF program identity PDA — proves this CPI originates from the VRF program"
+          ],
+          "signer": true,
+          "address": "9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw"
+        },
+        {
+          "name": "rarity_result",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "randomness",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "roll_rarity",
+      "docs": [
+        "Request a provably-fair rarity roll via MagicBlock VRF.",
+        "Creates a PDA to store the result and CPIs into the VRF oracle."
+      ],
+      "discriminator": [
+        58,
+        27,
+        148,
+        114,
+        37,
+        39,
+        129,
+        218
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "rarity_result",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  97,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_queue",
+          "writable": true,
+          "address": "Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh"
+        },
+        {
+          "name": "program_identity",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vrf_program",
+          "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
+        },
+        {
+          "name": "slot_hashes",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "RarityResult",
+      "discriminator": [
+        132,
+        190,
+        213,
+        166,
+        195,
+        11,
+        30,
+        133
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "RarityResult",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "rarity",
+            "type": "u8"
+          },
+          {
+            "name": "fulfilled",
+            "type": "bool"
+          },
+          {
+            "name": "roll_value",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}
