@@ -2,7 +2,7 @@
 
 A turn-based 4X strategy game set during the golden age of Solana NFTs. Lead one of four tribes — Monkes, Geckos, DeGods, or Cets — through 50 turns of exploration, warfare, diplomacy, and culture. Found settlements, research technology, train armies, and build wonders. At the end, only one tribe's floor price survives.
 
-Built for the [Solana Graveyard Hackathon](https://www.colosseum.org/) — MagicBlock track.
+Built for the [Solana Graveyard Hackathon](https://solana.com/graveyard-hack) — MagicBlock track.
 
 ## Play It
 
