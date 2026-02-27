@@ -117,6 +117,9 @@ const GREAT_PERSON_SPRITES_MAP: Record<string, string> = {
   blocksmyth: 'blocksmyth',
   retired_chad_dev: 'retiredchad',
   watch_king: 'watchking',
+  big_brain: 'bigbrain',
+  fxnction: 'function',
+  iced_knife: 'icedknife',
 }
 
 async function loadTribeSprites(tribeName: TribeName): Promise<void> {
