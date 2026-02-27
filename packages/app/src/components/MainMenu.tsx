@@ -60,9 +60,23 @@ function TribeCard({ tribe, available, selected, onSelect, index }: TribeCardPro
   const [btnHovered, setBtnHovered] = useState(false)
 
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 80 * index)
-    return () => clearTimeout(t)
-  }, [index])
+    const delay = 80 * index
+    let active = true
+    const t = setTimeout(() => {
+      if (active) setMounted(true)
+    }, delay)
+    return () => {
+      active = false
+      clearTimeout(t)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Safety: if mounted hasn't triggered after 2s, force it visible
+  useEffect(() => {
+    if (mounted) return
+    const safety = setTimeout(() => setMounted(true), 2000)
+    return () => clearTimeout(safety)
+  }, [mounted])
 
   const bonusEntries = Object.entries(tribe.bonuses).filter(
     ([, v]) => v !== undefined && v !== 0
@@ -354,9 +368,22 @@ export function MainMenu({ onStartGame, soarService }: MainMenuProps): JSX.Eleme
   const playableTribeNames = PLAYABLE_TRIBES.map(t => t.name)
 
   useEffect(() => {
-    const t = setTimeout(() => setTitleVisible(true), 100)
-    return () => clearTimeout(t)
+    let active = true
+    const t = setTimeout(() => {
+      if (active) setTitleVisible(true)
+    }, 100)
+    return () => {
+      active = false
+      clearTimeout(t)
+    }
   }, [])
+
+  // Safety: if title hasn't appeared after 2s, force it visible
+  useEffect(() => {
+    if (titleVisible) return
+    const safety = setTimeout(() => setTitleVisible(true), 2000)
+    return () => clearTimeout(safety)
+  }, [titleVisible])
 
   const handleStart = () => {
     if (selectedTribe) onStartGame(selectedTribe)

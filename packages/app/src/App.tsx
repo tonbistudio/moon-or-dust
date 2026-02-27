@@ -1,6 +1,7 @@
 // Main application component
 
-import { useState, useEffect, useCallback } from 'react'
+import { Component, useState, useEffect, useCallback } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
 import { GameProvider, useGameContext } from './context/GameContext'
 import { GameCanvas } from './components/GameCanvas'
 import { GameUI } from './components/GameUI'
@@ -9,6 +10,44 @@ import { EndGameScreen } from './components/EndGameScreen'
 import { SolanaProvider } from './wallet/SolanaProvider'
 import { isGameOver } from '@tribes/game-core'
 import type { TribeName } from '@tribes/game-core'
+
+// Error boundary to prevent blank screens from unhandled errors
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[Moon or Dust] Uncaught error:', error, info.componentStack)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          height: '100vh', background: '#1a1a2e', color: '#fff', fontFamily: 'system-ui, sans-serif',
+          padding: '20px', textAlign: 'center',
+        }}>
+          <h1 style={{ fontSize: '24px', marginBottom: '12px' }}>Something went wrong</h1>
+          <p style={{ color: '#888', marginBottom: '16px', maxWidth: '500px' }}>{this.state.error.message}</p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '10px 24px', background: '#7c3aed', border: 'none', borderRadius: '8px',
+              color: '#fff', fontSize: '14px', cursor: 'pointer',
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 interface ZoomControls {
   zoomIn: () => void
@@ -107,19 +146,21 @@ function GameApp(): JSX.Element {
 
 export function App(): JSX.Element {
   return (
-    <SolanaProvider>
-      <GameProvider>
-        <div
-          style={{
-            width: '100vw',
-            height: '100vh',
-            overflow: 'hidden',
-            background: '#1a1a2e',
-          }}
-        >
-          <GameApp />
-        </div>
-      </GameProvider>
-    </SolanaProvider>
+    <ErrorBoundary>
+      <SolanaProvider>
+        <GameProvider>
+          <div
+            style={{
+              width: '100vw',
+              height: '100vh',
+              overflow: 'hidden',
+              background: '#1a1a2e',
+            }}
+          >
+            <GameApp />
+          </div>
+        </GameProvider>
+      </SolanaProvider>
+    </ErrorBoundary>
   )
 }

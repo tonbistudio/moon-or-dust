@@ -658,14 +658,33 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
   const anchorWallet = useAnchorWallet()
   const anchorProvider = useMemo(() => {
     if (!anchorWallet || !connection) return null
-    return new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' })
+    try {
+      return new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' })
+    } catch (err) {
+      console.warn('[Anchor] Provider creation failed:', err)
+      return null
+    }
   }, [anchorWallet, connection])
-  const vrfService = useMemo(() => createVRFService(anchorProvider), [anchorProvider])
+  const vrfService = useMemo(() => {
+    try {
+      return createVRFService(anchorProvider)
+    } catch (err) {
+      console.warn('[VRF] Service creation failed, using local fallback:', err)
+      return createVRFService(null)
+    }
+  }, [anchorProvider])
   const vrfNonceRef = useRef(Date.now())
   const nextVRFNonce = useCallback(() => vrfNonceRef.current++, [])
 
   // SOAR service — uses on-chain SOAR when wallet connected + game registered, local fallback otherwise
-  const soarService = useMemo(() => createSOARService(anchorProvider), [anchorProvider])
+  const soarService = useMemo(() => {
+    try {
+      return createSOARService(anchorProvider)
+    } catch (err) {
+      console.warn('[SOAR] Service creation failed, using local fallback:', err)
+      return createSOARService(null)
+    }
+  }, [anchorProvider])
 
   // Achievement tracker — checks game state for achievement conditions
   const achievementTrackerRef = useRef<AchievementTracker | null>(null)
