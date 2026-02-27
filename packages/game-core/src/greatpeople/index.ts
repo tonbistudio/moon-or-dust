@@ -53,11 +53,19 @@ export const GREAT_PERSON_DEFINITIONS: Record<GreatPersonId, GreatPersonDefiniti
   // =========================================================================
   // Gold Category
   // =========================================================================
+  big_brain: {
+    id: 'big_brain',
+    name: 'Big Brain',
+    category: 'gold',
+    threshold: { type: 'accumulator', stat: 'gold', amount: 200 },
+    actionName: 'Sweep',
+    effect: { type: 'instant_gold', amount: 100 },
+  },
   dingaling: {
     id: 'dingaling',
     name: 'Dingaling',
     category: 'gold',
-    threshold: { type: 'accumulator', stat: 'gold', amount: 200 },
+    threshold: { type: 'accumulator', stat: 'gold', amount: 1000 },
     actionName: 'Forgotten Treasure',
     effect: { type: 'yield_buff', yield: 'gold', percent: 15, turns: 5 },
   },
@@ -89,6 +97,14 @@ export const GREAT_PERSON_DEFINITIONS: Record<GreatPersonId, GreatPersonDefiniti
     actionName: 'Grail Ape',
     effect: { type: 'yield_buff', yield: 'vibes', percent: 33, turns: 4 },
   },
+  iced_knife: {
+    id: 'iced_knife',
+    name: 'Iced Knife',
+    category: 'vibes',
+    threshold: { type: 'accumulator', stat: 'vibes', amount: 400 },
+    actionName: 'Twisted Knife',
+    effect: { type: 'yield_buff', yield: 'vibes', percent: 50, turns: 3 },
+  },
 
   // =========================================================================
   // Trade Category
@@ -105,11 +121,19 @@ export const GREAT_PERSON_DEFINITIONS: Record<GreatPersonId, GreatPersonDefiniti
   // =========================================================================
   // Production Category
   // =========================================================================
+  fxnction: {
+    id: 'fxnction',
+    name: 'Fxnction',
+    category: 'production',
+    threshold: { type: 'count', stat: 'wondersBuilt', amount: 2 },
+    actionName: 'Inspire',
+    effect: { type: 'instant_building', buildingCategory: 'vibes' },
+  },
   blocksmyth: {
     id: 'blocksmyth',
     name: 'Blocksmyth',
     category: 'production',
-    threshold: { type: 'count', stat: 'wondersBuilt', amount: 2 },
+    threshold: { type: 'count', stat: 'wondersBuilt', amount: 4 },
     actionName: 'Mercury Blast',
     effect: { type: 'production_buff', percent: 30, turns: 3, target: 'building' },
   },

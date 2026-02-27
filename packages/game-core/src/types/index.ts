@@ -322,6 +322,7 @@ export interface TradeRoute {
 export type GreatPersonId =
   | 'scum' | 'mert' | 'dingaling' | 'toly'
   | 'watch_king' | 'monoliff' | 'retired_chad_dev' | 'blocksmyth'
+  | 'big_brain' | 'iced_knife' | 'fxnction'
 
 export type GreatPersonCategory = 'alpha' | 'gold' | 'vibes' | 'trade' | 'production'
 
