@@ -32,3 +32,10 @@ coverage/
 playwright-report/
 test-results/
 nul
+
+.vercel
+.env*.local
+
+# Claude Code
+.claude/
+CLAUDE.md
